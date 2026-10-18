@@ -462,7 +462,7 @@ export function FacultyProfile({ onNavigate }: { onNavigate: (screen: string) =>
 // ==================== FACULTY ANNOUNCEMENTS ====================
 export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  const { announcements, addAnnouncement, deleteAnnouncement } = useData();
+  const { announcements, addAnnouncement } = useData();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -506,7 +506,6 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
                   <p className="text-xs text-gray-600 mt-1">{a.content}</p>
                   <p className="text-[10px] text-gray-400 mt-1">By {a.authorName} • {a.date}</p>
                 </div>
-                <button onClick={() => deleteAnnouncement(a.id)} className="text-red-400 text-xs ml-2"><i className="fas fa-trash" /></button>
               </div>
             </div>
           ))
@@ -519,7 +518,7 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
 // ==================== FACULTY COMMUNITY ====================
 export function FacultyCommunity({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  const { communityMessages, addCommunityMessage, deleteCommunityMessage, togglePinMessage } = useData();
+  const { communityMessages, addCommunityMessage } = useData();
   const [newMessage, setNewMessage] = useState('');
 
   const handlePost = () => {
@@ -543,10 +542,6 @@ export function FacultyCommunity({ onBack }: { onBack: () => void }) {
               <div className="flex-1">
                 <p className="text-sm font-semibold text-gray-800">{msg.authorName}</p>
                 <p className="text-[10px] text-gray-400">{msg.time}</p>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => togglePinMessage(msg.id)} className="text-teal-500 text-xs"><i className="fas fa-thumbtack" /></button>
-                <button onClick={() => deleteCommunityMessage(msg.id)} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>
               </div>
             </div>
             <p className="text-sm text-gray-700">{msg.message}</p>

@@ -21,7 +21,7 @@ export function QuizList({ onBack, onNavigate }: { onBack: () => void; onNavigat
       </div>
       <div className="px-4 space-y-3">
         {filtered.length === 0 ? (
-          <EmptyState icon="fa-clipboard" title="No Quizzes" message="No quizzes available" />
+          <EmptyState icon="fa-clipboard" title="No Quizzes" message="No quizzes available yet. Faculty or admin can create quizzes." />
         ) : (
           filtered.map((quiz) => (
             <div key={quiz.id} onClick={() => onNavigate('quiz-detail', quiz)} className="card cursor-pointer active:bg-gray-50">
@@ -133,7 +133,7 @@ function QuizInstructions({ onBack, onStart, quiz }: { onBack: () => void; onSta
 }
 
 // ==================== ACTIVE QUIZ ====================
-export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
+export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string, data?: any) => void }) {
   const { quizzes } = useData();
   const activeQuiz = quizzes.find(q => q.status === 'active');
   const questions = activeQuiz?.questions || [];
@@ -147,12 +147,17 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev <= 1) { clearInterval(timer); onNavigate('quiz-results'); return 0; }
+        if (prev <= 1) {
+          clearInterval(timer);
+          // Auto-submit with current answers
+          onNavigate('quiz-results', { answers, quiz: activeQuiz });
+          return 0;
+        }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [onNavigate]);
+  }, [onNavigate, answers, activeQuiz]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -161,7 +166,12 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
   };
 
   const selectAnswer = (optionIndex: number) => setAnswers(prev => ({ ...prev, [currentQ]: optionIndex }));
-  const handleSubmit = () => { setShowSubmit(false); onNavigate('quiz-results'); };
+  
+  const handleSubmit = () => {
+    setShowSubmit(false);
+    onNavigate('quiz-results', { answers, quiz: activeQuiz });
+  };
+
   const answeredCount = Object.keys(answers).length;
   const progress = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
 
@@ -194,7 +204,7 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
           <p className="text-sm font-medium text-gray-800">{questions[currentQ].question}</p>
         </div>
         <div className="space-y-2">
-          {questions[currentQ].options.map((option, idx) => (
+          {questions[currentQ].options.map((option: string, idx: number) => (
             <div key={idx} onClick={() => selectAnswer(idx)} className={`quiz-option ${answers[currentQ] === idx ? 'selected' : ''}`}>
               <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${answers[currentQ] === idx ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-500'}`}>{String.fromCharCode(65 + idx)}</span>
               <span className="text-sm text-gray-700">{option}</span>
@@ -215,7 +225,7 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setShowNav(false)}>
           <div className="bg-white w-full max-w-[430px] mx-auto rounded-t-2xl p-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold">Navigation</h3><button onClick={() => setShowNav(false)}><i className="fas fa-times text-gray-400" /></button></div>
-            <div className="grid grid-cols-5 gap-2">{questions.map((_, idx) => (<button key={idx} onClick={() => { setCurrentQ(idx); setShowNav(false); }} className={`w-10 h-10 rounded-lg text-xs font-bold flex items-center justify-center ${idx === currentQ ? 'bg-teal-500 text-white' : answers[idx] !== undefined ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{idx + 1}</button>))}</div>
+            <div className="grid grid-cols-5 gap-2">{questions.map((_: any, idx: number) => (<button key={idx} onClick={() => { setCurrentQ(idx); setShowNav(false); }} className={`w-10 h-10 rounded-lg text-xs font-bold flex items-center justify-center ${idx === currentQ ? 'bg-teal-500 text-white' : answers[idx] !== undefined ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{idx + 1}</button>))}</div>
           </div>
         </div>
       )}
@@ -239,10 +249,40 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
 }
 
 // ==================== QUIZ RESULTS ====================
-export function QuizResults({ onBack }: { onBack: () => void }) {
-  const score = 15;
-  const total = 20;
-  const percentage = (score / total) * 100;
+export function QuizResults({ onBack, quizData }: { onBack: () => void; quizData?: any }) {
+  const data = quizData || { answers: {}, quiz: null };
+  const answers = data.answers || {};
+  const quiz = data.quiz;
+  
+  if (!quiz || !quiz.questions) {
+    return (
+      <div>
+        <Header title="Results" showBack onBack={onBack} gradient={false} />
+        <EmptyState icon="fa-clipboard" title="No Results" message="Quiz data not available" />
+      </div>
+    );
+  }
+
+  // Calculate actual results
+  let correct = 0;
+  let incorrect = 0;
+  let unanswered = 0;
+  let totalScore = 0;
+
+  quiz.questions.forEach((q: any, idx: number) => {
+    if (answers[idx] === undefined) {
+      unanswered++;
+    } else if (answers[idx] === q.correctAnswer) {
+      correct++;
+      totalScore += q.marks;
+    } else {
+      incorrect++;
+      totalScore -= q.negativeMarks;
+    }
+  });
+
+  const maxScore = quiz.questions.length * 4; // Assuming 4 marks per question
+  const percentage = maxScore > 0 ? Math.max(0, (totalScore / maxScore) * 100) : 0;
 
   return (
     <div>
@@ -252,13 +292,53 @@ export function QuizResults({ onBack }: { onBack: () => void }) {
           <div className="w-24 h-24 rounded-full border-4 border-teal-500 flex items-center justify-center mx-auto mb-3">
             <p className="text-2xl font-bold text-teal-600">{percentage.toFixed(0)}%</p>
           </div>
-          <h2 className="text-lg font-bold text-gray-800">Quiz Completed!</h2>
-          <p className="text-sm text-gray-500 mt-1">Score: {score}/{total} marks</p>
+          <h2 className="text-lg font-bold text-gray-800">{quiz.title}</h2>
+          <p className="text-sm text-gray-500 mt-1">Score: {totalScore}/{maxScore} marks</p>
           <div className="grid grid-cols-3 gap-3 mt-4">
-            <div className="bg-green-50 rounded-lg p-2 text-center"><p className="text-lg font-bold text-green-600">15</p><p className="text-[10px] text-green-600">Correct</p></div>
-            <div className="bg-red-50 rounded-lg p-2 text-center"><p className="text-lg font-bold text-red-600">3</p><p className="text-[10px] text-red-600">Incorrect</p></div>
-            <div className="bg-gray-50 rounded-lg p-2 text-center"><p className="text-lg font-bold text-gray-600">2</p><p className="text-[10px] text-gray-600">Skipped</p></div>
+            <div className="bg-green-50 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-green-600">{correct}</p>
+              <p className="text-[10px] text-green-600">Correct</p>
+            </div>
+            <div className="bg-red-50 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-red-600">{incorrect}</p>
+              <p className="text-[10px] text-red-600">Incorrect</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-gray-600">{unanswered}</p>
+              <p className="text-[10px] text-gray-600">Skipped</p>
+            </div>
           </div>
+        </div>
+
+        {/* Answer Review */}
+        <h3 className="text-sm font-bold text-gray-800 mb-3">Answer Review</h3>
+        <div className="space-y-2">
+          {quiz.questions.map((q: any, idx: number) => {
+            const userAnswer = answers[idx];
+            const isCorrect = userAnswer === q.correctAnswer;
+            const wasAnswered = userAnswer !== undefined;
+            
+            return (
+              <div key={idx} className={`card ${isCorrect ? 'border-l-4 border-green-500' : wasAnswered ? 'border-l-4 border-red-500' : 'border-l-4 border-gray-300'}`}>
+                <div className="flex items-start gap-2">
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    isCorrect ? 'bg-green-100 text-green-600' : wasAnswered ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {isCorrect ? '✓' : wasAnswered ? '✗' : '—'}
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-800">Q{idx + 1}: {q.question}</p>
+                    <p className="text-[10px] text-green-600 mt-1">
+                      Correct: {q.options[q.correctAnswer]}
+                    </p>
+                    {wasAnswered && !isCorrect && (
+                      <p className="text-[10px] text-red-600">Your answer: {q.options[userAnswer]}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -673,29 +673,66 @@ export function AuditLogs({ onBack }: { onBack: () => void }) {
 }
 
 // ==================== ADMIN SETTINGS ====================
-export function AdminSettings({ onBack }: { onBack: () => void }) {
+export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
+  const { users, departments, courses, resources, auditLogs } = useData();
+  const [showInfo, setShowInfo] = useState<string | null>(null);
+
   return (
     <div>
       <Header title="Settings" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-3">
+        {/* Profile Card */}
+        <div className="gradient-header rounded-xl p-4 text-center">
+          <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-2 text-2xl">{user?.avatar}</div>
+          <h2 className="text-white font-bold">{user?.name}</h2>
+          <p className="text-gray-300 text-xs">{user?.email}</p>
+          <span className="badge badge-teal mt-2 inline-block">Administrator</span>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="card text-center py-3">
+            <p className="text-lg font-bold text-teal-600">{users.length}</p>
+            <p className="text-[10px] text-gray-500">Total Users</p>
+          </div>
+          <div className="card text-center py-3">
+            <p className="text-lg font-bold text-teal-600">{auditLogs.length}</p>
+            <p className="text-[10px] text-gray-500">Audit Logs</p>
+          </div>
+        </div>
+
+        {/* Settings Menu */}
         <div className="card p-0 overflow-hidden">
           {[
-            { icon: 'fa-shield-alt', label: 'Security Settings', desc: 'Password policy, session timeout' },
-            { icon: 'fa-bell', label: 'Notification Settings', desc: 'Push notifications, email' },
-            { icon: 'fa-database', label: 'Database Backup', desc: 'Data is saved locally' },
-            { icon: 'fa-storage', label: 'Storage Management', desc: 'Local storage usage' },
+            { icon: 'fa-shield-alt', label: 'Security Settings', desc: 'Password policy, session timeout', info: 'Security settings are configured at the server level. All passwords are hashed using bcrypt. Sessions expire after 24 hours of inactivity.' },
+            { icon: 'fa-bell', label: 'Notification Settings', desc: 'Push notifications, email', info: 'In-app notifications are active. Push notifications require FCM configuration. Email notifications can be enabled per user preference.' },
+            { icon: 'fa-database', label: 'Database / Data', desc: `${users.length} users, ${courses.length} courses, ${departments.length} departments`, info: 'All data is stored in localStorage for this demo. In production, use PostgreSQL with regular backups.' },
+            { icon: 'fa-folder', label: 'Storage', desc: `${resources.length} resources stored`, info: 'Resources metadata is stored locally. In production, files are stored in private object storage with signed URLs.' },
+            { icon: 'fa-history', label: 'Audit Logs', desc: `${auditLogs.length} entries`, action: 'audit-logs' },
           ].map((item, i) => (
-            <button key={i} className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 active:bg-gray-50">
+            <button key={i} onClick={() => item.action ? onNavigate(item.action) : setShowInfo(item.info || '')} className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 active:bg-gray-50">
               <i className={`fas ${item.icon} text-gray-400 w-5 text-center`} />
               <div className="flex-1 text-left"><p className="text-sm text-gray-700">{item.label}</p><p className="text-[10px] text-gray-400">{item.desc}</p></div>
               <i className="fas fa-chevron-right text-gray-300 text-xs" />
             </button>
           ))}
         </div>
+
         <button onClick={logout} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fas fa-sign-out-alt" /> Sign Out</button>
         <button onClick={logout} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fas fa-exchange-alt" /> Switch Account / Sign In</button>
       </div>
+
+      {/* Info Modal */}
+      {showInfo && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowInfo(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center mx-auto mb-3"><i className="fas fa-info-circle text-teal-500 text-xl" /></div>
+            <p className="text-sm text-gray-700 text-center">{showInfo}</p>
+            <button onClick={() => setShowInfo(null)} className="btn-primary mt-4">OK</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,12 +18,12 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string) => vo
             <p className="text-gray-300 text-xs">Welcome back,</p>
             <h1 className="text-white text-lg font-bold">{user?.name || 'Student'}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 relative z-10">
             <button onClick={() => onNavigate('notifications')} className="relative w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
               <i className="fas fa-bell text-white text-sm" />
               {unreadNotifs > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center">{unreadNotifs}</span>}
             </button>
-            <div className="w-9 h-9 rounded-full bg-teal-500/30 flex items-center justify-center text-lg">{user?.avatar}</div>
+            <button onClick={() => onNavigate('profile')} className="w-9 h-9 rounded-full bg-teal-500/30 flex items-center justify-center text-lg">{user?.avatar}</button>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -372,6 +372,9 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
         </div>
         <button onClick={logout} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
           <i className="fas fa-sign-out-alt" /> Sign Out
+        </button>
+        <button onClick={logout} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+          <i className="fas fa-exchange-alt" /> Switch Account / Sign In
         </button>
       </div>
     </div>

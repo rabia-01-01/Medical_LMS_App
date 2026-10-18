@@ -41,7 +41,7 @@ export function Header({ title, subtitle, showBack, onBack, rightAction, gradien
     <>
       <div className={`px-4 py-3 flex items-center gap-3 ${gradient ? 'gradient-header' : 'bg-white border-b border-gray-100'}`}>
         {showBack && (
-          <button onClick={onBack} className={`text-lg ${gradient ? 'text-white' : 'text-gray-700'}`}>
+          <button onClick={onBack} className={`text-lg ${gradient ? 'text-white' : 'text-gray-700'} z-10 relative`}>
             <i className="fas fa-arrow-left" />
           </button>
         )}
@@ -49,7 +49,11 @@ export function Header({ title, subtitle, showBack, onBack, rightAction, gradien
           <h1 className={`text-lg font-bold ${gradient ? 'text-white' : 'text-gray-900'}`}>{title}</h1>
           {subtitle && <p className={`text-xs ${gradient ? 'text-gray-300' : 'text-gray-500'}`}>{subtitle}</p>}
         </div>
-        {rightAction}
+        {rightAction && (
+          <div className="relative z-10">
+            {rightAction}
+          </div>
+        )}
       </div>
       <div className="italy-accent">
         <div className="green" />

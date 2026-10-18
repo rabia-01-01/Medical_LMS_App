@@ -101,6 +101,13 @@ body {
   height: 200px;
   border-radius: 50%;
   background: rgba(13, 148, 136, 0.15);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.gradient-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .italy-accent {

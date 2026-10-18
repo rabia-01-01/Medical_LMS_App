@@ -16,11 +16,11 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
             <p className="text-gray-300 text-xs">Admin Panel</p>
             <h1 className="text-white text-lg font-bold">{user?.name || 'Administrator'}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 relative z-10">
             <button onClick={() => onNavigate('notifications')} className="relative w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
               <i className="fas fa-bell text-white text-sm" />
             </button>
-            <div className="w-9 h-9 rounded-full bg-purple-500/30 flex items-center justify-center text-lg">{user?.avatar}</div>
+            <button onClick={() => onNavigate('settings')} className="w-9 h-9 rounded-full bg-purple-500/30 flex items-center justify-center text-lg">{user?.avatar}</button>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -172,7 +172,7 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   return (
     <div>
       <Header title="Manage Users" subtitle={`${filtered.length} users`} showBack onBack={onBack} rightAction={
-        <button onClick={() => onNavigate('add-user')} className="text-white text-sm"><i className="fas fa-plus" /></button>
+        <button onClick={() => onNavigate('add-user')} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
       } />
       <div className="flex gap-2 px-4 py-3 overflow-x-auto">
         {roles.map((r) => (
@@ -248,7 +248,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <Header title="Departments" subtitle={`${departments.length} departments`} showBack onBack={onBack} rightAction={
-        <button onClick={() => setShowForm(!showForm)} className="text-white text-sm"><i className="fas fa-plus" /></button>
+        <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
       } />
       <div className="p-4 space-y-3">
         {showForm && (
@@ -331,7 +331,7 @@ export function AdminCourses({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <Header title="Courses" subtitle={`${courses.length} courses`} showBack onBack={onBack} rightAction={
-        <button onClick={() => setShowForm(!showForm)} className="text-white text-sm"><i className="fas fa-plus" /></button>
+        <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
       } />
       <div className="p-4 space-y-3">
         {showForm && (
@@ -451,7 +451,7 @@ export function AdminAnnouncements({ onBack, onNavigate }: { onBack: () => void;
   return (
     <div>
       <Header title="Announcements" subtitle={`${announcements.length} announcements`} showBack onBack={onBack} rightAction={
-        <button onClick={() => onNavigate('send-announcement')} className="text-white text-sm"><i className="fas fa-plus" /></button>
+        <button onClick={() => onNavigate('send-announcement')} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
       } />
       <div className="p-4 space-y-3">
         {announcements.length === 0 ? (
@@ -580,7 +580,7 @@ export function AdminNotifications({ onBack, onNavigate }: { onBack: () => void;
   return (
     <div>
       <Header title="Notifications" showBack onBack={onBack} rightAction={
-        <button onClick={() => onNavigate('send-notification')} className="text-white text-sm"><i className="fas fa-plus" /></button>
+        <button onClick={() => onNavigate('send-notification')} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
       } />
       <div className="p-4 space-y-2">
         {notifications.length === 0 ? (
@@ -694,6 +694,7 @@ export function AdminSettings({ onBack }: { onBack: () => void }) {
           ))}
         </div>
         <button onClick={logout} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fas fa-sign-out-alt" /> Sign Out</button>
+        <button onClick={logout} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fas fa-exchange-alt" /> Switch Account / Sign In</button>
       </div>
     </div>
   );

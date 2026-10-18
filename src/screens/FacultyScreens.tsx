@@ -21,12 +21,12 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) 
             <h1 className="text-white text-lg font-bold">{user?.name || 'Faculty'}</h1>
             <p className="text-teal-300 text-xs">{user?.department || 'Faculty'}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 relative z-10">
             <button onClick={() => onNavigate('notifications')} className="relative w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
               <i className="fas fa-bell text-white text-sm" />
               {unreadNotifs > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center">{unreadNotifs}</span>}
             </button>
-            <div className="w-9 h-9 rounded-full bg-blue-500/30 flex items-center justify-center text-lg">{user?.avatar}</div>
+            <button onClick={() => onNavigate('profile')} className="w-9 h-9 rounded-full bg-blue-500/30 flex items-center justify-center text-lg">{user?.avatar}</button>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -224,11 +224,23 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Upload File</label>
-          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+          <input
+            type="file"
+            id="resource-file-upload"
+            accept=".pdf,.mp4,.doc,.docx,.ppt,.pptx,.txt"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setFormData(p => ({ ...p, size: (file.size / (1024 * 1024)).toFixed(1) + ' MB', title: p.title || file.name.replace(/\.[^/.]+$/, '') }));
+              }
+            }}
+            className="hidden"
+          />
+          <label htmlFor="resource-file-upload" className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition block">
             <i className="fas fa-cloud-upload-alt text-3xl text-gray-300 mb-2" />
             <p className="text-sm text-gray-500">Tap to select file</p>
             <p className="text-[10px] text-gray-400 mt-1">PDF, MP4, DOCX up to 500MB</p>
-          </div>
+          </label>
         </div>
         <button onClick={handleSubmit} disabled={!formData.title || !formData.courseId} className="btn-primary disabled:opacity-50"><i className="fas fa-upload mr-2" />Upload Resource</button>
       </div>
@@ -441,6 +453,7 @@ export function FacultyProfile({ onNavigate }: { onNavigate: (screen: string) =>
           ))}
         </div>
         <button onClick={logout} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fas fa-sign-out-alt" /> Sign Out</button>
+        <button onClick={logout} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fas fa-exchange-alt" /> Switch Account / Sign In</button>
       </div>
     </div>
   );
@@ -464,7 +477,7 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <Header title="Announcements" showBack onBack={onBack} rightAction={
-        <button onClick={() => setShowForm(!showForm)} className="text-white text-sm"><i className="fas fa-plus" /></button>
+        <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
       } />
       <div className="p-4 space-y-3">
         {showForm && (

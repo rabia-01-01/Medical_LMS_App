@@ -1,26 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { users } from '../data/mockData';
-
-type UserRole = 'admin' | 'faculty' | 'student';
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: UserRole;
-  avatar: string;
-  department?: string;
-  courses?: string[];
-  enrolledCourses?: string[];
-  studentId?: string;
-}
+import { User } from './DataContext';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isViewingAs: boolean;
   viewingAsUser: User | null;
-  login: (role: UserRole) => void;
+  login: (user: User) => void;
   logout: () => void;
   startViewingAs: (targetUser: User, reason: string) => void;
   stopViewingAs: () => void;
@@ -33,8 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isViewingAs, setIsViewingAs] = useState(false);
   const [viewingAsUser, setViewingAsUser] = useState<User | null>(null);
 
-  const login = (role: UserRole) => {
-    const userData = users[role] as User;
+  const login = (userData: User) => {
     setUser(userData);
   };
 

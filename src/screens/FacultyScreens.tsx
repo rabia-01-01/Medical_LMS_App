@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Header, BottomNav, SearchBar, StatusBadge, EmptyState } from '../components/Navigation';
-import { courses, resources, quizzes, notifications } from '../data/mockData';
+import { useData } from '../context/DataContext';
+import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 
 // ==================== FACULTY DASHBOARD ====================
 export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
-  const facultyCourses = courses.filter(c => user?.courses?.includes(c.name));
+  const { courses, resources, quizzes, notifications } = useData();
+  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
+  const myResources = resources.filter(r => r.uploaderId === user?.id);
+  const myQuizzes = quizzes.filter(q => q.createdById === user?.id);
+  const unreadNotifs = notifications.filter(n => !n.read).length;
 
   return (
     <div>
@@ -15,84 +19,92 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) 
           <div>
             <p className="text-gray-300 text-xs">Welcome,</p>
             <h1 className="text-white text-lg font-bold">{user?.name || 'Faculty'}</h1>
-            <p className="text-teal-300 text-xs">{user?.department || 'Department'}</p>
+            <p className="text-teal-300 text-xs">{user?.department || 'Faculty'}</p>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => onNavigate('notifications')} className="relative w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
               <i className="fas fa-bell text-white text-sm" />
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center">2</span>
+              {unreadNotifs > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center">{unreadNotifs}</span>}
             </button>
             <div className="w-9 h-9 rounded-full bg-blue-500/30 flex items-center justify-center text-lg">{user?.avatar}</div>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-teal-300 text-lg font-bold">{facultyCourses.length}</p>
+            <p className="text-teal-300 text-lg font-bold">{myCourses.length}</p>
             <p className="text-gray-300 text-[10px]">Courses</p>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-teal-300 text-lg font-bold">8</p>
+            <p className="text-teal-300 text-lg font-bold">{myResources.length}</p>
             <p className="text-gray-300 text-[10px]">Resources</p>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-teal-300 text-lg font-bold">3</p>
+            <p className="text-teal-300 text-lg font-bold">{myQuizzes.length}</p>
             <p className="text-gray-300 text-[10px]">Quizzes</p>
           </div>
         </div>
       </div>
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
-
       <div className="p-4 space-y-4">
-        {/* Quick Actions */}
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => onNavigate('upload')} className="card flex flex-col items-center py-4 active:bg-gray-50">
-            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center mb-2">
-              <i className="fas fa-cloud-upload-alt text-teal-600" />
-            </div>
+            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center mb-2"><i className="fas fa-cloud-upload-alt text-teal-600" /></div>
             <span className="text-xs font-medium text-gray-700">Upload Resource</span>
           </button>
           <button onClick={() => onNavigate('create-quiz')} className="card flex flex-col items-center py-4 active:bg-gray-50">
-            <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center mb-2">
-              <i className="fas fa-clipboard-list text-purple-600" />
-            </div>
+            <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center mb-2"><i className="fas fa-clipboard-list text-purple-600" /></div>
             <span className="text-xs font-medium text-gray-700">Create Quiz</span>
+          </button>
+          <button onClick={() => onNavigate('announcements')} className="card flex flex-col items-center py-4 active:bg-gray-50">
+            <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center mb-2"><i className="fas fa-bullhorn text-orange-600" /></div>
+            <span className="text-xs font-medium text-gray-700">Announcements</span>
+          </button>
+          <button onClick={() => onNavigate('community')} className="card flex flex-col items-center py-4 active:bg-gray-50">
+            <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mb-2"><i className="fas fa-comments text-blue-600" /></div>
+            <span className="text-xs font-medium text-gray-700">Community</span>
           </button>
         </div>
 
-        {/* My Courses */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-gray-800 font-bold text-sm">My Courses</h2>
             <button onClick={() => onNavigate('courses')} className="text-teal-600 text-xs font-medium">View All</button>
           </div>
-          {facultyCourses.slice(0, 3).map((course) => (
-            <div key={course.id} className="card flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
-                <i className={`fas ${course.icon}`} style={{ color: course.color }} />
+          {myCourses.length === 0 ? (
+            <div className="card text-center py-4"><p className="text-xs text-gray-500">No courses assigned yet</p></div>
+          ) : (
+            myCourses.slice(0, 3).map((course) => (
+              <div key={course.id} className="card flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
+                  <i className={`fas ${course.icon}`} style={{ color: course.color }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-800">{course.name}</p>
+                  <p className="text-xs text-gray-500">{course.studentIds.length} students</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-800">{course.name}</p>
-                <p className="text-xs text-gray-500">{course.students} students</p>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
-        {/* Recent Uploads */}
         <div>
           <h2 className="text-gray-800 font-bold text-sm mb-3">Recent Uploads</h2>
-          {resources.slice(0, 3).map((r) => (
-            <div key={r.id} className="card flex items-center gap-3 mb-2">
-              <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
-                <i className={`fas ${r.type === 'Video' ? 'fa-play text-blue-500' : 'fa-file-pdf text-red-500'} text-sm`} />
+          {myResources.length === 0 ? (
+            <div className="card text-center py-4"><p className="text-xs text-gray-500">No resources uploaded yet</p></div>
+          ) : (
+            myResources.slice(0, 3).map((r) => (
+              <div key={r.id} className="card flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                  <i className={`fas ${r.type === 'Video' ? 'fa-play text-blue-500' : 'fa-file-pdf text-red-500'} text-sm`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 truncate">{r.title}</p>
+                  <p className="text-[10px] text-gray-400">{r.date}</p>
+                </div>
+                <StatusBadge status={r.status} />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-800 truncate">{r.title}</p>
-                <p className="text-[10px] text-gray-400">{r.date}</p>
-              </div>
-              <StatusBadge status={r.status} />
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -102,37 +114,37 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) 
 // ==================== FACULTY COURSES ====================
 export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
-  const facultyCourses = courses.filter(c => user?.courses?.includes(c.name));
+  const { courses } = useData();
+  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
 
   return (
     <div>
-      <Header title="My Courses" subtitle={`${facultyCourses.length} assigned courses`} />
+      <Header title="My Courses" subtitle={`${myCourses.length} assigned`} />
       <div className="p-4 space-y-3">
-        {facultyCourses.map((course) => (
-          <div key={course.id} className="card">
-            <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
-                <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-bold text-gray-800">{course.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{course.description}</p>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.students} students</span>
-                  <span className="text-[10px] text-gray-400"><i className="fas fa-book mr-1" />{course.subjects.length} subjects</span>
+        {myCourses.length === 0 ? (
+          <EmptyState icon="fa-book" title="No Courses" message="No courses assigned to you yet" />
+        ) : (
+          myCourses.map((course) => (
+            <div key={course.id} className="card">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
+                  <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
                 </div>
-                <div className="flex gap-2 mt-2">
-                  <button onClick={() => onNavigate('upload')} className="text-[10px] bg-teal-50 text-teal-600 px-2 py-1 rounded font-medium">
-                    <i className="fas fa-upload mr-1" /> Upload
-                  </button>
-                  <button className="text-[10px] bg-purple-50 text-purple-600 px-2 py-1 rounded font-medium">
-                    <i className="fas fa-eye mr-1" /> Preview
-                  </button>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-gray-800">{course.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{course.description}</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length} students</span>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => onNavigate('upload')} className="text-[10px] bg-teal-50 text-teal-600 px-2 py-1 rounded font-medium"><i className="fas fa-upload mr-1" />Upload</button>
+                    <button onClick={() => onNavigate('create-quiz')} className="text-[10px] bg-purple-50 text-purple-600 px-2 py-1 rounded font-medium"><i className="fas fa-clipboard-list mr-1" />Quiz</button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -140,71 +152,76 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string) =>
 
 // ==================== UPLOAD RESOURCE ====================
 export function UploadResource({ onBack }: { onBack: () => void }) {
-  const [resourceType, setResourceType] = useState('PDF');
-  const [selectedCourse, setSelectedCourse] = useState('');
+  const { user } = useAuth();
+  const { courses, addResource } = useData();
+  const [formData, setFormData] = useState({ title: '', type: 'PDF', subject: '', courseId: '', examCategory: 'NEET', size: '5.2 MB' });
+  const [success, setSuccess] = useState(false);
+
+  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
+
+  const handleSubmit = () => {
+    if (!formData.title || !formData.courseId || !user) return;
+    addResource({
+      title: formData.title,
+      type: formData.type,
+      subject: formData.subject,
+      courseId: formData.courseId,
+      uploaderId: user.id,
+      uploaderName: user.name,
+      size: formData.size,
+      status: 'published',
+      examCategory: formData.examCategory,
+    });
+    setSuccess(true);
+    setTimeout(() => { onBack(); }, 1500);
+  };
+
+  if (success) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3"><i className="fas fa-check text-green-500 text-2xl" /></div>
+          <p className="text-sm font-semibold text-gray-800">Resource Uploaded!</p>
+          <p className="text-xs text-gray-500 mt-1">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <Header title="Upload Resource" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-4">
-        {/* Resource Type */}
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Resource Type</label>
           <div className="grid grid-cols-4 gap-2">
-            {['PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Question Paper', 'Practice'].map((type) => (
-              <button
-                key={type}
-                onClick={() => setResourceType(type)}
-                className={`py-2 px-2 rounded-lg text-[10px] font-medium transition ${
-                  resourceType === type ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {type}
-              </button>
+            {['PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Q.Paper', 'Practice'].map((type) => (
+              <button key={type} onClick={() => setFormData(p => ({ ...p, type }))} className={`py-2 px-1 rounded-lg text-[10px] font-medium transition ${formData.type === type ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{type}</button>
             ))}
           </div>
         </div>
-
-        {/* Title */}
         <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Title</label>
-          <input placeholder="Enter resource title" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          <label className="text-xs font-semibold text-gray-700 mb-2 block">Title *</label>
+          <input value={formData.title} onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))} placeholder="Enter resource title" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         </div>
-
-        {/* Description */}
-        <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Description</label>
-          <textarea placeholder="Brief description of the resource" rows={3} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" />
-        </div>
-
-        {/* Course */}
-        <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Course</label>
-          <select value={selectedCourse} onChange={(e) => setSelectedCourse(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-            <option value="">Select course</option>
-            {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
-        </div>
-
-        {/* Subject */}
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Subject</label>
-          <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-            <option value="">Select subject</option>
-            <option>Physics</option><option>Chemistry</option><option>Biology</option>
-            <option>Botany</option><option>Zoology</option><option>Logical Reasoning</option>
+          <input value={formData.subject} onChange={(e) => setFormData(p => ({ ...p, subject: e.target.value }))} placeholder="e.g., Physics, Biology" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-700 mb-2 block">Course *</label>
+          <select value={formData.courseId} onChange={(e) => setFormData(p => ({ ...p, courseId: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <option value="">Select course</option>
+            {myCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {myCourses.length === 0 && courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-
-        {/* Exam Category */}
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Exam Category</label>
-          <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+          <select value={formData.examCategory} onChange={(e) => setFormData(p => ({ ...p, examCategory: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
             <option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
           </select>
         </div>
-
-        {/* File Upload */}
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Upload File</label>
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
@@ -213,149 +230,112 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
             <p className="text-[10px] text-gray-400 mt-1">PDF, MP4, DOCX up to 500MB</p>
           </div>
         </div>
-
-        {/* Publish Status */}
-        <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Status</label>
-          <div className="flex gap-2">
-            <button className="flex-1 py-2 bg-teal-500 text-white rounded-lg text-xs font-medium">Publish Now</button>
-            <button className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium">Save as Draft</button>
-          </div>
-        </div>
-
-        <button className="btn-primary">
-          <i className="fas fa-upload mr-2" /> Upload Resource
-        </button>
+        <button onClick={handleSubmit} disabled={!formData.title || !formData.courseId} className="btn-primary disabled:opacity-50"><i className="fas fa-upload mr-2" />Upload Resource</button>
       </div>
     </div>
   );
 }
 
-// ==================== CREATE QUIZ (FACULTY) ====================
+// ==================== CREATE QUIZ ====================
 export function CreateQuiz({ onBack }: { onBack: () => void }) {
-  const [questions, setQuestions] = useState([{ question: '', options: ['', '', '', ''], correctAnswer: 0, marks: 4, negativeMarks: 1 }]);
+  const { user } = useAuth();
+  const { courses, addQuiz } = useData();
+  const [title, setTitle] = useState('');
+  const [courseId, setCourseId] = useState('');
+  const [duration, setDuration] = useState(45);
+  const [negativeMarking, setNegativeMarking] = useState(1);
+  const [questions, setQuestions] = useState([{ question: '', options: ['', '', '', ''], correctAnswer: 0 }]);
+  const [success, setSuccess] = useState(false);
 
-  const addQuestion = () => {
-    setQuestions([...questions, { question: '', options: ['', '', '', ''], correctAnswer: 0, marks: 4, negativeMarks: 1 }]);
+  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
+
+  const addQuestion = () => setQuestions([...questions, { question: '', options: ['', '', '', ''], correctAnswer: 0 }]);
+
+  const handleSubmit = () => {
+    if (!title || !courseId || !user) return;
+    const validQuestions = questions.filter(q => q.question && q.options.every(o => o));
+    if (validQuestions.length === 0) return;
+
+    addQuiz({
+      title,
+      subject: myCourses.find(c => c.id === courseId)?.subjects[0] || 'General',
+      courseId,
+      questions: validQuestions.map((q, i) => ({ id: i + 1, question: q.question, options: q.options, correctAnswer: q.correctAnswer, marks: 4, negativeMarks: negativeMarking })),
+      duration,
+      marks: validQuestions.length * 4,
+      negativeMarking,
+      status: 'active',
+      createdById: user.id,
+      createdByName: user.name,
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    });
+    setSuccess(true);
+    setTimeout(() => onBack(), 1500);
   };
+
+  if (success) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3"><i className="fas fa-check text-green-500 text-2xl" /></div>
+          <p className="text-sm font-semibold text-gray-800">Quiz Created!</p>
+          <p className="text-xs text-gray-500 mt-1">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <Header title="Create Quiz" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-4">
-        {/* Quiz Details */}
         <div className="card">
           <h3 className="text-sm font-bold text-gray-800 mb-3">Quiz Details</h3>
           <div className="space-y-3">
-            <input placeholder="Quiz Title" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-            <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-              <option>Select Course</option>
-              {courses.map(c => <option key={c.id}>{c.name}</option>)}
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quiz Title *" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+            <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="">Select Course *</option>
+              {myCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {myCourses.length === 0 && courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] text-gray-500">Duration (min)</label>
-                <input type="number" placeholder="45" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500">Negative Marks</label>
-                <input type="number" placeholder="1" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] text-gray-500">Start Date</label>
-                <input type="date" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500">End Date</label>
-                <input type="date" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-              </div>
+              <div><label className="text-[10px] text-gray-500">Duration (min)</label><input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" /></div>
+              <div><label className="text-[10px] text-gray-500">Negative Marks</label><input type="number" value={negativeMarking} onChange={(e) => setNegativeMarking(Number(e.target.value))} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" /></div>
             </div>
           </div>
         </div>
 
-        {/* Questions */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-800">Questions ({questions.length})</h3>
-            <button onClick={addQuestion} className="text-xs text-teal-600 font-medium">
-              <i className="fas fa-plus mr-1" /> Add Question
-            </button>
-          </div>
-
-          {questions.map((q, qIdx) => (
-            <div key={qIdx} className="card">
-              <div className="flex items-center justify-between mb-2">
-                <span className="badge badge-navy">Q{qIdx + 1}</span>
-                {qIdx > 0 && (
-                  <button onClick={() => setQuestions(questions.filter((_, i) => i !== qIdx))} className="text-red-400 text-xs">
-                    <i className="fas fa-trash" />
-                  </button>
-                )}
-              </div>
-              <textarea
-                placeholder="Enter question..."
-                value={q.question}
-                onChange={(e) => {
-                  const updated = [...questions];
-                  updated[qIdx].question = e.target.value;
-                  setQuestions(updated);
-                }}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2 resize-none"
-                rows={2}
-              />
-              <div className="space-y-2">
-                {q.options.map((opt, oIdx) => (
-                  <div key={oIdx} className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const updated = [...questions];
-                        updated[qIdx].correctAnswer = oIdx;
-                        setQuestions(updated);
-                      }}
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${
-                        q.correctAnswer === oIdx ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
-                      }`}
-                    >
-                      {String.fromCharCode(65 + oIdx)}
-                    </button>
-                    <input
-                      placeholder={`Option ${String.fromCharCode(65 + oIdx)}`}
-                      value={opt}
-                      onChange={(e) => {
-                        const updated = [...questions];
-                        updated[qIdx].options[oIdx] = e.target.value;
-                        setQuestions(updated);
-                      }}
-                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs"
-                    />
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-gray-400 mt-2">
-                <i className="fas fa-info-circle mr-1" /> Tap the letter to set correct answer (green = correct)
-              </p>
-            </div>
-          ))}
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-800">Questions ({questions.length})</h3>
+          <button onClick={addQuestion} className="text-xs text-teal-600 font-medium"><i className="fas fa-plus mr-1" />Add</button>
         </div>
 
-        <button onClick={addQuestion} className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500">
-          <i className="fas fa-plus mr-2" /> Add Another Question
-        </button>
+        {questions.map((q, qIdx) => (
+          <div key={qIdx} className="card">
+            <div className="flex items-center justify-between mb-2">
+              <span className="badge badge-navy">Q{qIdx + 1}</span>
+              {qIdx > 0 && <button onClick={() => setQuestions(questions.filter((_, i) => i !== qIdx))} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>}
+            </div>
+            <textarea value={q.question} onChange={(e) => { const u = [...questions]; u[qIdx].question = e.target.value; setQuestions(u); }} placeholder="Enter question..." className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2 resize-none" rows={2} />
+            <div className="space-y-2">
+              {q.options.map((opt, oIdx) => (
+                <div key={oIdx} className="flex items-center gap-2">
+                  <button onClick={() => { const u = [...questions]; u[qIdx].correctAnswer = oIdx; setQuestions(u); }} className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${q.correctAnswer === oIdx ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'}`}>{String.fromCharCode(65 + oIdx)}</button>
+                  <input value={opt} onChange={(e) => { const u = [...questions]; u[qIdx].options[oIdx] = e.target.value; setQuestions(u); }} placeholder={`Option ${String.fromCharCode(65 + oIdx)}`} className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
 
-        {/* Confidentiality Notice */}
+        <button onClick={addQuestion} className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500"><i className="fas fa-plus mr-2" />Add Question</button>
+
         <div className="card bg-orange-50 border-l-4 border-orange-400">
-          <p className="text-xs text-orange-800">
-            <i className="fas fa-shield-alt mr-1" />
-            <strong>Confidentiality Notice:</strong> Once submitted, quiz questions and answer keys cannot be retrieved. This policy ensures examination integrity.
-          </p>
+          <p className="text-xs text-orange-800"><i className="fas fa-shield-alt mr-1" /><strong>Confidentiality:</strong> Once submitted, quiz questions and answer keys cannot be retrieved.</p>
         </div>
 
-        <div className="flex gap-3">
-          <button className="btn-secondary flex-1">Save Draft</button>
-          <button className="btn-primary flex-1">Submit Quiz</button>
-        </div>
+        <button onClick={handleSubmit} disabled={!title || !courseId} className="btn-primary disabled:opacity-50">Submit Quiz</button>
       </div>
     </div>
   );
@@ -363,27 +343,31 @@ export function CreateQuiz({ onBack }: { onBack: () => void }) {
 
 // ==================== FACULTY SUBMISSIONS ====================
 export function FacultySubmissions({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const { quizzes } = useData();
+  const myQuizzes = quizzes.filter(q => q.createdById === user?.id);
+
   return (
     <div>
-      <Header title="Submissions" showBack onBack={onBack} gradient={false} />
+      <Header title="My Quizzes" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-3">
-        {quizzes.filter(q => q.createdBy === 'Dr. Sharma' || q.createdBy === 'Dr. Verma' || q.createdBy === 'Dr. Patel').map((quiz) => (
-          <div key={quiz.id} className="card">
-            <div className="flex items-center justify-between mb-2">
-              <StatusBadge status={quiz.status} />
-              <span className="text-xs text-gray-500">{quiz.questions} Qs</span>
+        {myQuizzes.length === 0 ? (
+          <EmptyState icon="fa-clipboard" title="No Quizzes" message="You haven't created any quizzes yet" />
+        ) : (
+          myQuizzes.map((quiz) => (
+            <div key={quiz.id} className="card">
+              <div className="flex items-center justify-between mb-2">
+                <StatusBadge status={quiz.status} />
+                <span className="text-xs text-gray-500">{quiz.questions.length} Qs</span>
+              </div>
+              <p className="text-sm font-bold text-gray-800">{quiz.title}</p>
+              <p className="text-xs text-gray-500 mt-1">{quiz.subject}</p>
             </div>
-            <p className="text-sm font-bold text-gray-800">{quiz.title}</p>
-            <p className="text-xs text-gray-500 mt-1">{quiz.course}</p>
-            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
-              <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{Math.floor(Math.random() * 100 + 50)} attempts</span>
-              <span className="text-[10px] text-gray-400"><i className="fas fa-chart-bar mr-1" />Avg: {Math.floor(Math.random() * 30 + 50)}%</span>
-            </div>
-          </div>
-        ))}
-        <div className="card bg-gray-50 text-center py-6">
-          <i className="fas fa-shield-alt text-2xl text-gray-300 mb-2" />
-          <p className="text-xs text-gray-500">Quiz contents and answer keys are not retrievable after submission per confidentiality policy.</p>
+          ))
+        )}
+        <div className="card bg-gray-50 text-center py-4">
+          <i className="fas fa-shield-alt text-xl text-gray-300 mb-2" />
+          <p className="text-[10px] text-gray-500">Quiz contents not retrievable after submission per confidentiality policy.</p>
         </div>
       </div>
     </div>
@@ -392,22 +376,28 @@ export function FacultySubmissions({ onBack }: { onBack: () => void }) {
 
 // ==================== FACULTY NOTIFICATIONS ====================
 export function FacultyNotifications({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const { notifications, markNotificationRead } = useData();
+  const myNotifs = notifications.filter(n => n.targetRole === 'all' || n.targetRole === user?.role);
+
   return (
     <div>
       <Header title="Notifications" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-2">
-        {notifications.map((n) => (
-          <div key={n.id} className={`card flex items-start gap-3 ${!n.read ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}>
-            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <i className="fas fa-bell text-blue-500 text-sm" />
+        {myNotifs.length === 0 ? (
+          <EmptyState icon="fa-bell-slash" title="No Notifications" message="You're all caught up!" />
+        ) : (
+          myNotifs.map((n) => (
+            <div key={n.id} onClick={() => markNotificationRead(n.id)} className={`card flex items-start gap-3 cursor-pointer ${!n.read ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}>
+              <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0"><i className="fas fa-bell text-blue-500 text-sm" /></div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-800">{n.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
+                <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-800">{n.title}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
-              <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -416,125 +406,139 @@ export function FacultyNotifications({ onBack }: { onBack: () => void }) {
 // ==================== FACULTY PROFILE ====================
 export function FacultyProfile({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
+  const { courses, resources, quizzes } = useData();
+  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
 
   return (
     <div>
       <div className="gradient-header pb-8 text-center">
-        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3 text-3xl backdrop-blur-sm border-2 border-white/30">
-          {user?.avatar}
-        </div>
+        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3 text-3xl backdrop-blur-sm border-2 border-white/30">{user?.avatar}</div>
         <h2 className="text-white text-lg font-bold">{user?.name}</h2>
         <p className="text-gray-300 text-xs">{user?.email}</p>
         <p className="text-teal-300 text-xs mt-1">{user?.department}</p>
       </div>
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
-
       <div className="p-4 space-y-3">
         <div className="grid grid-cols-3 gap-3">
-          <div className="card text-center">
-            <p className="text-lg font-bold text-teal-600">3</p>
-            <p className="text-[10px] text-gray-500">Courses</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-lg font-bold text-teal-600">8</p>
-            <p className="text-[10px] text-gray-500">Resources</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-lg font-bold text-teal-600">3</p>
-            <p className="text-[10px] text-gray-500">Quizzes</p>
-          </div>
+          <div className="card text-center"><p className="text-lg font-bold text-teal-600">{myCourses.length}</p><p className="text-[10px] text-gray-500">Courses</p></div>
+          <div className="card text-center"><p className="text-lg font-bold text-teal-600">{resources.filter(r => r.uploaderId === user?.id).length}</p><p className="text-[10px] text-gray-500">Resources</p></div>
+          <div className="card text-center"><p className="text-lg font-bold text-teal-600">{quizzes.filter(q => q.createdById === user?.id).length}</p><p className="text-[10px] text-gray-500">Quizzes</p></div>
         </div>
-
         <div className="card p-0 overflow-hidden">
           {[
             { icon: 'fa-cloud-upload-alt', label: 'Upload Resource', screen: 'upload' },
             { icon: 'fa-clipboard-list', label: 'Create Quiz', screen: 'create-quiz' },
-            { icon: 'fa-list-alt', label: 'My Submissions', screen: 'submissions' },
-            { icon: 'fa-eye', label: 'Student Preview', screen: 'student-preview' },
+            { icon: 'fa-list-alt', label: 'My Quizzes', screen: 'submissions' },
+            { icon: 'fa-bullhorn', label: 'Announcements', screen: 'announcements' },
+            { icon: 'fa-comments', label: 'Community', screen: 'community' },
             { icon: 'fa-question-circle', label: 'Help & Support', screen: 'help' },
           ].map((item, i) => (
-            <button
-              key={i}
-              onClick={() => onNavigate(item.screen)}
-              className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 active:bg-gray-50"
-            >
+            <button key={i} onClick={() => onNavigate(item.screen)} className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 active:bg-gray-50">
               <i className={`fas ${item.icon} text-gray-400 w-5 text-center`} />
               <span className="text-sm text-gray-700 flex-1 text-left">{item.label}</span>
               <i className="fas fa-chevron-right text-gray-300 text-xs" />
             </button>
           ))}
         </div>
-
-        <button onClick={logout} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
-          <i className="fas fa-sign-out-alt" /> Sign Out
-        </button>
+        <button onClick={logout} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fas fa-sign-out-alt" /> Sign Out</button>
       </div>
     </div>
   );
 }
 
-// ==================== STUDENT PREVIEW (FACULTY) ====================
-export function StudentPreview({ onBack }: { onBack: () => void }) {
-  const [selectedStudent, setSelectedStudent] = useState('');
-  const students = [
-    { name: 'Ayesha Khan', id: 'SIM-2024-0042', courses: ['NEET Foundation', 'NEET Physics'] },
-    { name: 'Rahul Kumar', id: 'SIM-2024-0038', courses: ['NEET Foundation', 'NEET Chemistry'] },
-    { name: 'Priya Singh', id: 'SIM-2024-0055', courses: ['NEET Biology', 'NEET Mock Tests'] },
-  ];
+// ==================== FACULTY ANNOUNCEMENTS ====================
+export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const { announcements, addAnnouncement, deleteAnnouncement } = useData();
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [pinned, setPinned] = useState(false);
+
+  const handlePost = () => {
+    if (!title || !content || !user) return;
+    addAnnouncement({ title, content, pinned, authorId: user.id, authorName: user.name, authorRole: user.role });
+    setTitle(''); setContent(''); setPinned(false); setShowForm(false);
+  };
 
   return (
     <div>
-      <Header title="Student Preview" subtitle="Read-only view for authorized students" showBack onBack={onBack} />
-      <div className="p-4">
-        <div className="card bg-blue-50 border-l-4 border-blue-400 mb-4">
-          <p className="text-xs text-blue-800">
-            <i className="fas fa-shield-alt mr-1" />
-            This is a restricted, read-only preview. You can only view students in your authorized courses. No modifications are permitted.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          {students.map((student) => (
-            <div
-              key={student.id}
-              onClick={() => setSelectedStudent(student.id)}
-              className={`card cursor-pointer ${selectedStudent === student.id ? 'ring-2 ring-teal-500' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">👩‍🎓</div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">{student.name}</p>
-                  <p className="text-xs text-gray-500">ID: {student.id}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{student.courses.join(', ')}</p>
-                </div>
-              </div>
+      <Header title="Announcements" showBack onBack={onBack} rightAction={
+        <button onClick={() => setShowForm(!showForm)} className="text-white text-sm"><i className="fas fa-plus" /></button>
+      } />
+      <div className="p-4 space-y-3">
+        {showForm && (
+          <div className="card border-2 border-teal-200">
+            <h3 className="text-sm font-bold text-gray-800 mb-3">New Announcement</h3>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Content" rows={3} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2 resize-none" />
+            <div className="flex items-center gap-2 mb-3">
+              <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
+              <span className="text-xs text-gray-600">Pin this announcement</span>
             </div>
-          ))}
-        </div>
-
-        {selectedStudent && (
-          <div className="mt-4 card">
-            <h3 className="text-sm font-bold text-gray-800 mb-3">Student Activity (Read-only)</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-xs text-gray-500">Last Active</span>
-                <span className="text-xs text-gray-700">2 hours ago</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-xs text-gray-500">Quizzes Completed</span>
-                <span className="text-xs text-gray-700">8</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-xs text-gray-500">Average Score</span>
-                <span className="text-xs text-gray-700">76%</span>
-              </div>
-              <div className="flex justify-between py-2">
-                <span className="text-xs text-gray-500">Resources Accessed</span>
-                <span className="text-xs text-gray-700">23</span>
-              </div>
-            </div>
+            <button onClick={handlePost} className="btn-primary">Post Announcement</button>
           </div>
         )}
+        {announcements.length === 0 ? (
+          <EmptyState icon="fa-bullhorn" title="No Announcements" message="Create your first announcement" />
+        ) : (
+          announcements.map((a) => (
+            <div key={a.id} className={`card ${a.pinned ? 'border-l-4 border-teal-500' : ''}`}>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    {a.pinned && <i className="fas fa-thumbtack text-teal-500 text-xs" />}
+                    <p className="text-sm font-bold text-gray-800">{a.title}</p>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">{a.content}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">By {a.authorName} • {a.date}</p>
+                </div>
+                <button onClick={() => deleteAnnouncement(a.id)} className="text-red-400 text-xs ml-2"><i className="fas fa-trash" /></button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==================== FACULTY COMMUNITY ====================
+export function FacultyCommunity({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const { communityMessages, addCommunityMessage, deleteCommunityMessage, togglePinMessage } = useData();
+  const [newMessage, setNewMessage] = useState('');
+
+  const handlePost = () => {
+    if (!newMessage.trim() || !user) return;
+    addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: user.role, message: newMessage, pinned: false });
+    setNewMessage('');
+  };
+
+  return (
+    <div>
+      <Header title="Community" showBack onBack={onBack} />
+      <div className="p-4 space-y-3">
+        <div className="card">
+          <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Post a message..." rows={2} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none mb-2" />
+          <button onClick={handlePost} className="btn-primary">Post</button>
+        </div>
+        {communityMessages.map((msg) => (
+          <div key={msg.id} className={`card ${msg.pinned ? 'border-l-4 border-teal-500' : ''}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-sm">{msg.authorRole === 'Faculty' ? '👨‍⚕️' : '👩‍🎓'}</div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-800">{msg.authorName}</p>
+                <p className="text-[10px] text-gray-400">{msg.time}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => togglePinMessage(msg.id)} className="text-teal-500 text-xs"><i className="fas fa-thumbtack" /></button>
+                <button onClick={() => deleteCommunityMessage(msg.id)} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700">{msg.message}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

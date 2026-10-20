@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
+import { useData, Course, Resource } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
+import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 
 // ==================== FACULTY DASHBOARD ====================
-export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
+export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses, resources, quizzes, notifications } = useData();
   const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
@@ -30,15 +31,15 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) 
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
+          <div onClick={() => onNavigate('courses')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
             <p className="text-teal-300 text-lg font-bold">{myCourses.length}</p>
             <p className="text-gray-300 text-[10px]">Courses</p>
           </div>
-          <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
+          <div onClick={() => onNavigate('faculty-resources')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
             <p className="text-teal-300 text-lg font-bold">{myResources.length}</p>
             <p className="text-gray-300 text-[10px]">Resources</p>
           </div>
-          <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
+          <div onClick={() => onNavigate('submissions')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
             <p className="text-teal-300 text-lg font-bold">{myQuizzes.length}</p>
             <p className="text-gray-300 text-[10px]">Quizzes</p>
           </div>
@@ -68,40 +69,59 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) 
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-gray-800 font-bold text-sm">My Courses</h2>
-            <button onClick={() => onNavigate('courses')} className="text-teal-600 text-xs font-medium">View All</button>
+            <button onClick={() => onNavigate('courses')} className="text-teal-600 text-xs font-medium hover:underline">View All</button>
           </div>
           {myCourses.length === 0 ? (
             <div className="card text-center py-4"><p className="text-xs text-gray-500">No courses assigned yet</p></div>
           ) : (
             myCourses.slice(0, 3).map((course) => (
-              <div key={course.id} className="card flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
+              <div 
+                key={course.id} 
+                onClick={() => onNavigate('course-detail', course)} 
+                className="card flex items-center gap-3 mb-2 cursor-pointer hover:border-teal-300 active:bg-gray-50 transition"
+              >
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
                   <i className={`fas ${course.icon}`} style={{ color: course.color }} />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-800">{course.name}</p>
-                  <p className="text-xs text-gray-500">{course.studentIds.length} students</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{course.name}</p>
+                  <p className="text-xs text-gray-500">{course.studentIds.length} students enrolled</p>
                 </div>
+                <i className="fas fa-chevron-right text-gray-300 text-xs" />
               </div>
             ))
           )}
         </div>
 
         <div>
-          <h2 className="text-gray-800 font-bold text-sm mb-3">Recent Uploads</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-gray-800 font-bold text-sm">Recent Uploads</h2>
+            <button onClick={() => onNavigate('faculty-resources')} className="text-teal-600 text-xs font-medium hover:underline">View All</button>
+          </div>
           {myResources.length === 0 ? (
             <div className="card text-center py-4"><p className="text-xs text-gray-500">No resources uploaded yet</p></div>
           ) : (
             myResources.slice(0, 3).map((r) => (
-              <div key={r.id} className="card flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
-                  <i className={`fas ${r.type === 'Video' ? 'fa-play text-blue-500' : 'fa-file-pdf text-red-500'} text-sm`} />
+              <div 
+                key={r.id} 
+                onClick={() => onNavigate('resource-view', r)} 
+                className="card flex items-center gap-3 mb-2 cursor-pointer hover:border-teal-300 active:bg-gray-50 transition"
+              >
+                <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <i className={`fas ${
+                    r.type === 'Video' ? 'fa-play text-blue-500' :
+                    r.type === 'PDF' ? 'fa-file-pdf text-red-500' :
+                    r.type === 'Notes' ? 'fa-sticky-note text-yellow-500' : 'fa-file-alt text-teal-600'
+                  } text-sm`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-gray-800 truncate">{r.title}</p>
-                  <p className="text-[10px] text-gray-400">{r.date}</p>
+                  <p className="text-[10px] text-gray-400">{r.subject} • {r.date}</p>
                 </div>
-                <StatusBadge status={r.status} />
+                <span className="text-[10px] font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded flex-shrink-0">
+                  View
+                </span>
+                <i className="fas fa-chevron-right text-gray-300 text-xs" />
               </div>
             ))
           )}
@@ -112,9 +132,10 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string) 
 }
 
 // ==================== FACULTY COURSES ====================
-export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string) => void }) {
+export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses } = useData();
+  const [enrollingCourse, setEnrollingCourse] = useState<Course | null>(null);
   const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
 
   return (
@@ -127,18 +148,43 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string) =>
           myCourses.map((course) => (
             <div key={course.id} className="card">
               <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
+                <div 
+                  onClick={() => onNavigate('course-detail', course)} 
+                  className="w-12 h-12 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0" 
+                  style={{ backgroundColor: course.color + '20' }}
+                >
                   <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-gray-800">{course.name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{course.description}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length} students</span>
+                <div className="flex-1 min-w-0">
+                  <div onClick={() => onNavigate('course-detail', course)} className="cursor-pointer">
+                    <p className="text-sm font-bold text-gray-800 hover:text-teal-600 transition truncate">{course.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{course.description}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">
+                        <i className="fas fa-users mr-1" />{course.studentIds.length} students enrolled
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => onNavigate('upload')} className="text-[10px] bg-teal-50 text-teal-600 px-2 py-1 rounded font-medium"><i className="fas fa-upload mr-1" />Upload</button>
-                    <button onClick={() => onNavigate('create-quiz')} className="text-[10px] bg-purple-50 text-purple-600 px-2 py-1 rounded font-medium"><i className="fas fa-clipboard-list mr-1" />Quiz</button>
+                  <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
+                    <button 
+                      onClick={() => setEnrollingCourse(course)} 
+                      className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5"
+                    >
+                      <i className="fas fa-user-plus text-[10px]" />
+                      <span>Enroll Students</span>
+                    </button>
+                    <button onClick={() => onNavigate('upload')} className="text-xs bg-teal-50 hover:bg-teal-100 text-teal-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5">
+                      <i className="fas fa-upload text-[10px]" />
+                      <span>Upload</span>
+                    </button>
+                    <button onClick={() => onNavigate('create-quiz')} className="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5">
+                      <i className="fas fa-clipboard-list text-[10px]" />
+                      <span>Quiz</span>
+                    </button>
+                    <button onClick={() => onNavigate('course-detail', course)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 ml-auto">
+                      <span>Details</span>
+                      <i className="fas fa-chevron-right text-[10px]" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -146,6 +192,14 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string) =>
           ))
         )}
       </div>
+
+      {/* Enrollment Modal */}
+      {enrollingCourse && (
+        <EnrollStudentsModal
+          course={enrollingCourse}
+          onClose={() => setEnrollingCourse(null)}
+        />
+      )}
     </div>
   );
 }
@@ -492,13 +546,24 @@ export function FacultyProfile({ onNavigate }: { onNavigate: (screen: string) =>
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
       <div className="p-4 space-y-3">
         <div className="grid grid-cols-3 gap-3">
-          <div className="card text-center"><p className="text-lg font-bold text-teal-600">{myCourses.length}</p><p className="text-[10px] text-gray-500">Courses</p></div>
-          <div className="card text-center"><p className="text-lg font-bold text-teal-600">{resources.filter(r => r.uploaderId === user?.id).length}</p><p className="text-[10px] text-gray-500">Resources</p></div>
-          <div className="card text-center"><p className="text-lg font-bold text-teal-600">{quizzes.filter(q => q.createdById === user?.id).length}</p><p className="text-[10px] text-gray-500">Quizzes</p></div>
+          <div onClick={() => onNavigate('courses')} className="card text-center cursor-pointer hover:border-teal-300 transition">
+            <p className="text-lg font-bold text-teal-600">{myCourses.length}</p>
+            <p className="text-[10px] text-gray-500">Courses</p>
+          </div>
+          <div onClick={() => onNavigate('faculty-resources')} className="card text-center cursor-pointer hover:border-teal-300 transition">
+            <p className="text-lg font-bold text-teal-600">{resources.filter(r => r.uploaderId === user?.id).length}</p>
+            <p className="text-[10px] text-gray-500">Resources</p>
+          </div>
+          <div onClick={() => onNavigate('submissions')} className="card text-center cursor-pointer hover:border-teal-300 transition">
+            <p className="text-lg font-bold text-teal-600">{quizzes.filter(q => q.createdById === user?.id).length}</p>
+            <p className="text-[10px] text-gray-500">Quizzes</p>
+          </div>
         </div>
         <div className="card p-0 overflow-hidden">
           {[
+            { icon: 'fa-folder', label: 'My Resources', screen: 'faculty-resources' },
             { icon: 'fa-cloud-upload-alt', label: 'Upload Resource', screen: 'upload' },
+            { icon: 'fa-book', label: 'My Courses & Enrollment', screen: 'courses' },
             { icon: 'fa-clipboard-list', label: 'Create Quiz', screen: 'create-quiz' },
             { icon: 'fa-list-alt', label: 'My Quizzes', screen: 'submissions' },
             { icon: 'fa-bullhorn', label: 'Announcements', screen: 'announcements' },
@@ -611,3 +676,166 @@ export function FacultyCommunity({ onBack }: { onBack: () => void }) {
     </div>
   );
 }
+
+// ==================== FACULTY RESOURCES ====================
+export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string, data?: any) => void }) {
+  const { user } = useAuth();
+  const { resources, deleteResource, courses } = useData();
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('All');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const myResources = resources.filter(r => r.uploaderId === user?.id);
+  const types = ['All', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Q.Paper', 'Practice'];
+
+  let filtered = myResources;
+  if (filter !== 'All') filtered = filtered.filter(r => r.type === filter);
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(r => r.title.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q));
+  }
+
+  return (
+    <div>
+      <Header 
+        title="My Resources" 
+        subtitle={`${myResources.length} uploaded`} 
+        showBack 
+        onBack={onBack}
+        rightAction={
+          <button 
+            onClick={() => onNavigate('upload')} 
+            className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-sm transition"
+            title="Upload new resource"
+          >
+            <i className="fas fa-plus" />
+          </button>
+        }
+      />
+      <div className="p-4 space-y-3">
+        {/* Search */}
+        <div className="relative">
+          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search my resources..."
+            className="w-full pl-8 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">
+              <i className="fas fa-times" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
+          {types.map(t => (
+            <button
+              key={t}
+              onClick={() => setFilter(t)}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+                filter === t ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* Resources List */}
+        {filtered.length === 0 ? (
+          <div className="card text-center py-12 px-4">
+            <i className="fas fa-folder-open text-4xl text-gray-300 mb-2" />
+            <h3 className="text-sm font-bold text-gray-700">No resources found</h3>
+            <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
+              {myResources.length === 0
+                ? 'You have not uploaded any resources yet. Upload learning materials, lecture notes, or videos for your students.'
+                : 'No resources match your current search and filter criteria.'}
+            </p>
+            <button 
+              onClick={() => onNavigate('upload')} 
+              className="btn-primary max-w-xs mx-auto mt-4 flex items-center justify-center gap-2"
+            >
+              <i className="fas fa-cloud-upload-alt" />
+              <span>Upload New Resource</span>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map((r) => {
+              const course = courses.find(c => c.id === r.courseId);
+              return (
+                <div 
+                  key={r.id} 
+                  className="card p-3 mb-0 flex items-center gap-3 border border-gray-100 hover:border-teal-300 transition"
+                >
+                  <div 
+                    onClick={() => onNavigate('resource-view', r)}
+                    className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-teal-50 transition"
+                  >
+                    <i className={`fas ${
+                      r.type === 'Video' ? 'fa-play text-blue-500' :
+                      r.type === 'PDF' ? 'fa-file-pdf text-red-500' :
+                      r.type === 'Notes' ? 'fa-sticky-note text-yellow-500' : 'fa-file-alt text-teal-600'
+                    } text-base`} />
+                  </div>
+                  
+                  <div 
+                    onClick={() => onNavigate('resource-view', r)} 
+                    className="flex-1 min-w-0 cursor-pointer"
+                  >
+                    <p className="text-xs font-bold text-gray-800 truncate hover:text-teal-600 transition">{r.title}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                      {r.subject} {course ? `• ${course.name}` : ''} • {r.size} • {r.date}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => onNavigate('resource-view', r)}
+                      className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      title="View document"
+                    >
+                      <span>View</span>
+                      <i className="fas fa-eye text-[10px]" />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(r.id)}
+                      className="w-7 h-7 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center text-xs transition"
+                      title="Delete resource"
+                    >
+                      <i className="fas fa-trash" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm animate-slide-up">
+            <h3 className="text-base font-bold text-gray-800 mb-1">Delete Resource?</h3>
+            <p className="text-xs text-gray-500 mb-4">Are you sure you want to delete this resource? Students will no longer be able to access it.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1 py-2 text-xs">Cancel</button>
+              <button 
+                onClick={() => { deleteResource(confirmDelete); setConfirmDelete(null); }} 
+                className="flex-1 py-2 bg-red-600 text-white rounded-xl font-semibold text-xs hover:bg-red-700 transition"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

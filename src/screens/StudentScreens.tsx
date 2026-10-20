@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../components/Navigation';
 
 // ==================== HOME SCREEN ====================
-export function StudentHome({ onNavigate }: { onNavigate: (screen: string) => void }) {
+export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses, announcements, communityMessages, quizzes, departments, notifications } = useData();
   const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
@@ -77,7 +77,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string) => vo
             </div>
           ) : (
             myCourses.slice(0, 3).map((course) => (
-              <div key={course.id} onClick={() => onNavigate('course-detail')} className="card flex items-center gap-3 cursor-pointer active:bg-gray-50">
+              <div key={course.id} onClick={() => onNavigate('course-detail', course)} className="card flex items-center gap-3 cursor-pointer active:bg-gray-50">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
                   <i className={`fas ${course.icon}`} style={{ color: course.color }} />
                 </div>
@@ -141,7 +141,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string) => vo
               <button onClick={() => onNavigate('quizzes')} className="text-teal-600 text-xs font-medium">View All</button>
             </div>
             {quizzes.filter(q => q.status === 'active').slice(0, 2).map((q) => (
-              <div key={q.id} onClick={() => onNavigate('quiz-detail')} className="card cursor-pointer active:bg-gray-50">
+              <div key={q.id} onClick={() => onNavigate('quiz-detail', q)} className="card cursor-pointer active:bg-gray-50">
                 <div className="flex items-center justify-between mb-2">
                   <StatusBadge status={q.status} />
                   <span className="text-xs text-gray-500">{q.duration} min</span>

@@ -5,7 +5,7 @@ import { BottomNav } from './components/Navigation';
 import { SplashScreen, LoginScreen } from './screens/AuthScreens';
 import { StudentHome, StudentCourses, StudentResources, StudentCommunity, StudentProfile, NotificationsScreen, AnnouncementsScreen, AboutScreen, DepartmentsScreen, HelpScreen, CalendarScreen } from './screens/StudentScreens';
 import { QuizList, QuizDetail, ActiveQuiz, QuizResults } from './screens/QuizScreens';
-import { FacultyDashboard, FacultyCourses, UploadResource, CreateQuiz, FacultySubmissions, FacultyNotifications, FacultyProfile, FacultyAnnouncements, FacultyCommunity } from './screens/FacultyScreens';
+import { FacultyDashboard, FacultyCourses, UploadResource, CreateQuiz, FacultySubmissions, FacultyNotifications, FacultyProfile, FacultyAnnouncements, FacultyCommunity, FacultyResources } from './screens/FacultyScreens';
 import { AdminDashboard, AdminUsers, AdminDepartments, AdminCourses, AdminResources, AdminNotifications, AuditLogs, AdminSettings, AdminCommunity, AdminAnnouncements, AddUser, SendAnnouncement, SendNotification } from './screens/AdminScreens';
 import { ResourceViewer, CourseDetail } from './screens/ResourceScreens';
 
@@ -121,6 +121,7 @@ function AppContent() {
         case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
+        case 'faculty-resources': return <FacultyResources onBack={handleBack} onNavigate={handleNavigate} />;
         default: return <FacultyDashboard onNavigate={handleNavigate} />;
       }
     }
@@ -144,6 +145,8 @@ function AppContent() {
         case 'settings': return <AdminSettings onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quiz-detail': return <QuizDetail onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
         case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
+        case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
+        case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
         default: return <AdminDashboard onNavigate={handleNavigate} />;
       }
     }

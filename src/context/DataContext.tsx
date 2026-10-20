@@ -142,6 +142,8 @@ interface DataContextType {
   addCourse: (course: Omit<Course, 'id' | 'createdAt'>) => void;
   deleteCourse: (id: string) => void;
   updateCourse: (id: string, data: Partial<Course>) => void;
+  enrollStudents: (courseId: string, studentIds: string[], enrolledBy?: { id: string; name: string }) => void;
+  unenrollStudent: (courseId: string, studentId: string, removedBy?: { id: string; name: string }) => void;
 
   // Resources
   resources: Resource[];
@@ -278,6 +280,46 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setCourses(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
   };
 
+  const enrollStudents = (courseId: string, studentIdsToAdd: string[], enrolledBy?: { id: string; name: string }) => {
+    setCourses(prev => prev.map(c => {
+      if (c.id !== courseId) return c;
+      const current = new Set(c.studentIds || []);
+      studentIdsToAdd.forEach(id => current.add(id));
+      return { ...c, studentIds: Array.from(current) };
+    }));
+    const targetCourse = courses.find(c => c.id === courseId);
+    addAuditLog({
+      action: 'Students Enrolled',
+      userId: enrolledBy?.id || 'faculty',
+      userName: enrolledBy?.name || 'Faculty',
+      details: `Enrolled ${studentIdsToAdd.length} student(s) into course "${targetCourse?.name || courseId}"`
+    });
+    studentIdsToAdd.forEach(sId => {
+      addNotification({
+        title: 'New Course Enrollment',
+        message: `You have been enrolled in "${targetCourse?.name || 'course'}". Check your courses to view resources!`,
+        type: 'enrollment',
+        targetRole: 'student',
+        targetCourseId: courseId,
+      });
+    });
+  };
+
+  const unenrollStudent = (courseId: string, studentIdToRemove: string, removedBy?: { id: string; name: string }) => {
+    setCourses(prev => prev.map(c => {
+      if (c.id !== courseId) return c;
+      return { ...c, studentIds: (c.studentIds || []).filter(id => id !== studentIdToRemove) };
+    }));
+    const targetCourse = courses.find(c => c.id === courseId);
+    const targetStudent = users.find(u => u.id === studentIdToRemove);
+    addAuditLog({
+      action: 'Student Unenrolled',
+      userId: removedBy?.id || 'faculty',
+      userName: removedBy?.name || 'Faculty',
+      details: `Removed ${targetStudent?.name || studentIdToRemove} from course "${targetCourse?.name || courseId}"`
+    });
+  };
+
   // Resources
   const addResource = (resource: Omit<Resource, 'id' | 'date'>) => {
     const newResource: Resource = { ...resource, id: generateId(), date: new Date().toISOString().split('T')[0] };
@@ -367,7 +409,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     <DataContext.Provider value={{
       users, addUser, updateUser, deleteUser, getUserById, getUsersByRole,
       departments, addDepartment, deleteDepartment, updateDepartment,
-      courses, addCourse, deleteCourse, updateCourse,
+      courses, addCourse, deleteCourse, updateCourse, enrollStudents, unenrollStudent,
       resources, addResource, deleteResource, updateResource,
       announcements, addAnnouncement, deleteAnnouncement, updateAnnouncement,
       communityMessages, addCommunityMessage, deleteCommunityMessage, togglePinMessage,

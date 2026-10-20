@@ -4,6 +4,7 @@ import { useData, User } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { signUpUser } from '../features/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { CurriculumBrowser } from '../features/curriculum';
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
@@ -328,6 +329,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
 // ==================== ADMIN COURSES ====================
 export function AdminCourses({ onBack }: { onBack: () => void }) {
   const { courses, addCourse, deleteCourse, users } = useData();
+  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: '', category: 'NEET', description: '', subjects: '', duration: '6 months', icon: 'fa-book', color: '#0d9488' });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -349,9 +351,45 @@ export function AdminCourses({ onBack }: { onBack: () => void }) {
 
   return (
     <div>
-      <Header title="Courses" subtitle={`${courses.length} courses`} showBack onBack={onBack} rightAction={
-        <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
-      } />
+      <Header 
+        title={viewMode === 'courses' ? 'Courses & Batches' : 'Academic Curriculum'} 
+        subtitle={viewMode === 'courses' ? `${courses.length} courses configured` : '3-Tier Academic Hierarchy'} 
+        showBack 
+        onBack={onBack} 
+        rightAction={
+          viewMode === 'courses' ? (
+            <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
+          ) : undefined
+        } 
+      />
+
+      {/* Tab Switcher */}
+      <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mt-3 mb-1">
+        <button
+          onClick={() => setViewMode('courses')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <i className="fas fa-book-medical text-[11px]" />
+          <span>Course Batches</span>
+        </button>
+        <button
+          onClick={() => setViewMode('curriculum')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <i className="fas fa-layer-group text-[11px]" />
+          <span>Curriculum Hierarchy</span>
+        </button>
+      </div>
+
+      {viewMode === 'curriculum' ? (
+        <div className="p-4">
+          <CurriculumBrowser canManage={true} />
+        </div>
+      ) : (
       <div className="p-4 space-y-3">
         {showForm && (
           <div className="card border-2 border-teal-200">
@@ -401,6 +439,7 @@ export function AdminCourses({ onBack }: { onBack: () => void }) {
           ))
         )}
       </div>
+      )}
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

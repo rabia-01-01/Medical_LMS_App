@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData, Course, Resource } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
+import { CurriculumBrowser } from '../features/curriculum';
 
 // ==================== FACULTY DASHBOARD ====================
 export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
@@ -135,16 +136,48 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
 export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses } = useData();
+  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
   const [enrollingCourse, setEnrollingCourse] = useState<Course | null>(null);
   const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
 
   return (
     <div>
-      <Header title="My Courses" subtitle={`${myCourses.length} assigned`} />
-      <div className="p-4 space-y-3">
-        {myCourses.length === 0 ? (
-          <EmptyState icon="fa-book" title="No Courses" message="No courses assigned to you yet" />
-        ) : (
+      <Header 
+        title={viewMode === 'courses' ? 'My Courses' : 'Academic Curriculum'} 
+        subtitle={viewMode === 'courses' ? `${myCourses.length} assigned` : 'Subjects, Chapters & Topics'} 
+      />
+
+      {/* Tab Switcher */}
+      <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mb-3">
+        <button
+          onClick={() => setViewMode('courses')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <i className="fas fa-book-medical text-[11px]" />
+          <span>Assigned Courses</span>
+        </button>
+        <button
+          onClick={() => setViewMode('curriculum')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <i className="fas fa-layer-group text-[11px]" />
+          <span>Manage Curriculum</span>
+        </button>
+      </div>
+
+      {viewMode === 'curriculum' ? (
+        <div className="px-4 pb-4">
+          <CurriculumBrowser canManage={true} />
+        </div>
+      ) : (
+        <div className="p-4 space-y-3">
+          {myCourses.length === 0 ? (
+            <EmptyState icon="fa-book" title="No Courses" message="No courses assigned to you yet" />
+          ) : (
           myCourses.map((course) => (
             <div key={course.id} className="card">
               <div className="flex items-start gap-3">
@@ -192,6 +225,7 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
           ))
         )}
       </div>
+      )}
 
       {/* Enrollment Modal */}
       {enrollingCourse && (

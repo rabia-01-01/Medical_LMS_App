@@ -3,6 +3,7 @@ import { Header } from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
+import { CurriculumBrowser } from '../features/curriculum';
 
 // Helper function to download base64 file
 function downloadFile(fileData: string, fileName: string, mimeType: string) {
@@ -672,14 +673,9 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
           )}
         </div>
 
-        {/* Subjects */}
+        {/* Academic Curriculum Hierarchy (Subjects, Chapters, Topics) */}
         <div className="card mb-0">
-          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">Subjects</h3>
-          <div className="flex flex-wrap gap-1.5">
-            {(c.subjects || []).map((s: string) => (
-              <span key={s} className="badge badge-teal text-xs">{s}</span>
-            ))}
-          </div>
+          <CurriculumBrowser initialSubjectId={c.subjects?.[0]} />
         </div>
 
         {/* Faculty */}

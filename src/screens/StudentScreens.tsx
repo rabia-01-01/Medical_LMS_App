@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../components/Navigation';
+import { CurriculumBrowser } from '../features/curriculum';
 
 // ==================== HOME SCREEN ====================
 export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
@@ -181,6 +182,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
 export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses } = useData();
+  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const categories = ['All', 'NEET', 'IMAT', 'UCAT', 'MCAT'];
@@ -191,33 +193,67 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
 
   return (
     <div>
-      <Header title="My Courses" subtitle={`${filteredCourses.length} courses enrolled`} />
-      <SearchBar value={search} onChange={setSearch} placeholder="Search courses..." />
-      <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
-        {categories.map((cat) => (
-          <button key={cat} onClick={() => setFilter(cat)} className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === cat ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{cat}</button>
-        ))}
+      <Header 
+        title={viewMode === 'courses' ? 'My Courses' : 'Medical Curriculum'} 
+        subtitle={viewMode === 'courses' ? `${filteredCourses.length} courses enrolled` : '3-Tier Academic Hierarchy'} 
+      />
+
+      {/* Tab Switcher */}
+      <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mb-3">
+        <button
+          onClick={() => setViewMode('courses')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <i className="fas fa-book-medical text-[11px]" />
+          <span>My Courses</span>
+        </button>
+        <button
+          onClick={() => setViewMode('curriculum')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <i className="fas fa-layer-group text-[11px]" />
+          <span>Curriculum Hierarchy</span>
+        </button>
       </div>
-      <div className="px-4 space-y-3">
-        {filteredCourses.map((course) => (
-          <div key={course.id} onClick={() => onNavigate('course-detail', course)} className="card cursor-pointer active:bg-gray-50">
-            <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
-                <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-gray-800">{course.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{course.description}</p>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="text-[10px] text-gray-400"><i className="fas fa-clock mr-1" />{course.duration}</span>
-                  <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length}</span>
+
+      {viewMode === 'curriculum' ? (
+        <div className="px-4 pb-4">
+          <CurriculumBrowser />
+        </div>
+      ) : (
+        <>
+          <SearchBar value={search} onChange={setSearch} placeholder="Search courses..." />
+          <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
+            {categories.map((cat) => (
+              <button key={cat} onClick={() => setFilter(cat)} className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === cat ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{cat}</button>
+            ))}
+          </div>
+          <div className="px-4 space-y-3">
+            {filteredCourses.map((course) => (
+              <div key={course.id} onClick={() => onNavigate('course-detail', course)} className="card cursor-pointer active:bg-gray-50">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
+                    <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-800">{course.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{course.description}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <span className="text-[10px] text-gray-400"><i className="fas fa-clock mr-1" />{course.duration}</span>
+                      <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            ))}
+            {filteredCourses.length === 0 && <EmptyState icon="fa-book" title="No Courses" message="You haven't enrolled in any courses yet" />}
           </div>
-        ))}
-        {filteredCourses.length === 0 && <EmptyState icon="fa-book" title="No Courses" message="You haven't enrolled in any courses yet" />}
-      </div>
+        </>
+      )}
     </div>
   );
 }

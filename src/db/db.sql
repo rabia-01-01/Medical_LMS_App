@@ -278,8 +278,20 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 CREATE POLICY "Users read their own profile, Admins read all"
 ON profiles FOR SELECT USING (id = auth.uid() OR auth.get_user_role() = 'ADMIN');
 
+CREATE POLICY "Users insert their own profile"
+ON profiles FOR INSERT WITH CHECK (id = auth.uid());
+
 CREATE POLICY "Users update their own profile"
 ON profiles FOR UPDATE USING (id = auth.uid());
+
+-- 1.1 ROLE EXTENSIONS (Students & Faculty)
+CREATE POLICY "Users and staff access student records"
+ON students FOR ALL USING (profile_id = auth.uid() OR auth.get_user_role() IN ('FACULTY', 'ADMIN'))
+WITH CHECK (profile_id = auth.uid() OR auth.get_user_role() = 'ADMIN');
+
+CREATE POLICY "Users and staff access faculty records"
+ON faculty FOR ALL USING (profile_id = auth.uid() OR auth.get_user_role() = 'ADMIN')
+WITH CHECK (profile_id = auth.uid() OR auth.get_user_role() = 'ADMIN');
 
 -- 2. CURRICULUM (Subjects, Chapters, Topics)
 CREATE POLICY "Everyone authenticated can view academic hierarchy"
@@ -384,3 +396,56 @@ WITH CHECK (
     bucket_id = 'resources' AND
     auth.get_user_role() IN ('FACULTY', 'ADMIN')
 );
+
+-- ============================================================================
+-- 12. AUTOMATIC PROFILE CREATION TRIGGER
+-- Ensures a public.profiles and role record is created whenever auth.users signs up
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+DECLARE
+  assigned_role user_role := 'STUDENT';
+  raw_role text;
+BEGIN
+  raw_role := new.raw_user_meta_data->>'role';
+  IF raw_role ILIKE 'FACULTY' THEN
+    assigned_role := 'FACULTY';
+  ELSIF raw_role ILIKE 'ADMIN' THEN
+    assigned_role := 'ADMIN';
+  ELSE
+    assigned_role := 'STUDENT';
+  END IF;
+
+  INSERT INTO public.profiles (id, full_name, phone, role, avatar_url)
+  VALUES (
+    new.id,
+    COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'phone',
+    assigned_role,
+    new.raw_user_meta_data->>'avatar_url'
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    phone = EXCLUDED.phone,
+    role = EXCLUDED.role;
+
+  -- Create role-specific extension record
+  IF assigned_role = 'STUDENT' THEN
+    INSERT INTO public.students (profile_id)
+    VALUES (new.id)
+    ON CONFLICT (profile_id) DO NOTHING;
+  ELSIF assigned_role = 'FACULTY' THEN
+    INSERT INTO public.faculty (profile_id, designation)
+    VALUES (new.id, COALESCE(new.raw_user_meta_data->>'department', 'General'))
+    ON CONFLICT (profile_id) DO NOTHING;
+  END IF;
+
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+

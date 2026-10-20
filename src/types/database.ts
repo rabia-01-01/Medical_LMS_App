@@ -50,6 +50,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       departments: {
         Row: {
@@ -73,6 +74,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       exams: {
         Row: {
@@ -102,6 +104,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       classes: {
         Row: {
@@ -125,6 +128,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       batches: {
         Row: {
@@ -160,6 +164,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       students: {
         Row: {
@@ -186,6 +191,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       faculty: {
         Row: {
@@ -212,6 +218,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       subjects: {
         Row: {
@@ -238,6 +245,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       chapters: {
         Row: {
@@ -267,6 +275,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       topics: {
         Row: {
@@ -296,6 +305,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       student_exams: {
         Row: {
@@ -310,6 +320,7 @@ export interface Database {
           student_id?: string;
           exam_id?: string;
         };
+        Relationships: [];
       };
       student_subjects: {
         Row: {
@@ -324,6 +335,7 @@ export interface Database {
           student_id?: string;
           subject_id?: string;
         };
+        Relationships: [];
       };
       faculty_subjects: {
         Row: {
@@ -338,6 +350,7 @@ export interface Database {
           faculty_id?: string;
           subject_id?: string;
         };
+        Relationships: [];
       };
       resources: {
         Row: {
@@ -379,6 +392,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       resource_files: {
         Row: {
@@ -408,6 +422,7 @@ export interface Database {
           file_size?: number;
           created_at?: string;
         };
+        Relationships: [];
       };
       questions: {
         Row: {
@@ -452,6 +467,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       question_options: {
         Row: {
@@ -475,6 +491,7 @@ export interface Database {
           is_correct?: boolean;
           option_order?: number;
         };
+        Relationships: [];
       };
       assessments: {
         Row: {
@@ -525,6 +542,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       assessment_questions: {
         Row: {
@@ -542,6 +560,7 @@ export interface Database {
           question_id?: string;
           question_order?: number;
         };
+        Relationships: [];
       };
       attempts: {
         Row: {
@@ -574,6 +593,7 @@ export interface Database {
           score?: number | null;
           accuracy?: number | null;
         };
+        Relationships: [];
       };
       attempt_answers: {
         Row: {
@@ -603,6 +623,7 @@ export interface Database {
           marks_awarded?: number;
           answered_at?: string;
         };
+        Relationships: [];
       };
       audit_logs: {
         Row: {
@@ -632,6 +653,7 @@ export interface Database {
           metadata?: Json | null;
           created_at?: string;
         };
+        Relationships: [];
       };
     };
     Views: {

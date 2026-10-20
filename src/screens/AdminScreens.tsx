@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, User } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
+import { signUpUser } from '../features/auth';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
@@ -91,8 +93,25 @@ export function AddUser({ onBack }: { onBack: () => void }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', role: 'student' as 'admin' | 'faculty' | 'student', department: '', targetExam: '' });
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.name || !formData.email || !formData.password) return;
+    
+    if (isSupabaseConfigured()) {
+      try {
+        await signUpUser({
+          email: formData.email.trim(),
+          password: formData.password,
+          fullName: formData.name.trim(),
+          phone: formData.phone.trim(),
+          role: formData.role,
+          department: formData.department.trim(),
+          targetExam: formData.targetExam,
+        });
+      } catch (err) {
+        console.warn('[AddUser] Supabase register error:', err);
+      }
+    }
+
     addUser({
       name: formData.name,
       email: formData.email,

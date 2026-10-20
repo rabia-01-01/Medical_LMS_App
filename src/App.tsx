@@ -34,11 +34,24 @@ const adminNavItems = [
 ];
 
 function AppContent() {
-  const { user, isAuthenticated, isViewingAs, viewingAsUser, stopViewingAs } = useAuth();
+  const { user, isAuthenticated, isLoading, isViewingAs, viewingAsUser, stopViewingAs } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
-  const [currentScreen, setCurrentScreen] = useState('home');
+  const [currentScreen, setCurrentScreen] = useState(() => {
+    return user?.role === 'admin' || user?.role === 'faculty' ? 'dashboard' : 'home';
+  });
   const [screenData, setScreenData] = useState<any>(null);
   const [screenHistory, setScreenHistory] = useState<string[]>([]);
+
+  // Automatically reset to role-specific entry screen upon authentication or role switch
+  React.useEffect(() => {
+    if (user?.role === 'admin' || user?.role === 'faculty') {
+      setCurrentScreen('dashboard');
+    } else {
+      setCurrentScreen('home');
+    }
+    setScreenHistory([]);
+    setScreenData(null);
+  }, [user?.role, user?.id]);
 
   const handleNavigate = useCallback((screen: string, data?: any) => {
     setScreenHistory(prev => [...prev, currentScreen]);
@@ -64,7 +77,7 @@ function AppContent() {
     setScreenData(null);
   }, []);
 
-  if (showSplash) return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  if (showSplash || isLoading) return <SplashScreen onComplete={() => setShowSplash(false)} />;
   if (!isAuthenticated) return <LoginScreen />;
 
   const navItems = user?.role === 'admin' ? adminNavItems : user?.role === 'faculty' ? facultyNavItems : studentNavItems;

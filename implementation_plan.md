@@ -305,7 +305,7 @@ src/
 
 - [x] **Step 1**: Create `src/lib/supabase.ts` and `src/types/database.ts` with types from `db.sql`. *(Completed)*
 - [x] **Step 2**: Create `.env.example` and connect project to Supabase. *(Completed)*
-- [ ] **Step 3**: Migrate `AuthContext.tsx` to Supabase Auth while keeping existing UI intact.
+- [x] **Step 3**: Migrate `AuthContext.tsx` to Supabase Auth while keeping existing UI intact. *(Completed)*
 - [ ] **Step 4**: Wire curriculum data (Exams, Subjects, Chapters) from PostgreSQL.
 - [ ] **Step 5**: Wire Resources and connect uploads to Supabase Storage bucket `resources`.
 - [ ] **Step 6**: Connect the Assessment Engine and interactive test runner to `assessments` & `questions`.

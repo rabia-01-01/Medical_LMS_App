@@ -49,6 +49,9 @@ export interface Resource {
   size: string;
   status: 'published' | 'draft';
   examCategory: string;
+  fileName: string;
+  fileData?: string; // Base64 encoded file data
+  mimeType?: string;
 }
 
 export interface Announcement {

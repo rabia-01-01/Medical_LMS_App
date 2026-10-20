@@ -3,72 +3,134 @@ import { Header } from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 
+// Helper function to download base64 file
+function downloadFile(fileData: string, fileName: string, mimeType: string) {
+  const byteCharacters = atob(fileData.split(',')[1]);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 // ==================== RESOURCE VIEWER ====================
 export function ResourceViewer({ onBack, resource }: { onBack: () => void; resource?: any }) {
   const r = resource || { title: 'Document', type: 'PDF', subject: 'General', size: '5 MB', uploaderName: 'Faculty', date: '2024-12-15' };
-  if (r.type === 'Video') return <VideoPlayer onBack={onBack} resource={r} />;
-  return <PDFViewer onBack={onBack} resource={r} />;
+  
+  // Determine viewer based on file type/mimeType
+  const isVideo = r.type === 'Video' || r.mimeType?.startsWith('video/');
+  const isImage = r.mimeType?.startsWith('image/');
+  const isPDF = r.type === 'PDF' || r.mimeType === 'application/pdf';
+  
+  if (isVideo) return <VideoPlayer onBack={onBack} resource={r} />;
+  if (isImage) return <ImageViewer onBack={onBack} resource={r} />;
+  if (isPDF) return <PDFViewer onBack={onBack} resource={r} />;
+  return <FileViewer onBack={onBack} resource={r} />;
 }
 
 // ==================== PDF VIEWER ====================
 function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user, isViewingAs, viewingAsUser } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
   const displayUser = isViewingAs ? viewingAsUser : user;
   const watermarkText = `${displayUser?.name || 'User'} • ${new Date().toLocaleDateString()}`;
 
-  setTimeout(() => setIsLoading(false), 1200);
+  const handleDownload = () => {
+    if (resource.fileData && resource.fileName) {
+      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'application/pdf');
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-gray-100">
       <Header title={resource.title} showBack onBack={onBack} gradient={false} />
       <div className="watermark">{watermarkText}</div>
-      <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center gap-2">
-        <i className="fas fa-shield-alt text-yellow-600 text-xs" />
-        <p className="text-[10px] text-yellow-700">Protected document • Download restricted • Watermarked</p>
+      <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <i className="fas fa-shield-alt text-yellow-600 text-xs" />
+          <p className="text-[10px] text-yellow-700">Protected document • Watermarked</p>
+        </div>
+        {resource.fileData && (
+          <button onClick={handleDownload} className="text-[10px] text-teal-600 font-medium">
+            <i className="fas fa-download mr-1" />Download
+          </button>
+        )}
       </div>
-      {isLoading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-10 h-10 border-3 border-gray-200 border-t-teal-500 rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm text-gray-500">Loading document...</p>
-          </div>
+      
+      {resource.fileData ? (
+        <div className="flex-1 overflow-hidden">
+          <iframe 
+            src={resource.fileData} 
+            className="w-full h-full border-0"
+            title={resource.title}
+          />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="bg-white rounded-lg shadow-sm p-6 min-h-[600px] select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
-            <div className="text-center mb-6">
-              <h2 className="text-lg font-bold text-gray-800">{resource.title}</h2>
-              <p className="text-xs text-gray-500 mt-1">Subject: {resource.subject} | By: {resource.uploaderName}</p>
-              <div className="w-full h-0.5 bg-gray-200 mt-4" />
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-gray-800">1. Introduction</h3>
-              <p className="text-xs text-gray-600 leading-relaxed">This document contains study material for the enrolled course. Content is protected and watermarked for security purposes. All access is logged and monitored.</p>
-              <h3 className="text-sm font-bold text-gray-800">2. Key Concepts</h3>
-              <p className="text-xs text-gray-600 leading-relaxed">The fundamental principles covered in this material are essential for examination preparation. Students should review these concepts thoroughly and practice related questions.</p>
-              <div className="bg-blue-50 rounded-lg p-3 border-l-4 border-blue-400">
-                <p className="text-xs font-semibold text-blue-800 mb-1">Key Concept</p>
-                <p className="text-xs text-blue-700">Understanding the core principles is crucial for success in medical entrance examinations.</p>
-              </div>
-              <h3 className="text-sm font-bold text-gray-800">3. Practice Questions</h3>
-              <p className="text-xs text-gray-600 leading-relaxed">Attempt the practice questions at the end of each section to test your understanding. Review incorrect answers and revisit the relevant theory.</p>
-            </div>
-            <div className="mt-8 pt-4 border-t border-gray-200 text-center">
-              <p className="text-[10px] text-gray-400">Page {currentPage} of 24</p>
-              <p className="text-[9px] text-gray-300 mt-1">© Sultanat e Italia Medica</p>
-            </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <i className="fas fa-file-pdf text-5xl text-red-400 mb-3" />
+            <p className="text-sm font-medium text-gray-700">{resource.title}</p>
+            <p className="text-xs text-gray-500 mt-1">{resource.size}</p>
+            <p className="text-xs text-gray-400 mt-2">File data not available</p>
           </div>
         </div>
       )}
-      {!isLoading && (
-        <div className="bg-white border-t border-gray-200 px-4 py-2 flex items-center justify-between">
-          <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-1 bg-gray-100 rounded text-xs disabled:opacity-50"><i className="fas fa-chevron-left" /> Prev</button>
-          <span className="text-xs text-gray-500">Page {currentPage} / 24</span>
-          <button onClick={() => setCurrentPage(Math.min(24, currentPage + 1))} disabled={currentPage === 24} className="px-3 py-1 bg-gray-100 rounded text-xs disabled:opacity-50">Next <i className="fas fa-chevron-right" /></button>
+    </div>
+  );
+}
+
+// ==================== IMAGE VIEWER ====================
+function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
+  const { user } = useAuth();
+  const watermarkText = `${user?.name || 'User'}`;
+
+  const handleDownload = () => {
+    if (resource.fileData && resource.fileName) {
+      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'image/jpeg');
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-gray-900">
+      <Header title={resource.title} showBack onBack={onBack} />
+      <div className="watermark text-white/10">{watermarkText}</div>
+      
+      {resource.fileData ? (
+        <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+          <img 
+            src={resource.fileData} 
+            alt={resource.title}
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <i className="fas fa-image text-5xl text-gray-400 mb-3" />
+            <p className="text-sm text-gray-300">Image not available</p>
+          </div>
         </div>
       )}
+      
+      <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-gray-300">{resource.fileName}</p>
+          <p className="text-[10px] text-gray-500">{resource.size}</p>
+        </div>
+        {resource.fileData && (
+          <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 text-white rounded-lg text-xs font-medium">
+            <i className="fas fa-download mr-1" />Download
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -76,60 +138,144 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
 // ==================== VIDEO PLAYER ====================
 function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
   const watermarkText = `${user?.name || 'User'}`;
 
-  React.useEffect(() => {
-    if (!isPlaying) return;
-    const interval = setInterval(() => {
-      setProgress(prev => { if (prev >= 100) { setIsPlaying(false); return 100; } return prev + 0.5; });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isPlaying]);
+  const handleDownload = () => {
+    if (resource.fileData && resource.fileName) {
+      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'video/mp4');
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-black">
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 py-3">
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="text-white"><i className="fas fa-arrow-left" /></button>
-          <div className="flex-1 min-w-0"><p className="text-white text-sm font-medium truncate">{resource.title}</p></div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-medium truncate">{resource.title}</p>
+            <p className="text-gray-300 text-[10px]">{resource.size}</p>
+          </div>
         </div>
       </div>
       <div className="watermark text-white/10">{watermarkText}</div>
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
-            <i className="fas fa-play text-3xl text-white ml-1" />
+      
+      {resource.fileData ? (
+        <div className="flex-1 flex items-center justify-center">
+          <video 
+            src={resource.fileData} 
+            controls 
+            className="max-w-full max-h-full"
+            controlsList="nodownload"
+          >
+            Your browser does not support video playback.
+          </video>
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
+              <i className="fas fa-play text-3xl text-white ml-1" />
+            </div>
+            <p className="text-white/60 text-xs">Video data not available</p>
           </div>
-          <p className="text-white/60 text-xs">Lecture Video</p>
-          <p className="text-white/40 text-[10px] mt-1">Private streaming • Authorized access only</p>
         </div>
+      )}
+      
+      <div className="bg-gray-900 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <i className="fas fa-lock text-teal-400 text-[10px]" />
+          <p className="text-[10px] text-gray-400">Protected playback</p>
+        </div>
+        {resource.fileData && (
+          <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 text-white rounded-lg text-xs font-medium">
+            <i className="fas fa-download mr-1" />Download
+          </button>
+        )}
       </div>
-      <div className="bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-8">
-        <div className="mb-3">
-          <div className="h-1 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${progress}%` }} /></div>
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button className="text-white/70"><i className="fas fa-backward" /></button>
-            <button onClick={() => setIsPlaying(!isPlaying)} className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
-              <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'} text-black text-sm`} />
+    </div>
+  );
+}
+
+// ==================== FILE VIEWER (for Excel, Word, etc.) ====================
+function FileViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
+  const { user } = useAuth();
+  
+  const handleDownload = () => {
+    if (resource.fileData && resource.fileName) {
+      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'application/octet-stream');
+    }
+  };
+
+  const getFileIcon = () => {
+    const type = resource.type?.toLowerCase();
+    if (type === 'pyq' || type === 'q.paper') return 'fa-file-alt text-purple-500';
+    if (type === 'assignment') return 'fa-tasks text-green-500';
+    if (type === 'notes') return 'fa-sticky-note text-yellow-500';
+    if (type === 'syllabus') return 'fa-list text-blue-500';
+    return 'fa-file text-gray-500';
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      <Header title={resource.title} showBack onBack={onBack} gradient={false} />
+      
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <div className="w-24 h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center mx-auto mb-4">
+            <i className={`fas ${getFileIcon()} text-4xl`} />
+          </div>
+          
+          <h2 className="text-lg font-bold text-gray-800 mb-2">{resource.title}</h2>
+          
+          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+            <div className="space-y-2 text-left">
+              <div className="flex justify-between">
+                <span className="text-xs text-gray-500">Type</span>
+                <span className="text-xs font-medium text-gray-700">{resource.type}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-gray-500">Size</span>
+                <span className="text-xs font-medium text-gray-700">{resource.size}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-gray-500">Subject</span>
+                <span className="text-xs font-medium text-gray-700">{resource.subject}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-gray-500">Uploaded by</span>
+                <span className="text-xs font-medium text-gray-700">{resource.uploaderName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-gray-500">Date</span>
+                <span className="text-xs font-medium text-gray-700">{resource.date}</span>
+              </div>
+              {resource.fileName && (
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">File</span>
+                  <span className="text-xs font-medium text-gray-700 truncate ml-2">{resource.fileName}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {resource.fileData ? (
+            <button onClick={handleDownload} className="btn-primary">
+              <i className="fas fa-download mr-2" />Download File
             </button>
-            <button className="text-white/70"><i className="fas fa-forward" /></button>
-          </div>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+              <i className="fas fa-exclamation-triangle text-yellow-600 mb-2" />
+              <p className="text-xs text-yellow-700">File data not available. Please contact your instructor.</p>
+            </div>
+          )}
         </div>
-      </div>
-      <div className="bg-gray-900 px-4 py-2 flex items-center gap-2">
-        <i className="fas fa-lock text-teal-400 text-[10px]" />
-        <p className="text-[10px] text-gray-400">Protected playback • Short-lived authorization</p>
       </div>
     </div>
   );
 }
 
 // ==================== COURSE DETAIL ====================
-export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => void; course?: any; onNavigate: (screen: string) => void }) {
+export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => void; course?: any; onNavigate: (screen: string, data?: any) => void }) {
   const { resources, users } = useData();
   const c = course;
 
@@ -180,7 +326,7 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
           ) : (
             <div className="space-y-2">
               {courseResources.slice(0, 5).map((r) => (
-                <button key={r.id} onClick={() => onNavigate('resource-view')} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 active:bg-gray-100">
+                <button key={r.id} onClick={() => onNavigate('resource-view', r)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 active:bg-gray-100">
                   <i className={`fas ${r.type === 'Video' ? 'fa-play-circle text-blue-500' : 'fa-file-pdf text-red-500'}`} />
                   <span className="text-xs text-gray-700 flex-1 text-left">{r.title}</span>
                   <i className="fas fa-chevron-right text-gray-300 text-[10px]" />

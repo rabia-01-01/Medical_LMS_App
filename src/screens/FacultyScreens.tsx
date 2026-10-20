@@ -154,13 +154,58 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string) =>
 export function UploadResource({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const { courses, addResource } = useData();
-  const [formData, setFormData] = useState({ title: '', type: 'PDF', subject: '', courseId: '', examCategory: 'NEET', size: '5.2 MB' });
+  const [formData, setFormData] = useState({ 
+    title: '', 
+    type: 'PDF', 
+    subject: '', 
+    courseId: '', 
+    examCategory: 'NEET', 
+    size: '',
+    fileName: '',
+    fileData: '',
+    mimeType: ''
+  });
+  const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const reader = new FileReader();
+    
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      
+      setFormData(prev => ({
+        ...prev,
+        fileName: file.name,
+        fileData: base64,
+        mimeType: file.type,
+        size: `${sizeMB} MB`,
+        title: prev.title || file.name.replace(/\.[^/.]+$/, '')
+      }));
+      setUploading(false);
+    };
+
+    reader.onerror = () => {
+      alert('Error reading file');
+      setUploading(false);
+    };
+
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = () => {
-    if (!formData.title || !formData.courseId || !user) return;
+    if (!formData.title || !formData.courseId || !user || !formData.fileData) {
+      alert('Please fill all required fields and upload a file');
+      return;
+    }
+    
     addResource({
       title: formData.title,
       type: formData.type,
@@ -171,6 +216,9 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
       size: formData.size,
       status: 'published',
       examCategory: formData.examCategory,
+      fileName: formData.fileName,
+      fileData: formData.fileData,
+      mimeType: formData.mimeType
     });
     setSuccess(true);
     setTimeout(() => { onBack(); }, 1500);
@@ -223,26 +271,38 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
           </select>
         </div>
         <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Upload File</label>
+          <label className="text-xs font-semibold text-gray-700 mb-2 block">Upload File *</label>
           <input
             type="file"
             id="resource-file-upload"
-            accept=".pdf,.mp4,.doc,.docx,.ppt,.pptx,.txt"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                setFormData(p => ({ ...p, size: (file.size / (1024 * 1024)).toFixed(1) + ' MB', title: p.title || file.name.replace(/\.[^/.]+$/, '') }));
-              }
-            }}
+            accept=".pdf,.mp4,.doc,.docx,.ppt,.pptx,.txt,.xls,.xlsx,.jpg,.jpeg,.png"
+            onChange={handleFileSelect}
             className="hidden"
           />
           <label htmlFor="resource-file-upload" className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition block">
-            <i className="fas fa-cloud-upload-alt text-3xl text-gray-300 mb-2" />
-            <p className="text-sm text-gray-500">Tap to select file</p>
-            <p className="text-[10px] text-gray-400 mt-1">PDF, MP4, DOCX up to 500MB</p>
+            {uploading ? (
+              <>
+                <div className="w-8 h-8 border-3 border-gray-200 border-t-teal-500 rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-sm text-gray-500">Reading file...</p>
+              </>
+            ) : formData.fileName ? (
+              <>
+                <i className="fas fa-check-circle text-3xl text-green-500 mb-2" />
+                <p className="text-sm text-gray-700 font-medium truncate px-4">{formData.fileName}</p>
+                <p className="text-[10px] text-gray-400 mt-1">{formData.size} • Tap to change</p>
+              </>
+            ) : (
+              <>
+                <i className="fas fa-cloud-upload-alt text-3xl text-gray-300 mb-2" />
+                <p className="text-sm text-gray-500">Tap to select file</p>
+                <p className="text-[10px] text-gray-400 mt-1">PDF, MP4, DOCX, XLSX, Images up to 50MB</p>
+              </>
+            )}
           </label>
         </div>
-        <button onClick={handleSubmit} disabled={!formData.title || !formData.courseId} className="btn-primary disabled:opacity-50"><i className="fas fa-upload mr-2" />Upload Resource</button>
+        <button onClick={handleSubmit} disabled={!formData.title || !formData.courseId || !formData.fileData || uploading} className="btn-primary disabled:opacity-50">
+          <i className="fas fa-upload mr-2" />Upload Resource
+        </button>
       </div>
     </div>
   );

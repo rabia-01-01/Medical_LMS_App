@@ -228,10 +228,10 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
   const { resources, courses } = useData();
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
-  const types = ['All', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment'];
+  const types = ['All', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Q.Paper', 'Practice'];
   
-  const myCourseIds = courses.filter(c => c.studentIds.includes(user?.id || '')).map(c => c.id);
-  let filtered = resources.filter(r => myCourseIds.includes(r.courseId) && r.status === 'published');
+  // Show all published resources to students
+  let filtered = resources.filter(r => r.status === 'published');
   if (filter !== 'All') filtered = filtered.filter(r => r.type === filter);
   if (search) filtered = filtered.filter(r => r.title.toLowerCase().includes(search.toLowerCase()));
 
@@ -451,32 +451,166 @@ export function AnnouncementsScreen({ onBack }: { onBack: () => void }) {
 export function AboutScreen({ onBack }: { onBack: () => void }) {
   return (
     <div>
-      <Header title="About" showBack onBack={onBack} gradient={false} />
-      <div className="p-4">
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 rounded-full bg-teal-50 flex items-center justify-center mx-auto mb-3"><i className="fas fa-staff-snake text-2xl text-teal-600" /></div>
-          <h2 className="text-lg font-bold text-gray-800">Sultanat e Italia Medica</h2>
-          <p className="text-xs text-gray-500 mt-1">Your Gateway to Medical Education in India and Italy</p>
-        </div>
-        <div className="space-y-4">
-          <div className="card">
-            <h3 className="text-sm font-bold text-gray-800 mb-2">Our Mission</h3>
-            <p className="text-xs text-gray-600 leading-relaxed">Sultanat e Italia Medica is dedicated to providing comprehensive medical entrance examination preparation for students aspiring to pursue medical education in India and Italy.</p>
+      <Header title="About Us" showBack onBack={onBack} gradient={false} />
+      
+      {/* Hero Section */}
+      <div className="gradient-header pb-6 text-center">
+        <div className="relative z-10">
+          <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3 backdrop-blur-sm border-2 border-white/30">
+            <i className="fas fa-staff-snake text-3xl text-white" />
           </div>
-          <div className="card">
-            <h3 className="text-sm font-bold text-gray-800 mb-2">Exams We Prepare For</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {['NEET (India)', 'IMAT (Italy)', 'UCAT (UK)', 'MCAT (USA/Canada)'].map((exam) => (
-                <div key={exam} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                  <i className="fas fa-check-circle text-teal-500 text-xs" /><span className="text-xs text-gray-700">{exam}</span>
-                </div>
-              ))}
+          <h1 className="text-white text-xl font-bold">Sultanat e Italia Medica</h1>
+          <p className="text-teal-200 text-xs mt-1 italic">"Your Gateway to Medical Education in India and Italy"</p>
+          <div className="flex justify-center gap-1 mt-3">
+            <div className="w-8 h-1 rounded bg-green-400" />
+            <div className="w-8 h-1 rounded bg-white" />
+            <div className="w-8 h-1 rounded bg-red-400" />
+          </div>
+        </div>
+      </div>
+      <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
+
+      <div className="p-4 space-y-4">
+        {/* Mission Card */}
+        <div className="card bg-gradient-to-br from-teal-50 to-blue-50 border-l-4 border-teal-500">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+              <i className="fas fa-bullseye text-teal-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 mb-1">Our Mission</h3>
+              <p className="text-xs text-gray-600 leading-relaxed">We bridge the gap between aspiring medical students and their dream careers by providing world-class preparation for medical entrance examinations across India, Italy, and beyond.</p>
             </div>
           </div>
-          <div className="text-center mt-6">
-            <p className="text-[10px] text-gray-400">Version 1.0.0 • Build 2024.12.15</p>
-            <p className="text-[10px] text-gray-400 mt-1">© 2024 Sultanat e Italia Medica</p>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="card text-center py-3">
+            <p className="text-lg font-bold text-teal-600">9+</p>
+            <p className="text-[10px] text-gray-500">Departments</p>
           </div>
+          <div className="card text-center py-3">
+            <p className="text-lg font-bold text-teal-600">15+</p>
+            <p className="text-[10px] text-gray-500">Courses</p>
+          </div>
+          <div className="card text-center py-3">
+            <p className="text-lg font-bold text-teal-600">4</p>
+            <p className="text-[10px] text-gray-500">Exams</p>
+          </div>
+        </div>
+
+        {/* Exams We Prepare For */}
+        <div className="card">
+          <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i className="fas fa-graduation-cap text-teal-500" /> Exams We Prepare For
+          </h3>
+          <div className="space-y-2">
+            {[
+              { name: 'NEET', country: 'India', icon: '🇮🇳', color: 'bg-orange-50 border-orange-200' },
+              { name: 'IMAT', country: 'Italy', icon: '🇮🇹', color: 'bg-green-50 border-green-200' },
+              { name: 'UCAT', country: 'United Kingdom', icon: '🇬🇧', color: 'bg-blue-50 border-blue-200' },
+              { name: 'MCAT', country: 'USA / Canada', icon: '🌎', color: 'bg-purple-50 border-purple-200' },
+            ].map((exam) => (
+              <div key={exam.name} className={`flex items-center gap-3 p-3 rounded-lg border ${exam.color}`}>
+                <span className="text-xl">{exam.icon}</span>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-gray-800">{exam.name}</p>
+                  <p className="text-[10px] text-gray-500">{exam.country}</p>
+                </div>
+                <i className="fas fa-check-circle text-teal-500" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* What We Offer */}
+        <div className="card">
+          <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i className="fas fa-star text-yellow-500" /> What We Offer
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { icon: 'fa-video', label: 'Video Lectures', color: 'text-blue-500' },
+              { icon: 'fa-file-pdf', label: 'Study Notes', color: 'text-red-500' },
+              { icon: 'fa-clipboard-check', label: 'Mock Tests', color: 'text-green-500' },
+              { icon: 'fa-file-alt', label: 'PYQ Papers', color: 'text-purple-500' },
+              { icon: 'fa-users', label: 'Expert Faculty', color: 'text-teal-500' },
+              { icon: 'fa-comments', label: 'Community', color: 'text-orange-500' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                <i className={`fas ${item.icon} ${item.color} text-sm`} />
+                <span className="text-xs text-gray-700">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* NEET & IMAT Subjects */}
+        <div className="card bg-gradient-to-r from-orange-50 to-yellow-50">
+          <h3 className="text-sm font-bold text-gray-800 mb-2">🇮🇳 NEET Subjects</h3>
+          <div className="flex flex-wrap gap-1">
+            {['Physics', 'Chemistry', 'Biology', 'Botany', 'Zoology'].map((s) => (
+              <span key={s} className="badge bg-orange-100 text-orange-700 text-[10px]">{s}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="card bg-gradient-to-r from-green-50 to-teal-50">
+          <h3 className="text-sm font-bold text-gray-800 mb-2">🇮🇹 IMAT Subjects</h3>
+          <div className="flex flex-wrap gap-1">
+            {['Logical Reasoning', 'Biology', 'Chemistry', 'Physics', 'Mathematics'].map((s) => (
+              <span key={s} className="badge bg-green-100 text-green-700 text-[10px]">{s}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Why Choose Us */}
+        <div className="card">
+          <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i className="fas fa-award text-teal-500" /> Why Choose Us?
+          </h3>
+          <div className="space-y-2">
+            {[
+              'Comprehensive curriculum aligned with exam patterns',
+              'Expert faculty with years of teaching experience',
+              'Regular mock tests with detailed performance analysis',
+              'Previous year question papers with solutions',
+              'Interactive community for peer learning',
+              'Personalized guidance and doubt clearing',
+            ].map((item, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <i className="fas fa-check text-teal-500 text-xs mt-0.5" />
+                <span className="text-xs text-gray-600">{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Contact */}
+        <div className="card bg-gray-50 text-center">
+          <h3 className="text-sm font-bold text-gray-800 mb-2">Get in Touch</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <i className="fas fa-envelope text-teal-500 text-xs" />
+              <span className="text-xs text-gray-600">support@sultanatitalia.edu</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <i className="fas fa-globe text-teal-500 text-xs" />
+              <span className="text-xs text-gray-600">www.sultanatitalia.edu</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center pt-2 pb-4">
+          <div className="flex justify-center gap-1 mb-2">
+            <div className="w-6 h-0.5 rounded bg-green-400" />
+            <div className="w-6 h-0.5 rounded bg-gray-300" />
+            <div className="w-6 h-0.5 rounded bg-red-400" />
+          </div>
+          <p className="text-[10px] text-gray-400">Version 1.0.0</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">© 2024 Sultanat e Italia Medica. All rights reserved.</p>
         </div>
       </div>
     </div>

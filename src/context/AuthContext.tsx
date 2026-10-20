@@ -15,18 +15,23 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [isViewingAs, setIsViewingAs] = useState(false);
   const [viewingAsUser, setViewingAsUser] = useState<User | null>(null);
 
   const login = (userData: User) => {
     setUser(userData);
+    localStorage.setItem('currentUser', JSON.stringify(userData));
   };
 
   const logout = () => {
     setUser(null);
     setIsViewingAs(false);
     setViewingAsUser(null);
+    localStorage.removeItem('currentUser');
   };
 
   const startViewingAs = (targetUser: User, reason: string) => {

@@ -143,8 +143,12 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
   const [timeLeft, setTimeLeft] = useState((activeQuiz?.duration || 45) * 60);
   const [showNav, setShowNav] = useState(false);
   const [showSubmit, setShowSubmit] = useState(false);
+  const [showExitWarning, setShowExitWarning] = useState(false);
 
+  // Timer effect
   useEffect(() => {
+    if (timeLeft <= 0) return;
+    
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -156,8 +160,25 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
         return prev - 1;
       });
     }, 1000);
+    
     return () => clearInterval(timer);
-  }, [onNavigate, answers, activeQuiz]);
+  }, [timeLeft <= 0]);
+
+  // Prevent back navigation during quiz
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      e.preventDefault();
+      setShowExitWarning(true);
+      window.history.pushState(null, '', window.location.href);
+    };
+    
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -189,11 +210,12 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
       <div className="bg-white border-b border-gray-100 px-4 py-3">
         <div className="flex items-center justify-between mb-2">
           <button onClick={() => setShowNav(true)} className="text-sm text-gray-600"><i className="fas fa-th mr-1" />Q {currentQ + 1}/{questions.length}</button>
-          <div className={`flex items-center gap-1 px-3 py-1 rounded-full ${timeLeft < 300 ? 'bg-red-100 text-red-600' : 'bg-teal-100 text-teal-700'}`}>
+          <div className={`flex items-center gap-1 px-3 py-1 rounded-full ${timeLeft < 300 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-teal-100 text-teal-700'}`}>
             <i className="fas fa-clock text-xs" /><span className="text-sm font-mono font-bold">{formatTime(timeLeft)}</span>
           </div>
         </div>
         <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress}%` }} /></div>
+        <p className="text-[10px] text-orange-600 mt-1 text-center"><i className="fas fa-lock mr-1" />Quiz in progress - cannot exit until submission</p>
       </div>
       <div className="flex-1 overflow-y-auto p-4">
         <div className="card mb-4">
@@ -241,6 +263,19 @@ export function ActiveQuiz({ onBack, onNavigate }: { onBack: () => void; onNavig
               <button onClick={() => setShowSubmit(false)} className="btn-secondary flex-1">Review</button>
               <button onClick={handleSubmit} className="flex-1 py-3 bg-green-500 text-white rounded-xl font-semibold text-sm">Submit</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showExitWarning && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <div className="text-center mb-4">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3"><i className="fas fa-lock text-red-500 text-xl" /></div>
+              <h3 className="text-lg font-bold">Cannot Exit Quiz</h3>
+              <p className="text-sm text-gray-500 mt-1">You must complete and submit the quiz before exiting. Time remaining: {formatTime(timeLeft)}</p>
+            </div>
+            <button onClick={() => setShowExitWarning(false)} className="btn-primary">Continue Quiz</button>
           </div>
         </div>
       )}
@@ -339,6 +374,13 @@ export function QuizResults({ onBack, quizData }: { onBack: () => void; quizData
               </div>
             );
           })}
+        </div>
+
+        {/* Back to Home Button */}
+        <div className="mt-6 mb-4">
+          <button onClick={onBack} className="btn-primary">
+            <i className="fas fa-home mr-2" /> Back to Home
+          </button>
         </div>
       </div>
     </div>

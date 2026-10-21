@@ -136,3 +136,20 @@ export function useCurriculum(initialSubjectId?: string) {
     removeTopic,
   };
 }
+
+/**
+ * Convenient hook to access curriculum subjects.
+ */
+export function useSubjects() {
+  const { subjects, isLoading, error, refresh } = useCurriculum();
+  return { subjects, isLoading, error, refresh };
+}
+
+/**
+ * Convenient hook to access chapters for a given subject.
+ */
+export function useChapters(subjectId?: string) {
+  const { chapters, isLoading, error, refresh } = useCurriculum(subjectId);
+  return { chapters, isLoading, error, refresh };
+}
+

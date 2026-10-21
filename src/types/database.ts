@@ -695,7 +695,10 @@ export type Topic = Database['public']['Tables']['topics']['Row'];
 
 export type LearningResource = Database['public']['Tables']['resources']['Row'];
 export type LearningResourceInsert = Database['public']['Tables']['resources']['Insert'];
+export type LearningResourceUpdate = Database['public']['Tables']['resources']['Update'];
 export type ResourceFile = Database['public']['Tables']['resource_files']['Row'];
+export type ResourceFileInsert = Database['public']['Tables']['resource_files']['Insert'];
+export type ResourceFileUpdate = Database['public']['Tables']['resource_files']['Update'];
 
 export type Question = Database['public']['Tables']['questions']['Row'];
 export type QuestionOption = Database['public']['Tables']['question_options']['Row'];

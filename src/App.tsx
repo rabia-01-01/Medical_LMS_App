@@ -147,7 +147,7 @@ function AppContent() {
         case 'add-user': return <AddUser onBack={handleBack} />;
         case 'departments': return <AdminDepartments onBack={handleBack} />;
         case 'courses': return <AdminCourses onBack={handleBack} />;
-        case 'resources': return <AdminResources onBack={handleBack} />;
+        case 'resources': return <AdminResources onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quizzes': return <QuizList onBack={handleBack} onNavigate={handleNavigate} />;
         case 'announcements': return <AdminAnnouncements onBack={handleBack} onNavigate={handleNavigate} />;
         case 'send-announcement': return <SendAnnouncement onBack={handleBack} />;

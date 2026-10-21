@@ -1,16 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, Course, Resource } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
-import { CurriculumBrowser } from '../features/curriculum';
+import { CurriculumBrowser, useSubjects, useChapters } from '../features/curriculum';
+import { resourceService, normalizeResourceType, useResources } from '../features/resources';
 
 // ==================== FACULTY DASHBOARD ====================
 export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses, resources, quizzes, notifications } = useData();
+  const { resources: cloudResources } = useResources();
   const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
-  const myResources = resources.filter(r => r.uploaderId === user?.id);
+  const myResources = useMemo(() => {
+    const ids = new Set<string>();
+    const list: any[] = [];
+    cloudResources.forEach((cr) => {
+      if (cr.created_by === user?.id || !cr.created_by) {
+        ids.add(cr.id);
+        list.push(cr);
+      }
+    });
+    resources.forEach((r) => {
+      if (r.uploaderId === user?.id && !ids.has(r.id)) {
+        list.push(r);
+      }
+    });
+    return list;
+  }, [cloudResources, resources, user?.id]);
   const myQuizzes = quizzes.filter(q => q.createdById === user?.id);
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
@@ -242,9 +259,13 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
 export function UploadResource({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const { courses, addResource } = useData();
+  const { subjects } = useSubjects();
+
   const [formData, setFormData] = useState({ 
     title: '', 
     type: 'PDF', 
+    subjectId: '',
+    chapterId: '',
     subject: '', 
     courseId: '', 
     examCategory: 'NEET', 
@@ -253,16 +274,34 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
     fileData: '',
     mimeType: ''
   });
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Load chapters dynamically when a subject is selected
+  const { chapters } = useChapters(formData.subjectId || undefined);
   const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
+
+  const handleSubjectChange = (subjectId: string) => {
+    const selected = subjects.find((s: any) => s.id === subjectId);
+    setFormData(prev => ({
+      ...prev,
+      subjectId,
+      subject: selected ? selected.name : prev.subject,
+      chapterId: '' // reset chapter
+    }));
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setSelectedFile(file);
     setUploading(true);
+    setUploadProgress('Preparing file...');
     const reader = new FileReader();
     
     reader.onload = () => {
@@ -273,52 +312,90 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
         ...prev,
         fileName: file.name,
         fileData: base64,
-        mimeType: file.type,
+        mimeType: file.type || 'application/octet-stream',
         size: `${sizeMB} MB`,
         title: prev.title || file.name.replace(/\.[^/.]+$/, '')
       }));
       setUploading(false);
+      setUploadProgress('');
     };
 
     reader.onerror = () => {
-      alert('Error reading file');
+      setErrorMessage('Error reading selected file');
       setUploading(false);
+      setUploadProgress('');
     };
 
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = () => {
-    if (!formData.title || !formData.courseId || !user || !formData.fileData) {
+  const handleSubmit = async () => {
+    if (!formData.title || !formData.courseId || !user || (!formData.fileData && !selectedFile)) {
       alert('Please fill all required fields and upload a file');
       return;
     }
-    
-    addResource({
-      title: formData.title,
-      type: formData.type,
-      subject: formData.subject,
-      courseId: formData.courseId,
-      uploaderId: user.id,
-      uploaderName: user.name,
-      size: formData.size,
-      status: 'published',
-      examCategory: formData.examCategory,
-      fileName: formData.fileName,
-      fileData: formData.fileData,
-      mimeType: formData.mimeType
-    });
-    setSuccess(true);
-    setTimeout(() => { onBack(); }, 1500);
+
+    try {
+      setUploading(true);
+      setErrorMessage(null);
+      setUploadProgress('Uploading to Supabase Storage...');
+
+      const fileToUpload = selectedFile || new Blob([formData.fileData || ''], { type: formData.mimeType || 'application/pdf' });
+
+      // 1. Supabase Storage upload + PostgreSQL insert
+      const created = await resourceService.createResource({
+        title: formData.title,
+        description: `${formData.examCategory} • ${formData.subject || 'General'}`,
+        resourceType: normalizeResourceType(formData.type),
+        subjectId: formData.subjectId || 'sub-general',
+        chapterId: formData.chapterId || null,
+        status: 'PUBLISHED',
+        file: fileToUpload,
+        fileName: formData.fileName,
+        mimeType: formData.mimeType,
+        fileSize: selectedFile?.size || 0,
+        base64Data: formData.fileData,
+      }, user.id, user.name);
+
+      // 2. DataContext state update
+      addResource({
+        title: formData.title,
+        type: formData.type,
+        subject: formData.subject || (subjects.find((s: any) => s.id === formData.subjectId)?.name || 'General'),
+        courseId: formData.courseId,
+        uploaderId: user.id,
+        uploaderName: user.name,
+        size: formData.size,
+        status: 'published',
+        examCategory: formData.examCategory,
+        fileName: formData.fileName,
+        fileData: formData.fileData,
+        mimeType: formData.mimeType,
+        storagePath: created.file?.storage_path,
+        signedUrl: created.signedUrl || undefined,
+        subjectId: formData.subjectId,
+        chapterId: formData.chapterId,
+      });
+
+      setSuccess(true);
+      setTimeout(() => { onBack(); }, 1500);
+    } catch (err: any) {
+      console.error('Resource upload failed:', err);
+      setErrorMessage(err.message || 'Upload failed. Please try again.');
+      setUploading(false);
+      setUploadProgress('');
+    }
   };
 
   if (success) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3"><i className="fas fa-check text-green-500 text-2xl" /></div>
-          <p className="text-sm font-semibold text-gray-800">Resource Uploaded!</p>
-          <p className="text-xs text-gray-500 mt-1">Redirecting...</p>
+        <div className="text-center animate-fade-in">
+          <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-3">
+            <i className="fas fa-cloud-upload-alt text-teal-600 text-2xl" />
+          </div>
+          <p className="text-sm font-semibold text-gray-800">Resource Uploaded to Cloud Storage!</p>
+          <p className="text-xs text-gray-500 mt-1">Secured & synced with academic curriculum</p>
         </div>
       </div>
     );
@@ -328,38 +405,97 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
     <div>
       <Header title="Upload Resource" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-4">
+        {errorMessage && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 flex items-center gap-2">
+            <i className="fas fa-exclamation-circle" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Resource Type</label>
           <div className="grid grid-cols-4 gap-2">
             {['PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Q.Paper', 'Practice'].map((type) => (
-              <button key={type} onClick={() => setFormData(p => ({ ...p, type }))} className={`py-2 px-1 rounded-lg text-[10px] font-medium transition ${formData.type === type ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{type}</button>
+              <button 
+                key={type} 
+                onClick={() => setFormData(p => ({ ...p, type }))} 
+                className={`py-2 px-1 rounded-lg text-[10px] font-medium transition ${formData.type === type ? 'bg-teal-500 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                {type}
+              </button>
             ))}
           </div>
         </div>
+
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Title *</label>
-          <input value={formData.title} onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))} placeholder="Enter resource title" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          <input 
+            value={formData.title} 
+            onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))} 
+            placeholder="e.g., Kinematics Formula Sheet & Practice Set" 
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" 
+          />
         </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Subject</label>
-          <input value={formData.subject} onChange={(e) => setFormData(p => ({ ...p, subject: e.target.value }))} placeholder="e.g., Physics, Biology" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-2 block">Curriculum Subject *</label>
+            <select 
+              value={formData.subjectId} 
+              onChange={(e) => handleSubjectChange(e.target.value)} 
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="">Select subject</option>
+              {subjects.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-2 block">Chapter (Optional)</label>
+            <select 
+              value={formData.chapterId} 
+              onChange={(e) => setFormData(p => ({ ...p, chapterId: e.target.value }))} 
+              disabled={!formData.subjectId || chapters.length === 0}
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+            >
+              <option value="">Select chapter</option>
+              {chapters.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Course *</label>
-          <select value={formData.courseId} onChange={(e) => setFormData(p => ({ ...p, courseId: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-            <option value="">Select course</option>
-            {myCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            {myCourses.length === 0 && courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-2 block">Course *</label>
+            <select 
+              value={formData.courseId} 
+              onChange={(e) => setFormData(p => ({ ...p, courseId: e.target.value }))} 
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="">Select course</option>
+              {myCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {myCourses.length === 0 && courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-2 block">Target Exam</label>
+            <select 
+              value={formData.examCategory} 
+              onChange={(e) => setFormData(p => ({ ...p, examCategory: e.target.value }))} 
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
+            </select>
+          </div>
         </div>
+
         <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Exam Category</label>
-          <select value={formData.examCategory} onChange={(e) => setFormData(p => ({ ...p, examCategory: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-            <option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">Upload File *</label>
+          <label className="text-xs font-semibold text-gray-700 mb-2 block">Cloud Storage Upload *</label>
           <input
             type="file"
             id="resource-file-upload"
@@ -367,29 +503,51 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
             onChange={handleFileSelect}
             className="hidden"
           />
-          <label htmlFor="resource-file-upload" className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition block">
+          <label 
+            htmlFor="resource-file-upload" 
+            className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-teal-400 transition block bg-gray-50/50"
+          >
             {uploading ? (
               <>
                 <div className="w-8 h-8 border-3 border-gray-200 border-t-teal-500 rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-sm text-gray-500">Reading file...</p>
+                <p className="text-sm font-semibold text-teal-700">{uploadProgress || 'Processing...'}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Connecting to Supabase Storage</p>
               </>
             ) : formData.fileName ? (
               <>
-                <i className="fas fa-check-circle text-3xl text-green-500 mb-2" />
-                <p className="text-sm text-gray-700 font-medium truncate px-4">{formData.fileName}</p>
-                <p className="text-[10px] text-gray-400 mt-1">{formData.size} • Tap to change</p>
+                <i className="fas fa-check-circle text-3xl text-teal-500 mb-2" />
+                <p className="text-sm text-gray-800 font-semibold truncate px-4">{formData.fileName}</p>
+                <div className="flex items-center justify-center gap-2 mt-1">
+                  <span className="badge badge-teal text-[10px]"><i className="fas fa-cloud mr-1" />Storage Ready</span>
+                  <span className="text-[10px] text-gray-400">{formData.size} • Tap to replace</span>
+                </div>
               </>
             ) : (
               <>
                 <i className="fas fa-cloud-upload-alt text-3xl text-gray-300 mb-2" />
-                <p className="text-sm text-gray-500">Tap to select file</p>
-                <p className="text-[10px] text-gray-400 mt-1">PDF, MP4, DOCX, XLSX, Images up to 50MB</p>
+                <p className="text-sm font-medium text-gray-600">Tap or drop file here</p>
+                <p className="text-[10px] text-gray-400 mt-1">Direct upload to private bucket: PDF, MP4, Office, Images</p>
               </>
             )}
           </label>
         </div>
-        <button onClick={handleSubmit} disabled={!formData.title || !formData.courseId || !formData.fileData || uploading} className="btn-primary disabled:opacity-50">
-          <i className="fas fa-upload mr-2" />Upload Resource
+
+        <button 
+          onClick={handleSubmit} 
+          disabled={!formData.title || !formData.courseId || (!formData.fileData && !selectedFile) || uploading} 
+          className="btn-primary disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {uploading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Uploading to Cloud...</span>
+            </>
+          ) : (
+            <>
+              <i className="fas fa-cloud-upload-alt" />
+              <span>Upload to Supabase Storage</span>
+            </>
+          )}
         </button>
       </div>
     </div>
@@ -714,20 +872,70 @@ export function FacultyCommunity({ onBack }: { onBack: () => void }) {
 // ==================== FACULTY RESOURCES ====================
 export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { resources, deleteResource, courses } = useData();
+  const { resources: localResources, deleteResource, courses } = useData();
+  const { resources: cloudResources, loading: cloudLoading, deleteResource: deleteCloudResource } = useResources();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const myResources = resources.filter(r => r.uploaderId === user?.id);
+  // Merge cloud resources with local DataContext resources
+  const myResources = useMemo(() => {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    cloudResources.forEach((cr) => {
+      if (cr.created_by === user?.id || !cr.created_by) {
+        seen.add(cr.id);
+        list.push({
+          id: cr.id,
+          title: cr.title,
+          type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
+          subject: cr.subjectName || 'General',
+          courseId: cr.subject_id,
+          uploaderId: cr.created_by,
+          uploaderName: cr.creatorName || user?.name || 'Faculty',
+          date: cr.created_at?.split('T')[0] || 'Recent',
+          size: cr.sizeFormatted || 'Cloud',
+          status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
+          examCategory: 'Medical',
+          fileName: cr.file?.file_name || 'document.pdf',
+          storagePath: cr.file?.storage_path,
+          signedUrl: cr.signedUrl,
+          fileData: cr.fileData,
+        });
+      }
+    });
+
+    localResources.forEach((lr) => {
+      if ((lr.uploaderId === user?.id || !lr.uploaderId) && !seen.has(lr.id)) {
+        list.push(lr);
+      }
+    });
+
+    return list;
+  }, [cloudResources, localResources, user]);
+
   const types = ['All', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Q.Paper', 'Practice'];
 
   let filtered = myResources;
   if (filter !== 'All') filtered = filtered.filter(r => r.type === filter);
   if (search.trim()) {
     const q = search.toLowerCase();
-    filtered = filtered.filter(r => r.title.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q));
+    filtered = filtered.filter(r => r.title.toLowerCase().includes(q) || (r.subject && r.subject.toLowerCase().includes(q)));
   }
+
+  const handleDelete = async (resourceId: string) => {
+    const target = myResources.find(res => res.id === resourceId);
+    if (target?.storagePath) {
+      try {
+        await deleteCloudResource(resourceId, target.storagePath);
+      } catch (err) {
+        console.warn('Failed to delete cloud resource:', err);
+      }
+    }
+    deleteResource(resourceId);
+    setConfirmDelete(null);
+  };
 
   return (
     <div>
@@ -737,13 +945,18 @@ export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; o
         showBack 
         onBack={onBack}
         rightAction={
-          <button 
-            onClick={() => onNavigate('upload')} 
-            className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-sm transition"
-            title="Upload new resource"
-          >
-            <i className="fas fa-plus" />
-          </button>
+          <div className="flex items-center gap-2">
+            {cloudLoading && (
+              <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" title="Syncing cloud resources..." />
+            )}
+            <button 
+              onClick={() => onNavigate('upload')} 
+              className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-sm transition"
+              title="Upload new resource"
+            >
+              <i className="fas fa-plus" />
+            </button>
+          </div>
         }
       />
       <div className="p-4 space-y-3">
@@ -822,9 +1035,14 @@ export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; o
                     className="flex-1 min-w-0 cursor-pointer"
                   >
                     <p className="text-xs font-bold text-gray-800 truncate hover:text-teal-600 transition">{r.title}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5 truncate">
-                      {r.subject} {course ? `• ${course.name}` : ''} • {r.size} • {r.date}
-                    </p>
+                    <div className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center gap-1.5">
+                      {r.storagePath && (
+                        <span className="badge badge-teal text-[8px] py-0 px-1">
+                          <i className="fas fa-cloud mr-0.5" />Cloud
+                        </span>
+                      )}
+                      <span>{r.subject} {course ? `• ${course.name}` : ''} • {r.size} • {r.date}</span>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -860,7 +1078,7 @@ export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; o
             <div className="flex gap-2">
               <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1 py-2 text-xs">Cancel</button>
               <button 
-                onClick={() => { deleteResource(confirmDelete); setConfirmDelete(null); }} 
+                onClick={() => { if (confirmDelete) handleDelete(confirmDelete); }} 
                 className="flex-1 py-2 bg-red-600 text-white rounded-xl font-semibold text-xs hover:bg-red-700 transition"
               >
                 Delete

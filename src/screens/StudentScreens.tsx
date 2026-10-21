@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../components/Navigation';
 import { CurriculumBrowser } from '../features/curriculum';
+import { useResources } from '../features/resources';
 
 // ==================== HOME SCREEN ====================
 export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
@@ -261,39 +262,127 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
 // ==================== RESOURCES SCREEN ====================
 export function StudentResources({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { resources, courses } = useData();
+  const { resources: localResources, courses } = useData();
+  const { resources: cloudResources, loading: cloudLoading } = useResources();
+
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const types = ['All', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Q.Paper', 'Practice'];
-  
-  // Show all published resources to students
-  let filtered = resources.filter(r => r.status === 'published');
-  if (filter !== 'All') filtered = filtered.filter(r => r.type === filter);
-  if (search) filtered = filtered.filter(r => r.title.toLowerCase().includes(search.toLowerCase()));
+
+  // Merge cloud resources with local DataContext resources
+  const allResources = useMemo(() => {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    // 1. Cloud resources
+    cloudResources.forEach((cr) => {
+      seen.add(cr.id);
+      list.push({
+        id: cr.id,
+        title: cr.title,
+        type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
+        subject: cr.subjectName || 'General',
+        courseId: cr.subject_id,
+        uploaderId: cr.created_by,
+        uploaderName: cr.creatorName || 'Faculty',
+        date: cr.created_at?.split('T')[0] || 'Recent',
+        size: cr.sizeFormatted || 'Cloud',
+        status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
+        examCategory: 'Medical',
+        fileName: cr.file?.file_name || 'document.pdf',
+        storagePath: cr.file?.storage_path,
+        signedUrl: cr.signedUrl,
+        fileData: cr.fileData,
+      });
+    });
+
+    // 2. Local context resources
+    localResources.forEach((lr) => {
+      if (!seen.has(lr.id)) {
+        list.push(lr);
+      }
+    });
+
+    return list;
+  }, [cloudResources, localResources]);
+
+  // Show published resources to students
+  let filtered = allResources.filter((r: any) => r.status === 'published' || !r.status);
+  if (filter !== 'All') {
+    const fLower = filter.toLowerCase();
+    filtered = filtered.filter((r: any) => {
+      const tLower = (r.type || '').toLowerCase();
+      if (fLower === 'notes') return tLower.includes('note');
+      if (fLower === 'video') return tLower.includes('vid');
+      if (fLower === 'pyq') return tLower.includes('pyq') || tLower.includes('past');
+      if (fLower === 'assignment') return tLower.includes('assign') || tLower.includes('dpp') || tLower.includes('practice');
+      return tLower === fLower;
+    });
+  }
+
+  if (search) {
+    const s = search.toLowerCase();
+    filtered = filtered.filter((r: any) => 
+      r.title.toLowerCase().includes(s) || 
+      (r.subject && r.subject.toLowerCase().includes(s))
+    );
+  }
 
   const typeIcons: Record<string, string> = {
-    PDF: 'fa-file-pdf text-red-500', Video: 'fa-play-circle text-blue-500', Notes: 'fa-sticky-note text-yellow-500',
-    PYQ: 'fa-file-alt text-purple-500', Assignment: 'fa-tasks text-green-500',
+    PDF: 'fa-file-pdf text-red-500',
+    Video: 'fa-play-circle text-blue-500',
+    Notes: 'fa-sticky-note text-yellow-500',
+    PYQ: 'fa-file-alt text-purple-500',
+    Assignment: 'fa-tasks text-green-500',
   };
 
   return (
     <div>
-      <Header title="Resources" subtitle={`${filtered.length} resources`} />
-      <SearchBar value={search} onChange={setSearch} placeholder="Search resources..." />
+      <Header 
+        title="Resources" 
+        subtitle={`${filtered.length} learning resources`} 
+        rightAction={
+          cloudLoading ? (
+            <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" title="Syncing cloud resources..." />
+          ) : undefined
+        }
+      />
+      <SearchBar value={search} onChange={setSearch} placeholder="Search high-yield notes, PYQs, videos..." />
+      
       <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
         {types.map((type) => (
-          <button key={type} onClick={() => setFilter(type)} className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === type ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{type}</button>
+          <button 
+            key={type} 
+            onClick={() => setFilter(type)} 
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
+              filter === type ? 'bg-teal-500 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {type}
+          </button>
         ))}
       </div>
+
       <div className="px-4 space-y-2">
-        {filtered.map((resource) => (
-          <div key={resource.id} onClick={() => onNavigate('resource-view', resource)} className="card flex items-center gap-3 cursor-pointer active:bg-gray-50">
-            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-              <i className={`fas ${typeIcons[resource.type] || 'fa-file text-gray-400'}`} />
+        {filtered.map((resource: any) => (
+          <div 
+            key={resource.id} 
+            onClick={() => onNavigate('resource-view', resource)} 
+            className="card flex items-center gap-3 cursor-pointer active:bg-gray-50 border border-gray-100 hover:border-teal-300 transition"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center flex-shrink-0">
+              <i className={`fas ${typeIcons[resource.type] || 'fa-file text-teal-600'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 truncate">{resource.title}</p>
-              <p className="text-xs text-gray-500">{resource.subject} • {resource.uploaderName}</p>
+              <p className="text-sm font-semibold text-gray-800 truncate hover:text-teal-600 transition">{resource.title}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {resource.storagePath && (
+                  <span className="badge badge-teal text-[8px] py-0 px-1 font-semibold flex items-center gap-0.5">
+                    <i className="fas fa-cloud text-[8px]" /> Cloud
+                  </span>
+                )}
+                <p className="text-xs text-gray-500 truncate">{resource.subject} • {resource.uploaderName}</p>
+              </div>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px] text-gray-400">{resource.size}</span>
                 <span className="text-[10px] text-gray-400">•</span>
@@ -303,7 +392,13 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
             <i className="fas fa-chevron-right text-gray-300 text-xs" />
           </div>
         ))}
-        {filtered.length === 0 && <EmptyState icon="fa-folder-open" title="No Resources" message="No resources available for your courses" />}
+        {filtered.length === 0 && (
+          <EmptyState 
+            icon="fa-folder-open" 
+            title="No Resources Found" 
+            message={search ? 'No materials match your search query.' : 'No resources available for this category yet.'} 
+          />
+        )}
       </div>
     </div>
   );

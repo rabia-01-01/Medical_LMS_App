@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 import { CurriculumBrowser } from '../features/curriculum';
+import { resourceService, useResources } from '../features/resources';
 
 // Helper function to download base64 file
 function downloadFile(fileData: string, fileName: string, mimeType: string) {
@@ -58,7 +59,6 @@ function extractTextContent(fileData: string): string | null {
     if (!fileData) return null;
     const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
     const decoded = atob(base64Data);
-    // Decode UTF-8 string properly
     try {
       const bytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
       return new TextDecoder('utf-8').decode(bytes);
@@ -70,18 +70,83 @@ function extractTextContent(fileData: string): string | null {
   }
 }
 
+/**
+ * Custom hook to dynamically resolve active media URL:
+ * Pre-signed Supabase Storage URL > Direct HTTP URL > Blob URL from Base64
+ */
+function useResourceUrl(resource: any) {
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
+    if (resource?.signedUrl) return resource.signedUrl;
+    if (typeof resource?.url === 'string' && resource.url.startsWith('http')) return resource.url;
+    if (typeof resource?.fileUrl === 'string' && resource.fileUrl.startsWith('http')) return resource.fileUrl;
+    if (resource?.fileData) return fileDataToBlobUrl(resource.fileData, resource.mimeType || 'application/octet-stream');
+    return null;
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (resource?.signedUrl) {
+      setResolvedUrl(resource.signedUrl);
+      return;
+    }
+
+    if (resource?.url?.startsWith('http') || resource?.fileUrl?.startsWith('http')) {
+      setResolvedUrl(resource.url || resource.fileUrl);
+      return;
+    }
+
+    const storagePath = resource?.storagePath || resource?.storage_path || resource?.file?.storage_path;
+    if (storagePath) {
+      setLoading(true);
+      resourceService.getSignedResourceUrl(storagePath)
+        .then((url) => {
+          if (isMounted) {
+            if (url) {
+              setResolvedUrl(url);
+            } else if (resource?.fileData) {
+              setResolvedUrl(fileDataToBlobUrl(resource.fileData, resource.mimeType || 'application/octet-stream'));
+            }
+          }
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+      return;
+    }
+
+    if (resource?.fileData) {
+      setResolvedUrl(fileDataToBlobUrl(resource.fileData, resource.mimeType || 'application/octet-stream'));
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    resource?.signedUrl,
+    resource?.storagePath,
+    resource?.storage_path,
+    resource?.file?.storage_path,
+    resource?.fileData,
+    resource?.mimeType,
+  ]);
+
+  return { resolvedUrl, loading };
+}
+
 // ==================== RESOURCE VIEWER ====================
 export function ResourceViewer({ onBack, resource }: { onBack: () => void; resource?: any }) {
   const r = resource || { title: 'Document', type: 'PDF', subject: 'General', size: '5 MB', uploaderName: 'Faculty', date: '2024-12-15' };
   
-  const mime = (r.mimeType || '').toLowerCase();
-  const type = (r.type || '').toLowerCase();
-  const fileName = (r.fileName || '').toLowerCase();
+  const mime = (r.mimeType || r.file?.mime_type || '').toLowerCase();
+  const type = (r.type || r.resource_type || '').toLowerCase();
+  const fileName = (r.fileName || r.file?.file_name || '').toLowerCase();
 
   const isVideo = type === 'video' || mime.startsWith('video/') || fileName.endsWith('.mp4') || fileName.endsWith('.webm');
   const isImage = mime.startsWith('image/') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.gif') || fileName.endsWith('.webp');
   const isPDF = type === 'pdf' || mime === 'application/pdf' || fileName.endsWith('.pdf');
-  const isText = mime.startsWith('text/') || mime === 'application/json' || fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.json') || fileName.endsWith('.csv') || type === 'notes';
+  const isText = mime.startsWith('text/') || mime === 'application/json' || fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.json') || fileName.endsWith('.csv') || type === 'note' || type === 'notes';
 
   if (isVideo) return <VideoPlayer onBack={onBack} resource={r} />;
   if (isImage) return <ImageViewer onBack={onBack} resource={r} />;
@@ -95,32 +160,32 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
   const { user, isViewingAs, viewingAsUser } = useAuth();
   const displayUser = isViewingAs ? viewingAsUser : user;
   const watermarkText = `${displayUser?.name || 'User'} • ${new Date().toLocaleDateString()}`;
+  const { resolvedUrl, loading } = useResourceUrl(resource);
 
-  const blobUrl = useMemo(() => {
-    if (!resource.fileData) return null;
-    return fileDataToBlobUrl(resource.fileData, resource.mimeType || 'application/pdf');
-  }, [resource.fileData, resource.mimeType]);
+  const handleDownload = async () => {
+    const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
+    const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'document'}.pdf`;
+    const mimeType = resource.mimeType || resource.file?.mime_type || 'application/pdf';
 
-  useEffect(() => {
-    return () => {
-      if (blobUrl && blobUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(blobUrl);
+    if (storagePath) {
+      try {
+        await resourceService.downloadResourceFile(storagePath, fileName, mimeType, resource.fileData);
+        return;
+      } catch (err) {
+        console.warn('[PDFViewer] Cloud download failed, falling back to base64:', err);
       }
-    };
-  }, [blobUrl]);
+    }
 
-  const handleDownload = () => {
-    if (resource.fileData && resource.fileName) {
-      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'application/pdf');
+    if (resource.fileData) {
+      downloadFile(resource.fileData, fileName, mimeType);
+    } else if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank');
     }
   };
 
   const handleOpenFullscreen = () => {
-    if (blobUrl) {
-      window.open(blobUrl, '_blank');
-    } else if (resource.fileData) {
-      const tempUrl = fileDataToBlobUrl(resource.fileData, resource.mimeType || 'application/pdf');
-      if (tempUrl) window.open(tempUrl, '_blank');
+    if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank');
     }
   };
 
@@ -133,7 +198,7 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
         gradient={false}
         rightAction={
           <div className="flex items-center gap-2">
-            {blobUrl && (
+            {resolvedUrl && (
               <button 
                 onClick={handleOpenFullscreen} 
                 className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
@@ -143,7 +208,7 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                 <span className="hidden sm:inline">Fullscreen</span>
               </button>
             )}
-            {resource.fileData && (
+            {(resource.fileData || resolvedUrl) && (
               <button 
                 onClick={handleDownload} 
                 className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
@@ -165,28 +230,29 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
           <p className="text-[11px] text-yellow-800 font-medium">Protected Document • Watermarked</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[11px] text-gray-500">{resource.size}</span>
-          <button onClick={handleOpenFullscreen} className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1">
-            <i className="fas fa-expand text-[10px]" /> Open in Tab
-          </button>
+          <span className="text-[11px] text-gray-500">{resource.sizeFormatted || resource.size}</span>
+          {resolvedUrl && (
+            <button onClick={handleOpenFullscreen} className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1">
+              <i className="fas fa-expand text-[10px]" /> Open in Tab
+            </button>
+          )}
         </div>
       </div>
       
-      {blobUrl ? (
+      {resolvedUrl ? (
         <div className="flex-1 w-full h-full relative overflow-hidden bg-gray-200">
           <object
-            data={blobUrl}
+            data={resolvedUrl}
             type="application/pdf"
             className="w-full h-full"
           >
             <iframe 
-              src={blobUrl} 
+              src={resolvedUrl} 
               className="w-full h-full border-0"
               title={resource.title}
             />
           </object>
           
-          {/* Quick fallback button if iframe rendering is restricted by browser */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-gray-200 flex items-center gap-3">
             <span className="text-[11px] text-gray-600">Viewing PDF Document</span>
             <button 
@@ -197,15 +263,22 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
             </button>
           </div>
         </div>
+      ) : loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <p className="text-xs text-gray-500">Loading secure cloud stream...</p>
+          </div>
+        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center card max-w-sm p-6 shadow-sm">
             <i className="fas fa-file-pdf text-5xl text-red-500 mb-3" />
             <h3 className="text-base font-bold text-gray-800">{resource.title}</h3>
-            <p className="text-xs text-gray-500 mt-1">{resource.subject} • {resource.size}</p>
+            <p className="text-xs text-gray-500 mt-1">{resource.subject || resource.subjectName} • {resource.sizeFormatted || resource.size}</p>
             <div className="mt-4 p-3 bg-gray-50 rounded-xl text-xs text-gray-600">
-              <p>Uploaded by <span className="font-semibold text-gray-800">{resource.uploaderName}</span> on {resource.date}</p>
-              <p className="text-[11px] text-gray-400 mt-1">Direct PDF stream is not available or was stored as placeholder.</p>
+              <p>Uploaded by <span className="font-semibold text-gray-800">{resource.uploaderName || resource.creatorName}</span> on {resource.date || resource.created_at?.split('T')[0]}</p>
+              <p className="text-[11px] text-gray-400 mt-1">Direct PDF stream is not available or stored as offline preview.</p>
             </div>
             {resource.fileData && (
               <button onClick={handleDownload} className="btn-primary mt-4">
@@ -223,16 +296,42 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
 function TextViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [remoteText, setRemoteText] = useState<string | null>(null);
   const watermarkText = `${user?.name || 'User'} • ${new Date().toLocaleDateString()}`;
+  const { resolvedUrl } = useResourceUrl(resource);
 
   const textContent = useMemo(() => {
-    if (!resource.fileData) return null;
-    return extractTextContent(resource.fileData);
-  }, [resource.fileData]);
+    if (resource.fileData) return extractTextContent(resource.fileData);
+    return remoteText;
+  }, [resource.fileData, remoteText]);
 
-  const handleDownload = () => {
-    if (resource.fileData && resource.fileName) {
-      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'text/plain');
+  useEffect(() => {
+    if (!resource.fileData && resolvedUrl && resolvedUrl.startsWith('http')) {
+      fetch(resolvedUrl)
+        .then((res) => res.text())
+        .then((txt) => setRemoteText(txt))
+        .catch((err) => console.warn('[TextViewer] Failed to fetch remote text content:', err));
+    }
+  }, [resource.fileData, resolvedUrl]);
+
+  const handleDownload = async () => {
+    const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
+    const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'notes'}.txt`;
+    const mimeType = resource.mimeType || resource.file?.mime_type || 'text/plain';
+
+    if (storagePath) {
+      try {
+        await resourceService.downloadResourceFile(storagePath, fileName, mimeType, resource.fileData);
+        return;
+      } catch (err) {
+        console.warn('[TextViewer] Cloud download failed, using base64:', err);
+      }
+    }
+
+    if (resource.fileData) {
+      downloadFile(resource.fileData, fileName, mimeType);
+    } else if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank');
     }
   };
 
@@ -264,7 +363,7 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
               <i className={`fas ${copied ? 'fa-check text-green-600' : 'fa-copy'} text-[10px]`} />
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
-            {resource.fileData && (
+            {(resource.fileData || resolvedUrl) && (
               <button
                 onClick={handleDownload}
                 className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
@@ -280,28 +379,26 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
 
       <div className="watermark pointer-events-none select-none">{watermarkText}</div>
 
-      {/* Info bar */}
       <div className="bg-teal-50/70 border-b border-teal-100 px-4 py-2 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2 text-teal-800">
           <i className="fas fa-sticky-note text-teal-600 text-xs" />
-          <span className="font-semibold">{resource.type || 'Notes'} Document</span>
+          <span className="font-semibold">{resource.type || resource.resource_type || 'Notes'} Document</span>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-gray-500">
           <span>{lineCount} lines</span>
           <span>•</span>
           <span>{wordCount} words</span>
           <span>•</span>
-          <span>{resource.size}</span>
+          <span>{resource.sizeFormatted || resource.size}</span>
         </div>
       </div>
 
-      {/* Document content */}
       <div className="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-5 sm:p-7 min-h-[400px]">
           <div className="border-b border-gray-100 pb-3 mb-4">
             <h1 className="text-lg font-bold text-gray-900">{resource.title}</h1>
             <p className="text-xs text-gray-500 mt-1">
-              Subject: <span className="font-semibold text-gray-700">{resource.subject}</span> • Uploaded by {resource.uploaderName} on {resource.date}
+              Subject: <span className="font-semibold text-gray-700">{resource.subject || resource.subjectName}</span> • Uploaded by {resource.uploaderName || resource.creatorName} on {resource.date || resource.created_at?.split('T')[0]}
             </p>
           </div>
 
@@ -314,7 +411,7 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
               <i className="fas fa-file-alt text-4xl mb-3 text-gray-300" />
               <p className="text-sm font-medium text-gray-600">Text content preview not available.</p>
               <p className="text-xs text-gray-400 mt-1">Please download the file to view its full content.</p>
-              {resource.fileData && (
+              {(resource.fileData || resolvedUrl) && (
                 <button onClick={handleDownload} className="btn-primary max-w-xs mx-auto mt-4">
                   <i className="fas fa-download mr-1.5" />Download Document
                 </button>
@@ -331,20 +428,31 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
 function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
   const watermarkText = `${user?.name || 'User'}`;
+  const { resolvedUrl } = useResourceUrl(resource);
 
-  const blobUrl = useMemo(() => {
-    if (!resource.fileData) return null;
-    return fileDataToBlobUrl(resource.fileData, resource.mimeType || 'image/jpeg');
-  }, [resource.fileData, resource.mimeType]);
+  const handleDownload = async () => {
+    const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
+    const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'image'}.jpg`;
+    const mimeType = resource.mimeType || resource.file?.mime_type || 'image/jpeg';
 
-  const handleDownload = () => {
-    if (resource.fileData && resource.fileName) {
-      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'image/jpeg');
+    if (storagePath) {
+      try {
+        await resourceService.downloadResourceFile(storagePath, fileName, mimeType, resource.fileData);
+        return;
+      } catch (err) {
+        console.warn('[ImageViewer] Cloud download failed, using base64:', err);
+      }
+    }
+
+    if (resource.fileData) {
+      downloadFile(resource.fileData, fileName, mimeType);
+    } else if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank');
     }
   };
 
   const handleOpenFullscreen = () => {
-    if (blobUrl) window.open(blobUrl, '_blank');
+    if (resolvedUrl) window.open(resolvedUrl, '_blank');
   };
 
   return (
@@ -352,15 +460,15 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
       <Header 
         title={resource.title} 
         showBack 
-        onBack={onBack}
+        onBack={onBack} 
         rightAction={
           <div className="flex items-center gap-2">
-            {blobUrl && (
+            {resolvedUrl && (
               <button onClick={handleOpenFullscreen} className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-medium transition" title="Open Full Image">
                 <i className="fas fa-expand text-[10px] mr-1" />Fullscreen
               </button>
             )}
-            {resource.fileData && (
+            {(resource.fileData || resolvedUrl) && (
               <button onClick={handleDownload} className="px-2.5 py-1 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium transition" title="Download Image">
                 <i className="fas fa-download text-[10px] mr-1" />Download
               </button>
@@ -370,10 +478,10 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
       />
       <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
       
-      {resource.fileData ? (
+      {resolvedUrl || resource.fileData ? (
         <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
           <img 
-            src={blobUrl || resource.fileData} 
+            src={resolvedUrl || resource.fileData} 
             alt={resource.title}
             className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
           />
@@ -390,9 +498,9 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
       <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
         <div>
           <p className="text-xs text-gray-200 font-medium">{resource.fileName || resource.title}</p>
-          <p className="text-[10px] text-gray-400">{resource.size} • {resource.subject}</p>
+          <p className="text-[10px] text-gray-400">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
         </div>
-        {resource.fileData && (
+        {(resource.fileData || resolvedUrl) && (
           <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
             <i className="fas fa-download text-xs" />
             <span>Download</span>
@@ -407,15 +515,26 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
 function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
   const watermarkText = `${user?.name || 'User'}`;
+  const { resolvedUrl } = useResourceUrl(resource);
 
-  const blobUrl = useMemo(() => {
-    if (!resource.fileData) return null;
-    return fileDataToBlobUrl(resource.fileData, resource.mimeType || 'video/mp4');
-  }, [resource.fileData, resource.mimeType]);
+  const handleDownload = async () => {
+    const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
+    const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'video'}.mp4`;
+    const mimeType = resource.mimeType || resource.file?.mime_type || 'video/mp4';
 
-  const handleDownload = () => {
-    if (resource.fileData && resource.fileName) {
-      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'video/mp4');
+    if (storagePath) {
+      try {
+        await resourceService.downloadResourceFile(storagePath, fileName, mimeType, resource.fileData);
+        return;
+      } catch (err) {
+        console.warn('[VideoPlayer] Cloud download failed, using base64:', err);
+      }
+    }
+
+    if (resource.fileData) {
+      downloadFile(resource.fileData, fileName, mimeType);
+    } else if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank');
     }
   };
 
@@ -426,9 +545,9 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
           <button onClick={onBack} className="text-white text-base"><i className="fas fa-arrow-left" /></button>
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-bold truncate">{resource.title}</p>
-            <p className="text-gray-300 text-[10px]">{resource.size} • {resource.subject}</p>
+            <p className="text-gray-300 text-[10px]">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
           </div>
-          {resource.fileData && (
+          {(resource.fileData || resolvedUrl) && (
             <button onClick={handleDownload} className="text-white bg-white/20 hover:bg-white/30 text-xs px-2.5 py-1 rounded-lg">
               <i className="fas fa-download mr-1" />Download
             </button>
@@ -437,10 +556,10 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
       </div>
       <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
       
-      {resource.fileData ? (
+      {resolvedUrl || resource.fileData ? (
         <div className="flex-1 flex items-center justify-center p-2">
           <video 
-            src={blobUrl || resource.fileData} 
+            src={resolvedUrl || resource.fileData} 
             controls 
             className="max-w-full max-h-full rounded-lg shadow-xl"
             controlsList="nodownload"
@@ -464,7 +583,7 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
           <i className="fas fa-lock text-teal-400 text-xs" />
           <p className="text-[11px] text-gray-400">Protected Video Playback</p>
         </div>
-        {resource.fileData && (
+        {(resource.fileData || resolvedUrl) && (
           <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium">
             <i className="fas fa-download mr-1" />Save Video
           </button>
@@ -478,34 +597,45 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
 function FileViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
   const watermarkText = `${user?.name || 'User'} • ${new Date().toLocaleDateString()}`;
+  const { resolvedUrl } = useResourceUrl(resource);
 
-  const blobUrl = useMemo(() => {
-    if (!resource.fileData) return null;
-    return fileDataToBlobUrl(resource.fileData, resource.mimeType || 'application/octet-stream');
-  }, [resource.fileData, resource.mimeType]);
+  const handleDownload = async () => {
+    const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
+    const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'resource'}.bin`;
+    const mimeType = resource.mimeType || resource.file?.mime_type || 'application/octet-stream';
 
-  const handleDownload = () => {
-    if (resource.fileData && resource.fileName) {
-      downloadFile(resource.fileData, resource.fileName, resource.mimeType || 'application/octet-stream');
+    if (storagePath) {
+      try {
+        await resourceService.downloadResourceFile(storagePath, fileName, mimeType, resource.fileData);
+        return;
+      } catch (err) {
+        console.warn('[FileViewer] Cloud download failed, using base64:', err);
+      }
+    }
+
+    if (resource.fileData) {
+      downloadFile(resource.fileData, fileName, mimeType);
+    } else if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank');
     }
   };
 
   const handleOpenBrowser = () => {
-    if (blobUrl) {
-      window.open(blobUrl, '_blank');
+    if (resolvedUrl) {
+      window.open(resolvedUrl, '_blank');
     }
   };
 
   const getFileIcon = () => {
-    const fn = (resource.fileName || '').toLowerCase();
-    const type = (resource.type || '').toLowerCase();
+    const fn = (resource.fileName || resource.file?.file_name || '').toLowerCase();
+    const type = (resource.type || resource.resource_type || '').toLowerCase();
     if (fn.endsWith('.doc') || fn.endsWith('.docx')) return 'fa-file-word text-blue-600';
     if (fn.endsWith('.xls') || fn.endsWith('.xlsx')) return 'fa-file-excel text-green-600';
     if (fn.endsWith('.ppt') || fn.endsWith('.pptx')) return 'fa-file-powerpoint text-orange-600';
     if (type === 'pyq' || type === 'q.paper') return 'fa-file-alt text-purple-500';
-    if (type === 'assignment') return 'fa-tasks text-green-500';
-    if (type === 'notes') return 'fa-sticky-note text-yellow-500';
-    if (type === 'syllabus') return 'fa-list text-blue-500';
+    if (type === 'assignment' || type === 'dpp') return 'fa-tasks text-green-500';
+    if (type === 'notes' || type === 'note') return 'fa-sticky-note text-yellow-500';
+    if (type === 'syllabus' || type === 'book') return 'fa-book text-blue-500';
     return 'fa-file text-teal-600';
   };
 
@@ -517,7 +647,7 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
         onBack={onBack} 
         gradient={false}
         rightAction={
-          resource.fileData && (
+          (resource.fileData || resolvedUrl) && (
             <button onClick={handleDownload} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition">
               <i className="fas fa-download text-[10px]" />
               <span>Download</span>
@@ -534,40 +664,40 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
           </div>
           
           <h2 className="text-lg font-bold text-gray-800 mb-1">{resource.title}</h2>
-          <p className="text-xs text-gray-500 mb-4">{resource.subject} • {resource.examCategory || 'General'}</p>
+          <p className="text-xs text-gray-500 mb-4">{resource.subject || resource.subjectName} • {resource.examCategory || 'Medical LMS'}</p>
           
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 text-left space-y-2.5">
             <div className="flex justify-between items-center text-xs">
               <span className="text-gray-500">Document Type</span>
-              <span className="font-semibold text-gray-800 badge badge-teal">{resource.type || 'Document'}</span>
+              <span className="font-semibold text-gray-800 badge badge-teal">{resource.type || resource.resource_type || 'Document'}</span>
             </div>
             <div className="flex justify-between items-center text-xs">
               <span className="text-gray-500">File Size</span>
-              <span className="font-semibold text-gray-700">{resource.size}</span>
+              <span className="font-semibold text-gray-700">{resource.sizeFormatted || resource.size}</span>
             </div>
             <div className="flex justify-between items-center text-xs">
               <span className="text-gray-500">Uploaded By</span>
-              <span className="font-semibold text-gray-700">{resource.uploaderName}</span>
+              <span className="font-semibold text-gray-700">{resource.uploaderName || resource.creatorName}</span>
             </div>
             <div className="flex justify-between items-center text-xs">
               <span className="text-gray-500">Upload Date</span>
-              <span className="font-semibold text-gray-700">{resource.date}</span>
+              <span className="font-semibold text-gray-700">{resource.date || resource.created_at?.split('T')[0]}</span>
             </div>
-            {resource.fileName && (
+            {(resource.fileName || resource.file?.file_name) && (
               <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-100">
                 <span className="text-gray-500">File Name</span>
-                <span className="font-medium text-gray-700 truncate ml-2 max-w-[180px]">{resource.fileName}</span>
+                <span className="font-medium text-gray-700 truncate ml-2 max-w-[180px]">{resource.fileName || resource.file?.file_name}</span>
               </div>
             )}
           </div>
 
-          {resource.fileData ? (
+          {resource.fileData || resolvedUrl ? (
             <div className="space-y-2">
               <button onClick={handleDownload} className="btn-primary flex items-center justify-center gap-2 shadow-sm">
                 <i className="fas fa-download" />
-                <span>Download Document ({resource.size})</span>
+                <span>Download Document ({resource.sizeFormatted || resource.size})</span>
               </button>
-              {blobUrl && (
+              {resolvedUrl && (
                 <button 
                   onClick={handleOpenBrowser} 
                   className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
@@ -593,9 +723,55 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
 // ==================== COURSE DETAIL ====================
 export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => void; course?: any; onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { resources, users } = useData();
+  const { resources: localResources, users } = useData();
+  const { resources: cloudResources } = useResources();
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const c = course;
+
+  const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
+
+  const courseResources = useMemo(() => {
+    if (!c) return [];
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    cloudResources.forEach((cr) => {
+      const isMatch = cr.subject_id === c.id || 
+                      (c.subjects && c.subjects.includes(cr.subject_id)) ||
+                      (c.name && cr.subjectName && c.name.toLowerCase().includes(cr.subjectName.toLowerCase()));
+      if (isMatch) {
+        seen.add(cr.id);
+        list.push({
+          id: cr.id,
+          title: cr.title,
+          type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
+          subject: cr.subjectName || c.name || 'General',
+          courseId: c.id,
+          uploaderId: cr.created_by,
+          uploaderName: cr.creatorName || 'Faculty',
+          date: cr.created_at?.split('T')[0] || 'Recent',
+          size: cr.sizeFormatted || 'Cloud',
+          status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
+          examCategory: 'Medical',
+          fileName: cr.file?.file_name || 'document.pdf',
+          storagePath: cr.file?.storage_path,
+          signedUrl: cr.signedUrl,
+          fileData: cr.fileData,
+        });
+      }
+    });
+
+    localResources.forEach((lr) => {
+      if (lr.courseId === c.id && !seen.has(lr.id)) {
+        list.push(lr);
+      }
+    });
+
+    return list;
+  }, [cloudResources, localResources, c]);
+
+  const facultyMembers = users.filter(u => c?.facultyIds?.includes(u.id));
+  const enrolledStudents = users.filter(u => c?.studentIds?.includes(u.id));
 
   if (!c) return (
     <div>
@@ -603,11 +779,6 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
       <div className="p-4"><p className="text-sm text-gray-500 text-center">Course not found</p></div>
     </div>
   );
-
-  const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
-  const courseResources = resources.filter(r => r.courseId === c.id);
-  const facultyMembers = users.filter(u => c.facultyIds?.includes(u.id));
-  const enrolledStudents = users.filter(u => c.studentIds?.includes(u.id));
 
   return (
     <div>

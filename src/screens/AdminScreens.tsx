@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, User } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { signUpUser } from '../features/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { CurriculumBrowser } from '../features/curriculum';
+import { useResources, resourceService } from '../features/resources';
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
@@ -458,42 +459,226 @@ export function AdminCourses({ onBack }: { onBack: () => void }) {
 }
 
 // ==================== ADMIN RESOURCES ====================
-export function AdminResources({ onBack }: { onBack: () => void }) {
-  const { resources, deleteResource } = useData();
+export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onNavigate?: (screen: string, data?: any) => void }) {
+  const { resources: localResources, deleteResource, updateResource } = useData();
+  const { resources: cloudResources, loading: cloudLoading, deleteResource: deleteCloudResource } = useResources();
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('All');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  // Merge cloud resources with local DataContext resources
+  const allResources = useMemo(() => {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    cloudResources.forEach((cr) => {
+      seen.add(cr.id);
+      list.push({
+        id: cr.id,
+        title: cr.title,
+        type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
+        subject: cr.subjectName || 'General',
+        courseId: cr.subject_id,
+        uploaderId: cr.created_by,
+        uploaderName: cr.creatorName || 'Faculty',
+        date: cr.created_at?.split('T')[0] || 'Recent',
+        size: cr.sizeFormatted || 'Cloud',
+        status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
+        examCategory: 'Medical',
+        fileName: cr.file?.file_name || 'document.pdf',
+        storagePath: cr.file?.storage_path,
+        signedUrl: cr.signedUrl,
+        fileData: cr.fileData,
+        isCloud: !!cr.file?.storage_path,
+      });
+    });
+
+    localResources.forEach((lr) => {
+      if (!seen.has(lr.id)) {
+        list.push({
+          ...lr,
+          isCloud: !!lr.storagePath,
+        });
+      }
+    });
+
+    return list;
+  }, [cloudResources, localResources]);
+
+  const cloudCount = allResources.filter(r => r.isCloud).length;
+  const publishedCount = allResources.filter(r => r.status === 'published').length;
+
+  const filters = ['All', 'Cloud', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment'];
+
+  let filtered = allResources;
+  if (filter === 'Cloud') {
+    filtered = filtered.filter(r => r.isCloud);
+  } else if (filter !== 'All') {
+    filtered = filtered.filter(r => r.type === filter);
+  }
+
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(r => 
+      r.title.toLowerCase().includes(q) || 
+      (r.subject && r.subject.toLowerCase().includes(q)) ||
+      (r.uploaderName && r.uploaderName.toLowerCase().includes(q))
+    );
+  }
+
+  const handleDelete = async (resourceId: string) => {
+    const target = allResources.find(res => res.id === resourceId);
+    if (target?.storagePath) {
+      try {
+        await deleteCloudResource(resourceId, target.storagePath);
+      } catch (err) {
+        console.warn('Failed to delete cloud resource:', err);
+      }
+    }
+    deleteResource(resourceId);
+    setConfirmDelete(null);
+  };
 
   return (
     <div>
-      <Header title="Resources" subtitle={`${resources.length} resources`} showBack onBack={onBack} />
-      <div className="p-4 space-y-2">
-        {resources.length === 0 ? (
-          <EmptyState icon="fa-folder" title="No Resources" message="No resources uploaded yet" />
+      <Header 
+        title="Resource Governance" 
+        subtitle={`${allResources.length} total resources`} 
+        showBack 
+        onBack={onBack}
+        rightAction={
+          cloudLoading ? (
+            <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" title="Syncing cloud resources..." />
+          ) : undefined
+        }
+      />
+
+      <div className="p-4 space-y-3">
+        {/* Cloud Storage & Governance Stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="card p-2.5 text-center mb-0 bg-teal-50/60 border-teal-100">
+            <p className="text-teal-700 text-base font-bold">{allResources.length}</p>
+            <p className="text-[10px] text-teal-800 font-medium">Total Items</p>
+          </div>
+          <div className="card p-2.5 text-center mb-0 bg-blue-50/60 border-blue-100">
+            <p className="text-blue-700 text-base font-bold flex items-center justify-center gap-1">
+              <i className="fas fa-cloud text-xs" />
+              <span>{cloudCount}</span>
+            </p>
+            <p className="text-[10px] text-blue-800 font-medium">Cloud Storage</p>
+          </div>
+          <div className="card p-2.5 text-center mb-0 bg-emerald-50/60 border-emerald-100">
+            <p className="text-emerald-700 text-base font-bold">{publishedCount}</p>
+            <p className="text-[10px] text-emerald-800 font-medium">Published</p>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by title, subject, or faculty..."
+            className="w-full pl-8 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">
+              <i className="fas fa-times" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
+          {filters.map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+                filter === f ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {f === 'Cloud' && <i className="fas fa-cloud mr-1 text-[10px]" />}
+              {f}
+            </button>
+          ))}
+        </div>
+
+        {/* Resources List */}
+        {filtered.length === 0 ? (
+          <EmptyState icon="fa-folder" title="No Resources Found" message="No resources match the selected criteria" />
         ) : (
-          resources.map((r) => (
-            <div key={r.id} className="card flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                <i className={`fas ${r.type === 'Video' ? 'fa-play text-blue-500' : 'fa-file-pdf text-red-500'}`} />
+          <div className="space-y-2">
+            {filtered.map((r) => (
+              <div key={r.id} className="card p-3 mb-0 flex items-center gap-3 border border-gray-100 hover:border-teal-300 transition">
+                <div 
+                  onClick={() => onNavigate && onNavigate('resource-view', r)}
+                  className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-teal-50 transition"
+                >
+                  <i className={`fas ${
+                    r.type === 'Video' ? 'fa-play text-blue-500' :
+                    r.type === 'PDF' ? 'fa-file-pdf text-red-500' :
+                    r.type === 'Notes' ? 'fa-sticky-note text-yellow-500' : 'fa-file-alt text-teal-600'
+                  } text-base`} />
+                </div>
+
+                <div 
+                  onClick={() => onNavigate && onNavigate('resource-view', r)} 
+                  className="flex-1 min-w-0 cursor-pointer"
+                >
+                  <p className="text-xs font-bold text-gray-800 truncate hover:text-teal-600 transition">{r.title}</p>
+                  <div className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center gap-1.5">
+                    {r.isCloud && (
+                      <span className="badge badge-teal text-[8px] py-0 px-1">
+                        <i className="fas fa-cloud mr-0.5" />Cloud
+                      </span>
+                    )}
+                    <span>{r.subject} • {r.uploaderName} • {r.date}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <StatusBadge status={r.status} />
+                  {onNavigate && (
+                    <button
+                      onClick={() => onNavigate('resource-view', r)}
+                      className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      title="Preview resource document"
+                    >
+                      <i className="fas fa-eye text-[10px]" />
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setConfirmDelete(r.id)} 
+                    className="w-7 h-7 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center text-xs transition"
+                    title="Delete resource"
+                  >
+                    <i className="fas fa-trash" />
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-800 truncate">{r.title}</p>
-                <p className="text-[10px] text-gray-400">{r.uploaderName} • {r.date}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusBadge status={r.status} />
-                <button onClick={() => setConfirmDelete(r.id)} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
-            <h3 className="text-lg font-bold text-gray-800 text-center mb-2">Delete Resource?</h3>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => { deleteResource(confirmDelete); setConfirmDelete(null); }} className="flex-1 py-3 bg-red-500 text-white rounded-xl font-semibold text-sm">Delete</button>
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm animate-slide-up">
+            <h3 className="text-base font-bold text-gray-800 mb-1">Delete Resource?</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Are you sure you want to permanently delete this resource and any associated storage file from the cloud?
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1 py-2 text-xs">Cancel</button>
+              <button 
+                onClick={() => { if (confirmDelete) handleDelete(confirmDelete); }} 
+                className="flex-1 py-2 bg-red-600 text-white rounded-xl font-semibold text-xs hover:bg-red-700 transition"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

@@ -329,6 +329,36 @@ ON resources FOR UPDATE USING (
     auth.get_user_role() = 'ADMIN'
 );
 
+CREATE POLICY "Users delete own resources, Admin delete any"
+ON resources FOR DELETE USING (
+    created_by = auth.uid() OR 
+    auth.get_user_role() = 'ADMIN'
+);
+
+-- 3.1 RESOURCE FILES
+CREATE POLICY "Students and Faculty view resource files for viewable resources"
+ON resource_files FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM resources r
+        WHERE r.id = resource_files.resource_id
+        AND (r.status = 'PUBLISHED' OR r.created_by = auth.uid() OR auth.get_user_role() = 'ADMIN')
+    )
+);
+
+CREATE POLICY "Faculty and Admins insert resource files"
+ON resource_files FOR INSERT WITH CHECK (
+    auth.get_user_role() IN ('FACULTY', 'ADMIN')
+);
+
+CREATE POLICY "Faculty and Admins delete resource files"
+ON resource_files FOR DELETE USING (
+    EXISTS (
+        SELECT 1 FROM resources r
+        WHERE r.id = resource_files.resource_id
+        AND (r.created_by = auth.uid() OR auth.get_user_role() = 'ADMIN')
+    )
+);
+
 -- 4. ASSESSMENTS & QUESTIONS
 CREATE POLICY "Students view published assessments"
 ON assessments FOR SELECT USING (
@@ -393,6 +423,14 @@ USING (
 CREATE POLICY "Faculty and Admins can upload resources"
 ON storage.objects FOR INSERT
 WITH CHECK (
+    bucket_id = 'resources' AND
+    auth.get_user_role() IN ('FACULTY', 'ADMIN')
+);
+
+-- RLS for Storage: Faculty and Admins can delete resources
+CREATE POLICY "Faculty and Admins can delete resources"
+ON storage.objects FOR DELETE
+USING (
     bucket_id = 'resources' AND
     auth.get_user_role() IN ('FACULTY', 'ADMIN')
 );

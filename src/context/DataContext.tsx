@@ -52,6 +52,10 @@ export interface Resource {
   fileName: string;
   fileData?: string; // Base64 encoded file data
   mimeType?: string;
+  storagePath?: string; // Supabase Storage bucket path
+  signedUrl?: string; // Pre-signed temporary URL for viewing/download
+  subjectId?: string;
+  chapterId?: string;
 }
 
 export interface Announcement {

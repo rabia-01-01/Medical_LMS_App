@@ -268,13 +268,93 @@ export async function getSubjects(): Promise<Subject[]> {
   }
 }
 
+// ============================================================================
+// LOCAL STORAGE PERSISTENT CURRICULUM FALLBACK (Offline / Hybrid Cache)
+// ============================================================================
+
+const CUSTOM_STORAGE_KEY = 'lms_curriculum_custom_v1';
+
+export interface CustomCurriculumData {
+  chapters: Chapter[];
+  topics: Topic[];
+  deletedChapterIds?: string[];
+  deletedTopicIds?: string[];
+}
+
+export function getCustomCurriculumData(): CustomCurriculumData {
+  try {
+    const raw = localStorage.getItem(CUSTOM_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    // ignore
+  }
+  return { chapters: [], topics: [], deletedChapterIds: [], deletedTopicIds: [] };
+}
+
+export function saveCustomCurriculumData(data: CustomCurriculumData): void {
+  try {
+    localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function mergeWithCustomCurriculum(baseCurriculum: SubjectWithChapters[]): SubjectWithChapters[] {
+  const custom = getCustomCurriculumData();
+  const deletedChaps = new Set(custom.deletedChapterIds || []);
+  const deletedTops = new Set(custom.deletedTopicIds || []);
+
+  return baseCurriculum.map((subj) => {
+    // 1. Existing base chapters filtered
+    const validBaseChapters: ChapterWithTopics[] = subj.chapters
+      .filter((c) => !deletedChaps.has(c.id))
+      .map((ch) => {
+        const existingTopics = ch.topics.filter((t) => !deletedTops.has(t.id));
+        const customForThisChapter = (custom.topics || []).filter(
+          (t) => t.chapter_id === ch.id && !deletedTops.has(t.id) && !existingTopics.some((et) => et.id === t.id)
+        );
+        return {
+          ...ch,
+          topics: [...existingTopics, ...customForThisChapter].sort(
+            (a, b) => (a.display_order || 0) - (b.display_order || 0)
+          ),
+        };
+      });
+
+    // 2. Custom chapters added to this subject
+    const customForThisSubject = (custom.chapters || [])
+      .filter(
+        (c) =>
+          (c.subject_id === subj.id || c.subject_id === subj.code) &&
+          !deletedChaps.has(c.id) &&
+          !validBaseChapters.some((bc) => bc.id === c.id)
+      )
+      .map((c) => {
+        const topics = (custom.topics || [])
+          .filter((t) => t.chapter_id === c.id && !deletedTops.has(t.id))
+          .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+        return {
+          ...c,
+          topics,
+        };
+      });
+
+    return {
+      ...subj,
+      chapters: [...validBaseChapters, ...customForThisSubject].sort(
+        (a, b) => (a.display_order || 0) - (b.display_order || 0)
+      ),
+    };
+  });
+}
+
 /**
  * Fetch the complete 3-tier academic hierarchy:
  * Subject -> Chapters -> Topics
  */
 export async function getFullCurriculum(): Promise<SubjectWithChapters[]> {
   if (!isSupabaseConfigured()) {
-    return DEFAULT_CURRICULUM;
+    return mergeWithCustomCurriculum(DEFAULT_CURRICULUM);
   }
 
   try {
@@ -284,15 +364,15 @@ export async function getFullCurriculum(): Promise<SubjectWithChapters[]> {
       .order('name');
 
     if (subjError || !subjects || subjects.length === 0) {
-      return DEFAULT_CURRICULUM;
+      return mergeWithCustomCurriculum(DEFAULT_CURRICULUM);
     }
 
-    const { data: chapters, error: chapError } = await supabase
+    const { data: chapters } = await supabase
       .from('chapters')
       .select('*')
       .order('display_order', { ascending: true });
 
-    const { data: topics, error: topError } = await supabase
+    const { data: topics } = await supabase
       .from('topics')
       .select('*')
       .order('display_order', { ascending: true });
@@ -316,13 +396,13 @@ export async function getFullCurriculum(): Promise<SubjectWithChapters[]> {
 
     // If database subjects exist but no chapters are populated, merge with default chapters
     if (nested.every((s) => s.chapters.length === 0)) {
-      return DEFAULT_CURRICULUM;
+      return mergeWithCustomCurriculum(DEFAULT_CURRICULUM);
     }
 
-    return nested;
+    return mergeWithCustomCurriculum(nested);
   } catch (err) {
     console.error('[curriculumService] Error fetching full curriculum hierarchy:', err);
-    return DEFAULT_CURRICULUM;
+    return mergeWithCustomCurriculum(DEFAULT_CURRICULUM);
   }
 }
 
@@ -339,17 +419,21 @@ export async function getChapters(subjectId: string): Promise<ChapterWithTopics[
  * Add a new chapter to a subject.
  */
 export async function createChapter(payload: CreateChapterPayload): Promise<Chapter | null> {
+  const custom = getCustomCurriculumData();
+  const fallbackChapter: Chapter = {
+    id: `chap-${Date.now()}`,
+    subject_id: payload.subjectId,
+    name: payload.name.trim(),
+    description: payload.description || null,
+    display_order: payload.displayOrder || (custom.chapters.length + 1),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
   if (!isSupabaseConfigured()) {
-    const newChapter: Chapter = {
-      id: `chap-${Date.now()}`,
-      subject_id: payload.subjectId,
-      name: payload.name.trim(),
-      description: payload.description || null,
-      display_order: payload.displayOrder || 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    return newChapter;
+    custom.chapters.push(fallbackChapter);
+    saveCustomCurriculumData(custom);
+    return fallbackChapter;
   }
 
   try {
@@ -364,15 +448,21 @@ export async function createChapter(payload: CreateChapterPayload): Promise<Chap
       .select()
       .single();
 
-    if (error) {
-      console.error('[curriculumService] createChapter error:', error.message);
-      return null;
+    if (error || !data) {
+      console.warn('[curriculumService] Supabase createChapter warning, saving locally:', error?.message);
+      custom.chapters.push(fallbackChapter);
+      saveCustomCurriculumData(custom);
+      return fallbackChapter;
     }
 
+    custom.chapters.push(data);
+    saveCustomCurriculumData(custom);
     return data;
   } catch (err) {
-    console.error('[curriculumService] createChapter exception:', err);
-    return null;
+    console.warn('[curriculumService] createChapter exception, saving locally:', err);
+    custom.chapters.push(fallbackChapter);
+    saveCustomCurriculumData(custom);
+    return fallbackChapter;
   }
 }
 
@@ -380,17 +470,21 @@ export async function createChapter(payload: CreateChapterPayload): Promise<Chap
  * Add a new topic to a chapter.
  */
 export async function createTopic(payload: CreateTopicPayload): Promise<Topic | null> {
+  const custom = getCustomCurriculumData();
+  const fallbackTopic: Topic = {
+    id: `top-${Date.now()}`,
+    chapter_id: payload.chapterId,
+    name: payload.name.trim(),
+    description: payload.description || null,
+    display_order: payload.displayOrder || (custom.topics.length + 1),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
   if (!isSupabaseConfigured()) {
-    const newTopic: Topic = {
-      id: `top-${Date.now()}`,
-      chapter_id: payload.chapterId,
-      name: payload.name.trim(),
-      description: payload.description || null,
-      display_order: payload.displayOrder || 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    return newTopic;
+    custom.topics.push(fallbackTopic);
+    saveCustomCurriculumData(custom);
+    return fallbackTopic;
   }
 
   try {
@@ -405,44 +499,80 @@ export async function createTopic(payload: CreateTopicPayload): Promise<Topic | 
       .select()
       .single();
 
-    if (error) {
-      console.error('[curriculumService] createTopic error:', error.message);
-      return null;
+    if (error || !data) {
+      console.warn('[curriculumService] Supabase createTopic warning, saving locally:', error?.message);
+      custom.topics.push(fallbackTopic);
+      saveCustomCurriculumData(custom);
+      return fallbackTopic;
     }
 
+    custom.topics.push(data);
+    saveCustomCurriculumData(custom);
     return data;
   } catch (err) {
-    console.error('[curriculumService] createTopic exception:', err);
-    return null;
+    console.warn('[curriculumService] createTopic exception, saving locally:', err);
+    custom.topics.push(fallbackTopic);
+    saveCustomCurriculumData(custom);
+    return fallbackTopic;
   }
+}
+
+/**
+ * Reorder topics inside a chapter.
+ */
+export async function reorderTopics(chapterId: string, orderedTopicIds: string[]): Promise<boolean> {
+  const custom = getCustomCurriculumData();
+  custom.topics = custom.topics.map((t) => {
+    if (t.chapter_id === chapterId) {
+      const idx = orderedTopicIds.indexOf(t.id);
+      if (idx !== -1) {
+        return { ...t, display_order: idx + 1 };
+      }
+    }
+    return t;
+  });
+  saveCustomCurriculumData(custom);
+  return true;
 }
 
 /**
  * Delete a chapter.
  */
 export async function deleteChapter(chapterId: string): Promise<boolean> {
-  if (!isSupabaseConfigured()) return true;
-
-  try {
-    const { error } = await supabase.from('chapters').delete().eq('id', chapterId);
-    return !error;
-  } catch (err) {
-    return false;
+  const custom = getCustomCurriculumData();
+  if (!custom.deletedChapterIds) custom.deletedChapterIds = [];
+  if (!custom.deletedChapterIds.includes(chapterId)) {
+    custom.deletedChapterIds.push(chapterId);
   }
+  custom.chapters = custom.chapters.filter((c) => c.id !== chapterId);
+  saveCustomCurriculumData(custom);
+
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('chapters').delete().eq('id', chapterId);
+    } catch {}
+  }
+  return true;
 }
 
 /**
  * Delete a topic.
  */
 export async function deleteTopic(topicId: string): Promise<boolean> {
-  if (!isSupabaseConfigured()) return true;
-
-  try {
-    const { error } = await supabase.from('topics').delete().eq('id', topicId);
-    return !error;
-  } catch (err) {
-    return false;
+  const custom = getCustomCurriculumData();
+  if (!custom.deletedTopicIds) custom.deletedTopicIds = [];
+  if (!custom.deletedTopicIds.includes(topicId)) {
+    custom.deletedTopicIds.push(topicId);
   }
+  custom.topics = custom.topics.filter((t) => t.id !== topicId);
+  saveCustomCurriculumData(custom);
+
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('topics').delete().eq('id', topicId);
+    } catch {}
+  }
+  return true;
 }
 
 /**

@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../components/Navigation';
@@ -555,7 +557,10 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
                     <span className={`badge text-[9px] ${msg.authorRole === 'Faculty' ? 'badge-teal' : msg.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'}`}>{msg.authorRole}</span>
                     {msg.pinned && <i className="fas fa-thumbtack text-teal-500 text-[9px]" />}
                   </div>
-                  <p className="text-[10px] text-gray-400">{msg.time}</p>
+                  <p className="text-[10px] text-gray-400 font-medium flex items-center gap-1 mt-0.5">
+                    <i className="far fa-clock text-[9px] text-teal-600" />
+                    <span>{msg.time}</span>
+                  </p>
                 </div>
               </div>
               <p className="text-sm text-gray-700">{msg.message}</p>
@@ -707,10 +712,13 @@ export function AnnouncementsScreen({ onBack }: { onBack: () => void }) {
                 <div className="flex-1">
                   <p className="text-sm font-bold text-gray-800">{a.title}</p>
                   <p className="text-xs text-gray-600 mt-1">{a.content}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10px] text-gray-400">By {a.authorName}</span>
-                    <span className="text-[10px] text-gray-400">•</span>
-                    <span className="text-[10px] text-gray-400">{a.date}</span>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className="text-[10px] text-gray-500 font-medium">By {a.authorName} ({a.authorRole})</span>
+                    <span className="text-[10px] text-gray-300">•</span>
+                    <span className="text-[10px] text-teal-700 font-semibold flex items-center gap-1 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60">
+                      <i className="far fa-clock text-[9px]" />
+                      <span>{a.date}{a.time ? ` at ${a.time}` : ''}</span>
+                    </span>
                   </div>
                 </div>
               </div>
@@ -956,23 +964,429 @@ export function HelpScreen({ onBack }: { onBack: () => void }) {
 
 // ==================== CALENDAR ====================
 export function CalendarScreen({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const { calendarEvents, announcements, quizzes, addCalendarEvent } = useData();
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => format(new Date(), 'yyyy-MM-dd'));
+  const [filterType, setFilterType] = useState<string>('All');
+  const [showAddEventModal, setShowAddEventModal] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventDesc, setNewEventDesc] = useState('');
+  const [newEventDate, setNewEventDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [newEventTime, setNewEventTime] = useState('10:00 AM');
+  const [newEventType, setNewEventType] = useState<'announcement' | 'exam' | 'lecture' | 'deadline'>('lecture');
+
+  const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
+
+  // Consolidate all academic events
+  const allEvents = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      date: string;
+      time?: string;
+      type: 'announcement' | 'exam' | 'lecture' | 'deadline';
+      authorName?: string;
+      authorRole?: string;
+    }> = [...calendarEvents];
+
+    const seenIds = new Set(list.map(e => e.id));
+
+    // Include announcements
+    announcements.forEach((a) => {
+      const synId = `cal-ann-${a.id}`;
+      if (!seenIds.has(synId) && !seenIds.has(a.id)) {
+        list.push({
+          id: synId,
+          title: `[Announcement] ${a.title}`,
+          description: a.content,
+          date: a.date,
+          time: a.time || '10:00 AM',
+          type: 'announcement',
+          authorName: a.authorName,
+          authorRole: a.authorRole,
+        });
+      }
+    });
+
+    // Include quizzes
+    quizzes.forEach((q) => {
+      const qDate = q.startDate || format(new Date(), 'yyyy-MM-dd');
+      const qId = `cal-quiz-${q.id}`;
+      if (!seenIds.has(qId)) {
+        list.push({
+          id: qId,
+          title: `[Exam Drill] ${q.title}`,
+          description: `${q.subject} • ${q.questions.length} Questions • ${q.duration} mins`,
+          date: qDate,
+          time: '09:00 AM',
+          type: 'exam',
+          authorName: q.createdByName,
+          authorRole: 'Faculty',
+        });
+      }
+    });
+
+    return list.sort((a, b) => a.date.localeCompare(b.date));
+  }, [calendarEvents, announcements, quizzes]);
+
+  // Calendar dates generation
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startDayOfWeek = monthStart.getDay(); // 0 is Sunday
+
+  // Events on specific dates
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    allEvents.forEach((e) => {
+      map.set(e.date, (map.get(e.date) || 0) + 1);
+    });
+    return map;
+  }, [allEvents]);
+
+  // Filtered event list
+  const filteredEvents = useMemo(() => {
+    let list = allEvents;
+    if (selectedDate) {
+      list = list.filter((e) => e.date === selectedDate);
+    }
+    if (filterType === 'Announcements') {
+      list = list.filter((e) => e.type === 'announcement');
+    } else if (filterType === 'Exams') {
+      list = list.filter((e) => e.type === 'exam');
+    } else if (filterType === 'Lectures') {
+      list = list.filter((e) => e.type === 'lecture');
+    }
+    return list;
+  }, [allEvents, selectedDate, filterType]);
+
+  const handleCreateEvent = () => {
+    if (!newEventTitle.trim()) return;
+    addCalendarEvent({
+      title: newEventTitle.trim(),
+      description: newEventDesc.trim() || undefined,
+      date: newEventDate,
+      time: newEventTime,
+      type: newEventType,
+      authorName: user?.name || 'Academic Team',
+      authorRole: user?.role === 'admin' ? 'Admin' : 'Faculty',
+    });
+    setNewEventTitle('');
+    setNewEventDesc('');
+    setShowAddEventModal(false);
+  };
+
   return (
-    <div>
-      <Header title="Academic Calendar" showBack onBack={onBack} gradient={false} />
-      <div className="p-4">
-        <div className="card mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <button className="text-gray-400"><i className="fas fa-chevron-left" /></button>
-            <h3 className="text-sm font-bold text-gray-800">December 2024</h3>
-            <button className="text-gray-400"><i className="fas fa-chevron-right" /></button>
+    <div className="pb-12">
+      <Header
+        title="Academic Calendar"
+        subtitle="Schedules, Announcements & Exam Timings"
+        showBack
+        onBack={onBack}
+        gradient={false}
+        rightAction={
+          isFacultyOrAdmin && (
+            <button
+              onClick={() => setShowAddEventModal(true)}
+              className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs"
+            >
+              <i className="fas fa-calendar-plus text-[10px]" />
+              <span className="hidden sm:inline">Add Event</span>
+            </button>
+          )
+        }
+      />
+
+      <div className="p-4 space-y-4">
+        {/* Month Selector & Navigation */}
+        <div className="card mb-0 shadow-xs">
+          <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
+            <button
+              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center text-xs transition"
+              title="Previous Month"
+            >
+              <i className="fas fa-chevron-left" />
+            </button>
+            <div className="text-center">
+              <h3 className="text-sm font-bold text-gray-900">{format(currentMonth, 'MMMM yyyy')}</h3>
+              <p className="text-[10px] text-gray-400">Academic Term 2026</p>
+            </div>
+            <button
+              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center text-xs transition"
+              title="Next Month"
+            >
+              <i className="fas fa-chevron-right" />
+            </button>
           </div>
+
+          {/* Days of Week */}
+          <div className="grid grid-cols-7 gap-1 text-center mb-1">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+              <span key={i} className="text-[10px] text-gray-400 font-semibold py-1">
+                {d}
+              </span>
+            ))}
+          </div>
+
+          {/* Day Grid */}
           <div className="grid grid-cols-7 gap-1 text-center">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (<span key={i} className="text-[10px] text-gray-400 font-medium py-1">{d}</span>))}
-            {Array.from({ length: 31 }, (_, i) => (<span key={i} className={`text-xs py-1.5 rounded-full ${i + 1 === 15 ? 'bg-teal-500 text-white font-bold' : 'text-gray-600'}`}>{i + 1}</span>))}
+            {/* Blank offset tiles */}
+            {Array.from({ length: startDayOfWeek }, (_, i) => (
+              <span key={`blank-${i}`} className="py-2" />
+            ))}
+
+            {/* Days in Month */}
+            {daysInMonth.map((day, i) => {
+              const dayStr = format(day, 'yyyy-MM-dd');
+              const isToday = isSameDay(day, new Date());
+              const isSelected = selectedDate === dayStr;
+              const hasEvents = (eventsByDate.get(dayStr) || 0) > 0;
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => setSelectedDate(prev => prev === dayStr ? null : dayStr)}
+                  className={`py-2 rounded-xl text-xs font-semibold relative transition flex flex-col items-center justify-center ${
+                    isSelected
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : isToday
+                      ? 'bg-teal-50 text-teal-800 border border-teal-300 font-bold'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <span>{format(day, 'd')}</span>
+                  {hasEvents && (
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
+                        isSelected ? 'bg-white' : 'bg-teal-500'
+                      }`}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
+
+          {/* Date Selection Reset */}
+          {selectedDate && (
+            <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+              <span className="text-[11px] text-gray-600 font-medium">
+                Filtering: <strong className="text-teal-700">{format(new Date(selectedDate), 'dd MMMM yyyy')}</strong>
+              </span>
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="text-[10px] text-teal-600 font-bold hover:underline"
+              >
+                Clear Date Filter
+              </button>
+            </div>
+          )}
         </div>
-        <EmptyState icon="fa-calendar" title="No Events" message="No upcoming events scheduled" />
+
+        {/* Filter Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-1 text-xs">
+          {['All', 'Announcements', 'Exams', 'Lectures'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`px-3 py-1.5 rounded-full font-semibold transition text-xs whitespace-nowrap ${
+                filterType === t
+                  ? 'bg-teal-600 text-white shadow-2xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:border-teal-300'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* Event List */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+              <i className="fas fa-list-check text-teal-600" />
+              <span>
+                {selectedDate
+                  ? `Events for ${format(new Date(selectedDate), 'dd MMM yyyy')}`
+                  : `Upcoming Events (${filteredEvents.length})`}
+              </span>
+            </h3>
+            <span className="text-[10px] text-gray-400">
+              {filteredEvents.length} scheduled
+            </span>
+          </div>
+
+          {filteredEvents.length === 0 ? (
+            <div className="card text-center py-8">
+              <EmptyState
+                icon="fa-calendar-day"
+                title="No Events Scheduled"
+                message={selectedDate ? `No academic events found on ${selectedDate}` : "No upcoming events matching this filter"}
+              />
+            </div>
+          ) : (
+            filteredEvents.map((ev) => {
+              const isAnn = ev.type === 'announcement';
+              const isExam = ev.type === 'exam';
+              const isLecture = ev.type === 'lecture';
+
+              return (
+                <div
+                  key={ev.id}
+                  className={`card border-l-4 transition hover:shadow-xs ${
+                    isAnn
+                      ? 'border-l-amber-500 bg-amber-50/20'
+                      : isExam
+                      ? 'border-l-rose-500 bg-rose-50/20'
+                      : 'border-l-teal-600 bg-teal-50/20'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`badge text-[9px] font-bold uppercase py-0.5 px-2 rounded-full ${
+                          isAnn
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : isExam
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : 'bg-teal-100 text-teal-800 border border-teal-200'
+                        }`}
+                      >
+                        {ev.type}
+                      </span>
+                      {ev.authorRole && (
+                        <span className="text-[10px] text-gray-500">
+                          {ev.authorName} ({ev.authorRole})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Actual Date and Timing */}
+                    <div className="text-right flex-shrink-0">
+                      <span className="text-xs font-bold text-gray-800 block">
+                        {ev.date}
+                      </span>
+                      <span className="text-[10px] font-semibold text-teal-700 flex items-center justify-end gap-1">
+                        <i className="far fa-clock text-[9px]" />
+                        {ev.time || '10:00 AM'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <h4 className="text-sm font-bold text-gray-900 leading-snug">{ev.title}</h4>
+                  {ev.description && (
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">{ev.description}</p>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
+
+      {/* Add Event Modal for Admin / Faculty */}
+      <AnimatePresence>
+        {showAddEventModal && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setShowAddEventModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-3"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <i className="fas fa-calendar-plus text-teal-600" />
+                  <span>Schedule Academic Calendar Event</span>
+                </h3>
+                <button onClick={() => setShowAddEventModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times text-xs" />
+                </button>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Event Title</label>
+                <input
+                  value={newEventTitle}
+                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  placeholder="e.g. Physiology Grand Revision Lecture"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-teal-500 mt-1"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Actual Date</label>
+                  <input
+                    type="date"
+                    value={newEventDate}
+                    onChange={(e) => setNewEventDate(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-teal-500 mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Actual Timing</label>
+                  <input
+                    value={newEventTime}
+                    onChange={(e) => setNewEventTime(e.target.value)}
+                    placeholder="e.g. 10:30 AM"
+                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-teal-500 mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Category</label>
+                <select
+                  value={newEventType}
+                  onChange={(e) => setNewEventType(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-teal-500 mt-1 bg-white"
+                >
+                  <option value="announcement">Announcement</option>
+                  <option value="exam">Examination / Drill</option>
+                  <option value="lecture">Lecture / Clinical Session</option>
+                  <option value="deadline">Academic Deadline</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Description</label>
+                <textarea
+                  value={newEventDesc}
+                  onChange={(e) => setNewEventDesc(e.target.value)}
+                  placeholder="Brief syllabus outline or instructions..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-teal-500 mt-1 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  onClick={() => setShowAddEventModal(false)}
+                  className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateEvent}
+                  disabled={!newEventTitle.trim()}
+                  className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition"
+                >
+                  Save Event
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

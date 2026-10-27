@@ -162,6 +162,18 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
   const isStudent = displayUser?.role === 'student';
   const watermarkText = `${displayUser?.name || 'User'} • ${new Date().toLocaleDateString()}`;
   const { resolvedUrl, loading } = useResourceUrl(resource);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(100);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const handleDownload = async () => {
     if (isStudent) {
@@ -189,7 +201,7 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
     }
   };
 
-  const handleOpenFullscreen = () => {
+  const handleOpenNewTab = () => {
     if (isStudent) return;
     if (resolvedUrl) {
       window.open(resolvedUrl, '_blank');
@@ -198,7 +210,7 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
 
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
-      <div className="flex flex-col h-full bg-gray-100">
+      <div className="flex flex-col h-full bg-gray-100 relative">
         <Header 
           title={resource.title} 
           showBack 
@@ -206,27 +218,37 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
           gradient={false}
           rightAction={
             <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={() => setIsFullscreen(prev => !prev)} 
+                className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-teal-200 shadow-2xs"
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Mode"}
+              >
+                <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'} text-[11px]`} />
+                <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+              </button>
+
               {isStudent ? (
                 <span className="px-2 py-1 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
                   <i className="fas fa-shield-alt text-yellow-600" />
-                  <span>Protected Document</span>
+                  <span className="hidden sm:inline">Protected</span>
                 </span>
               ) : (
                 <>
                   {resolvedUrl && (
                     <button 
-                      onClick={handleOpenFullscreen} 
-                      className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
-                      title="Open in new window / full screen"
+                      onClick={handleOpenNewTab} 
+                      className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      title="Open in new window"
                     >
                       <i className="fas fa-external-link-alt text-[10px]" />
-                      <span className="hidden sm:inline">Fullscreen</span>
+                      <span className="hidden sm:inline">Tab</span>
                     </button>
                   )}
                   {(resource.fileData || resolvedUrl) && (
                     <button 
                       onClick={handleDownload} 
-                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-2xs"
                       title="Download PDF"
                     >
                       <i className="fas fa-download text-[10px]" />
@@ -250,11 +272,13 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-gray-500">{resource.sizeFormatted || resource.size}</span>
-            {!isStudent && resolvedUrl && (
-              <button onClick={handleOpenFullscreen} className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1">
-                <i className="fas fa-expand text-[10px]" /> Open in Tab
-              </button>
-            )}
+            <button 
+              type="button" 
+              onClick={() => setIsFullscreen(true)} 
+              className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1"
+            >
+              <i className="fas fa-expand text-[10px]" /> Fullscreen Mode
+            </button>
           </div>
         </div>
         
@@ -275,6 +299,13 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full shadow-lg border border-gray-200 flex items-center gap-2 text-[11px] text-gray-600">
               <i className="fas fa-book-reader text-teal-600" />
               <span>Viewing Protected PDF in App</span>
+              <button 
+                type="button" 
+                onClick={() => setIsFullscreen(true)} 
+                className="ml-2 font-bold text-teal-700 hover:text-teal-800 underline"
+              >
+                Expand Fullscreen
+              </button>
             </div>
           </div>
         ) : loading ? (
@@ -294,16 +325,112 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                 <p>Uploaded by <span className="font-semibold text-gray-800">{resource.uploaderName || resource.creatorName}</span> on {resource.date || resource.created_at?.split('T')[0]}</p>
                 <p className="text-[11px] text-gray-400 mt-1">Direct PDF stream is not available or stored as offline preview.</p>
               </div>
-              {!isStudent && resource.fileData ? (
-                <button onClick={handleDownload} className="btn-primary mt-4">
-                  <i className="fas fa-download mr-1.5" />Download PDF
+              <div className="mt-4 flex flex-col gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => setIsFullscreen(true)} 
+                  className="btn-secondary w-full py-2 text-xs flex items-center justify-center gap-1.5"
+                >
+                  <i className="fas fa-expand text-teal-600" /> Fullscreen Document Mode
                 </button>
-              ) : isStudent ? (
-                <div className="mt-4 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-500">
-                  <i className="fas fa-lock mr-1 text-teal-600" />
-                  Direct PDF download is restricted for students.
+                {!isStudent && resource.fileData ? (
+                  <button onClick={handleDownload} className="btn-primary w-full py-2 text-xs">
+                    <i className="fas fa-download mr-1.5" />Download PDF
+                  </button>
+                ) : isStudent ? (
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-500">
+                    <i className="fas fa-lock mr-1 text-teal-600" />
+                    Direct PDF download is restricted for students.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fullscreen Overlay Facility */}
+        {isFullscreen && (
+          <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col w-screen h-screen">
+            <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between text-white z-20 shadow-md">
+              <div className="flex items-center gap-3">
+                <i className="fas fa-file-pdf text-red-400 text-lg" />
+                <div>
+                  <h3 className="text-sm font-bold truncate max-w-xs sm:max-w-md">{resource.title}</h3>
+                  <p className="text-[10px] text-slate-400">{resource.subject || resource.subjectName || 'Medical Document'} • DRM Protected Fullscreen</p>
                 </div>
-              ) : null}
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 text-xs">
+                  <button 
+                    type="button" 
+                    onClick={() => setZoom(z => Math.max(z - 15, 60))} 
+                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200" 
+                    title="Zoom Out"
+                  >
+                    <i className="fas fa-search-minus" />
+                  </button>
+                  <span className="text-[11px] font-mono px-2 text-slate-300 min-w-[42px] text-center">{zoom}%</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setZoom(z => Math.min(z + 15, 200))} 
+                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200" 
+                    title="Zoom In"
+                  >
+                    <i className="fas fa-search-plus" />
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setZoom(100)} 
+                    className="px-2 py-1 hover:bg-slate-700 rounded text-[10px] text-teal-400 font-semibold"
+                    title="Reset Zoom"
+                  >
+                    100%
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreen(false)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow"
+                  title="Exit Fullscreen (Esc)"
+                >
+                  <i className="fas fa-compress text-xs" />
+                  <span>Exit Fullscreen</span>
+                </button>
+              </div>
+            </div>
+            
+            <div className="relative flex-1 w-full h-full bg-slate-900 overflow-auto flex items-center justify-center">
+              <div className="watermark pointer-events-none select-none text-white/10 z-30">{watermarkText}</div>
+              {resolvedUrl ? (
+                <div 
+                  style={{ 
+                    transform: `scale(${zoom / 100})`, 
+                    transformOrigin: 'top center',
+                    transition: 'transform 0.15s ease-out',
+                    width: '100%',
+                    height: '100%'
+                  }} 
+                  className="w-full h-full flex justify-center"
+                >
+                  <object
+                    data={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                    type="application/pdf"
+                    className="w-full h-full pointer-events-auto"
+                  >
+                    <iframe 
+                      src={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`} 
+                      className="w-full h-full border-0"
+                      title={resource.title}
+                    />
+                  </object>
+                </div>
+              ) : (
+                <div className="text-center p-8 text-slate-400">
+                  <i className="fas fa-file-pdf text-5xl text-red-500 mb-3" />
+                  <p className="text-sm font-semibold text-white">{resource.title}</p>
+                  <p className="text-xs text-slate-400 mt-1">Full-screen stream preview is active.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -318,6 +445,8 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
   const isStudent = user?.role === 'student';
   const [copied, setCopied] = useState(false);
   const [remoteText, setRemoteText] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base');
   const watermarkText = `${user?.name || 'User'} • ${new Date().toLocaleDateString()}`;
   const { resolvedUrl } = useResourceUrl(resource);
 
@@ -325,6 +454,16 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
     if (resource.fileData) return extractTextContent(resource.fileData);
     return remoteText;
   }, [resource.fileData, remoteText]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   useEffect(() => {
     if (!resource.fileData && resolvedUrl && resolvedUrl.startsWith('http')) {
@@ -378,7 +517,7 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
 
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
-      <div className="flex flex-col h-full bg-gray-50">
+      <div className="flex flex-col h-full bg-gray-50 relative">
         <Header 
           title={resource.title} 
           showBack 
@@ -386,10 +525,20 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
           gradient={false}
           rightAction={
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(prev => !prev)}
+                className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-teal-200 shadow-2xs"
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Reader"}
+              >
+                <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'} text-[11px]`} />
+                <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+              </button>
+
               {isStudent ? (
                 <span className="px-2 py-1 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
                   <i className="fas fa-lock text-yellow-600" />
-                  <span>Protected Notes</span>
+                  <span className="hidden sm:inline">Protected Notes</span>
                 </span>
               ) : (
                 <>
@@ -404,7 +553,7 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
                   {(resource.fileData || resolvedUrl) && (
                     <button
                       onClick={handleDownload}
-                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-2xs"
                       title="Download document"
                     >
                       <i className="fas fa-download text-[10px]" />
@@ -430,16 +579,32 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
             <span>{wordCount} words</span>
             <span>•</span>
             <span>{resource.sizeFormatted || resource.size}</span>
+            <button 
+              type="button" 
+              onClick={() => setIsFullscreen(true)} 
+              className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1 ml-1"
+            >
+              <i className="fas fa-expand text-[10px]" /> Fullscreen Reader
+            </button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-5 sm:p-7 min-h-[400px]">
-            <div className="border-b border-gray-100 pb-3 mb-4">
-              <h1 className="text-lg font-bold text-gray-900">{resource.title}</h1>
-              <p className="text-xs text-gray-500 mt-1">
-                Subject: <span className="font-semibold text-gray-700">{resource.subject || resource.subjectName}</span> • Uploaded by {resource.uploaderName || resource.creatorName} on {resource.date || resource.created_at?.split('T')[0]}
-              </p>
+            <div className="border-b border-gray-100 pb-3 mb-4 flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-bold text-gray-900">{resource.title}</h1>
+                <p className="text-xs text-gray-500 mt-1">
+                  Subject: <span className="font-semibold text-gray-700">{resource.subject || resource.subjectName}</span> • Uploaded by {resource.uploaderName || resource.creatorName} on {resource.date || resource.created_at?.split('T')[0]}
+                </p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsFullscreen(true)}
+                className="btn-secondary text-xs px-2.5 py-1.5 flex items-center gap-1 shadow-2xs"
+              >
+                <i className="fas fa-expand text-teal-600 text-xs" /> Fullscreen
+              </button>
             </div>
 
             {textContent ? (
@@ -461,6 +626,71 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
             )}
           </div>
         </div>
+
+        {/* Fullscreen Reader Modal */}
+        {isFullscreen && (
+          <div className="fixed inset-0 z-50 bg-slate-900 text-slate-100 flex flex-col w-screen h-screen">
+            <div className="bg-slate-950 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-20 shadow-md">
+              <div className="flex items-center gap-3">
+                <i className="fas fa-sticky-note text-amber-400 text-lg" />
+                <div>
+                  <h3 className="text-sm font-bold truncate max-w-xs sm:max-w-md">{resource.title}</h3>
+                  <p className="text-[10px] text-slate-400">{resource.subject || 'Notes'} • {lineCount} lines • {wordCount} words • DRM Reader</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 text-xs">
+                  <button 
+                    type="button" 
+                    onClick={() => setFontSize(f => f === 'xl' ? 'lg' : f === 'lg' ? 'base' : 'sm')} 
+                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200"
+                    title="Smaller text"
+                  >
+                    A-
+                  </button>
+                  <span className="text-[11px] font-mono px-2 text-slate-300 uppercase">{fontSize}</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setFontSize(f => f === 'sm' ? 'base' : f === 'base' ? 'lg' : 'xl')} 
+                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200"
+                    title="Larger text"
+                  >
+                    A+
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreen(false)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow"
+                  title="Exit Fullscreen (Esc)"
+                >
+                  <i className="fas fa-compress text-xs" />
+                  <span>Exit Fullscreen</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="watermark pointer-events-none select-none text-white/10 z-30">{watermarkText}</div>
+
+            <div className="flex-1 overflow-y-auto p-6 sm:p-10 max-w-4xl mx-auto w-full">
+              <div className="bg-slate-800/90 rounded-2xl p-6 sm:p-8 border border-slate-700 shadow-xl">
+                <h1 className="text-xl font-bold text-white mb-2">{resource.title}</h1>
+                <p className="text-xs text-slate-400 border-b border-slate-700 pb-3 mb-6">
+                  {resource.subject || resource.subjectName} • Uploaded by {resource.uploaderName || resource.creatorName}
+                </p>
+                {textContent ? (
+                  <pre className={`whitespace-pre-wrap font-sans text-slate-200 leading-relaxed ${fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base' : fontSize === 'xl' ? 'text-lg' : 'text-sm'} ${isStudent ? 'select-none' : 'select-text'}`}>
+                    {textContent}
+                  </pre>
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    <p className="text-sm">No text content available.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DocumentProtectionWrapper>
   );
@@ -472,6 +702,18 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
   const isStudent = user?.role === 'student';
   const watermarkText = `${user?.name || 'User'}`;
   const { resolvedUrl } = useResourceUrl(resource);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const handleDownload = async () => {
     if (isStudent) {
@@ -499,38 +741,36 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
     }
   };
 
-  const handleOpenFullscreen = () => {
-    if (isStudent) return;
-    if (resolvedUrl) window.open(resolvedUrl, '_blank');
-  };
-
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
-      <div className="flex flex-col h-full bg-gray-900">
+      <div className="flex flex-col h-full bg-gray-900 relative">
         <Header 
           title={resource.title} 
           showBack 
           onBack={onBack} 
           rightAction={
             <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={() => setIsFullscreen(prev => !prev)} 
+                className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-white/20"
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Mode"}
+              >
+                <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'} text-[11px]`} />
+                <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+              </button>
+
               {isStudent ? (
                 <span className="px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded-lg text-[10px] font-bold flex items-center gap-1 border border-yellow-500/30">
                   <i className="fas fa-lock" />
-                  <span>Protected Image</span>
+                  <span className="hidden sm:inline">Protected</span>
                 </span>
               ) : (
-                <>
-                  {resolvedUrl && (
-                    <button onClick={handleOpenFullscreen} className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-medium transition" title="Open Full Image">
-                      <i className="fas fa-expand text-[10px] mr-1" />Fullscreen
-                    </button>
-                  )}
-                  {(resource.fileData || resolvedUrl) && (
-                    <button onClick={handleDownload} className="px-2.5 py-1 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium transition" title="Download Image">
-                      <i className="fas fa-download text-[10px] mr-1" />Download
-                    </button>
-                  )}
-                </>
+                (resource.fileData || resolvedUrl) && (
+                  <button onClick={handleDownload} className="px-2.5 py-1 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium transition" title="Download Image">
+                    <i className="fas fa-download text-[10px] mr-1" />Download
+                  </button>
+                )
               )}
             </div>
           }
@@ -560,18 +800,95 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
             <p className="text-xs text-gray-200 font-medium">{resource.fileName || resource.title}</p>
             <p className="text-[10px] text-gray-400">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
           </div>
-          {!isStudent && (resource.fileData || resolvedUrl) && (
-            <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
-              <i className="fas fa-download text-xs" />
-              <span>Download</span>
+          <div className="flex items-center gap-3">
+            <button 
+              type="button" 
+              onClick={() => setIsFullscreen(true)} 
+              className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1"
+            >
+              <i className="fas fa-expand text-xs" /> Fullscreen Mode
             </button>
-          )}
-          {isStudent && (
-            <span className="text-[10px] text-gray-400 flex items-center gap-1">
-              <i className="fas fa-shield-alt text-teal-400" /> Protected Visual Asset
-            </span>
-          )}
+            {!isStudent && (resource.fileData || resolvedUrl) && (
+              <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                <i className="fas fa-download text-xs" />
+                <span>Download</span>
+              </button>
+            )}
+            {isStudent && (
+              <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                <i className="fas fa-shield-alt text-teal-400" /> Protected Visual Asset
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Fullscreen Modal Overlay */}
+        {isFullscreen && (
+          <div className="fixed inset-0 z-50 bg-black flex flex-col w-screen h-screen">
+            <div className="bg-black/90 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between text-white z-20">
+              <div className="flex items-center gap-3">
+                <i className="fas fa-image text-teal-400 text-lg" />
+                <div>
+                  <h3 className="text-sm font-bold truncate max-w-xs sm:max-w-md">{resource.title}</h3>
+                  <p className="text-[10px] text-gray-400">{resource.subject || 'Visual Asset'} • DRM Protected Fullscreen</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700 text-xs">
+                  <button 
+                    type="button" 
+                    onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} 
+                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-200" 
+                    title="Zoom Out"
+                  >
+                    <i className="fas fa-search-minus" />
+                  </button>
+                  <span className="text-[11px] font-mono px-2 text-gray-300 min-w-[42px] text-center">{Math.round(zoom * 100)}%</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setZoom(z => Math.min(z + 0.25, 3))} 
+                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-200" 
+                    title="Zoom In"
+                  >
+                    <i className="fas fa-search-plus" />
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setZoom(1)} 
+                    className="px-2 py-1 hover:bg-gray-700 rounded text-[10px] text-teal-400 font-semibold"
+                    title="Reset Zoom"
+                  >
+                    100%
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreen(false)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow"
+                  title="Exit Fullscreen (Esc)"
+                >
+                  <i className="fas fa-compress text-xs" />
+                  <span>Exit Fullscreen</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="watermark text-white/10 pointer-events-none select-none z-30">{watermarkText}</div>
+
+            <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+              <img 
+                src={resolvedUrl || resource.fileData} 
+                alt={resource.title}
+                style={{
+                  transform: `scale(${zoom})`,
+                  transition: 'transform 0.15s ease-out'
+                }}
+                className={`max-w-full max-h-full object-contain ${isStudent ? 'pointer-events-none select-none' : ''}`}
+                draggable={!isStudent}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </DocumentProtectionWrapper>
   );
@@ -583,6 +900,17 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
   const isStudent = user?.role === 'student';
   const watermarkText = `${user?.name || 'User'}`;
   const { resolvedUrl } = useResourceUrl(resource);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const handleDownload = async () => {
     if (isStudent) {
@@ -612,7 +940,7 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
 
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
-      <div className="flex flex-col h-full bg-black">
+      <div className="flex flex-col h-full bg-black relative">
         <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent px-4 py-3">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="text-white text-base"><i className="fas fa-arrow-left" /></button>
@@ -620,8 +948,17 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
               <p className="text-white text-sm font-bold truncate">{resource.title}</p>
               <p className="text-gray-300 text-[10px]">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
             </div>
+            <button 
+              type="button"
+              onClick={() => setIsFullscreen(prev => !prev)} 
+              className="text-white bg-white/20 hover:bg-white/30 text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 transition border border-white/20"
+              title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Mode"}
+            >
+              <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'} text-[11px]`} />
+              <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+            </button>
             {!isStudent && (resource.fileData || resolvedUrl) && (
-              <button onClick={handleDownload} className="text-white bg-white/20 hover:bg-white/30 text-xs px-2.5 py-1 rounded-lg">
+              <button onClick={handleDownload} className="text-white bg-teal-600 hover:bg-teal-700 text-xs px-2.5 py-1 rounded-lg flex items-center gap-1">
                 <i className="fas fa-download mr-1" />Download
               </button>
             )}
@@ -662,12 +999,61 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
             <i className="fas fa-lock text-teal-400 text-xs" />
             <p className="text-[11px] text-gray-400">Protected Video Stream</p>
           </div>
-          {!isStudent && (resource.fileData || resolvedUrl) && (
-            <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium">
-              <i className="fas fa-download mr-1" />Save Video
+          <div className="flex items-center gap-2">
+            <button 
+              type="button" 
+              onClick={() => setIsFullscreen(true)} 
+              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-teal-400 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-gray-700"
+            >
+              <i className="fas fa-expand text-xs" />
+              <span>Fullscreen Mode</span>
             </button>
-          )}
+            {!isStudent && (resource.fileData || resolvedUrl) && (
+              <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium">
+                <i className="fas fa-download mr-1" />Save Video
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Fullscreen Video Overlay */}
+        {isFullscreen && (
+          <div className="fixed inset-0 z-50 bg-black flex flex-col w-screen h-screen">
+            <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 to-transparent px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <i className="fas fa-play-circle text-teal-400 text-lg" />
+                <div>
+                  <h3 className="text-white text-sm font-bold truncate max-w-xs sm:max-w-md">{resource.title}</h3>
+                  <p className="text-gray-300 text-[10px]">{resource.subject || 'Video Lecture'} • DRM Protected Fullscreen</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(false)}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow"
+                title="Exit Fullscreen (Esc)"
+              >
+                <i className="fas fa-compress text-xs" />
+                <span>Exit Fullscreen</span>
+              </button>
+            </div>
+
+            <div className="watermark text-white/10 pointer-events-none select-none z-10">{watermarkText}</div>
+
+            <div className="flex-1 flex items-center justify-center p-2">
+              <video 
+                src={resolvedUrl || resource.fileData} 
+                controls 
+                autoPlay
+                className="max-w-full max-h-full rounded-lg shadow-2xl"
+                controlsList="nodownload noplaybackrate"
+                disablePictureInPicture={isStudent}
+              >
+                Your browser does not support video playback.
+              </video>
+            </div>
+          </div>
+        )}
       </div>
     </DocumentProtectionWrapper>
   );
@@ -679,6 +1065,17 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
   const isStudent = user?.role === 'student';
   const watermarkText = `${user?.name || 'User'} • ${new Date().toLocaleDateString()}`;
   const { resolvedUrl } = useResourceUrl(resource);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const handleDownload = async () => {
     if (isStudent) {
@@ -728,24 +1125,36 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
 
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
-      <div className="flex flex-col h-full bg-gray-50">
+      <div className="flex flex-col h-full bg-gray-50 relative">
         <Header 
           title={resource.title} 
           showBack 
           onBack={onBack} 
           gradient={false}
           rightAction={
-            !isStudent && (resource.fileData || resolvedUrl) ? (
-              <button onClick={handleDownload} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition">
-                <i className="fas fa-download text-[10px]" />
-                <span>Download</span>
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={() => setIsFullscreen(prev => !prev)} 
+                className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-teal-200 shadow-2xs"
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Preview"}
+              >
+                <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'} text-[11px]`} />
+                <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
               </button>
-            ) : isStudent ? (
-              <span className="px-2 py-1 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
-                <i className="fas fa-lock text-yellow-600" />
-                <span>Protected</span>
-              </span>
-            ) : undefined
+
+              {!isStudent && (resource.fileData || resolvedUrl) ? (
+                <button onClick={handleDownload} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-2xs">
+                  <i className="fas fa-download text-[10px]" />
+                  <span>Download</span>
+                </button>
+              ) : isStudent ? (
+                <span className="px-2 py-1 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                  <i className="fas fa-lock text-yellow-600" />
+                  <span>Protected</span>
+                </span>
+              ) : undefined}
+            </div>
           }
         />
         <div className="watermark pointer-events-none select-none">{watermarkText}</div>
@@ -784,37 +1193,118 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
               )}
             </div>
 
-            {!isStudent && (resource.fileData || resolvedUrl) ? (
-              <div className="space-y-2">
-                <button onClick={handleDownload} className="btn-primary flex items-center justify-center gap-2 shadow-sm">
-                  <i className="fas fa-download" />
-                  <span>Download Document ({resource.sizeFormatted || resource.size})</span>
-                </button>
-                {resolvedUrl && (
-                  <button 
-                    onClick={handleOpenBrowser} 
-                    className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
-                  >
-                    <i className="fas fa-external-link-alt text-[10px]" />
-                    <span>Open Document in Browser</span>
+            <div className="space-y-2">
+              <button 
+                type="button" 
+                onClick={() => setIsFullscreen(true)} 
+                className="w-full py-2 bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
+              >
+                <i className="fas fa-expand text-teal-600 text-xs" />
+                <span>Fullscreen Document Preview</span>
+              </button>
+
+              {!isStudent && (resource.fileData || resolvedUrl) ? (
+                <>
+                  <button onClick={handleDownload} className="btn-primary flex items-center justify-center gap-2 shadow-sm w-full">
+                    <i className="fas fa-download" />
+                    <span>Download Document ({resource.sizeFormatted || resource.size})</span>
                   </button>
-                )}
-              </div>
-            ) : isStudent ? (
-              <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-center">
-                <i className="fas fa-shield-alt text-teal-600 text-lg mb-1 block" />
-                <p className="text-xs font-bold text-teal-800">Protected Medical Material</p>
-                <p className="text-[11px] text-teal-600 mt-0.5">Direct file download is restricted for students. Study materials are protected under LMS copyright.</p>
-              </div>
-            ) : (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                <i className="fas fa-exclamation-triangle text-yellow-600 mb-1" />
-                <p className="text-xs text-yellow-700 font-medium">Document content is unavailable.</p>
-                <p className="text-[11px] text-yellow-600 mt-1">Please contact the instructor for material access.</p>
-              </div>
-            )}
+                  {resolvedUrl && (
+                    <button 
+                      onClick={handleOpenBrowser} 
+                      className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
+                    >
+                      <i className="fas fa-external-link-alt text-[10px]" />
+                      <span>Open Document in Browser</span>
+                    </button>
+                  )}
+                </>
+              ) : isStudent ? (
+                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-center">
+                  <i className="fas fa-shield-alt text-teal-600 text-lg mb-1 block" />
+                  <p className="text-xs font-bold text-teal-800">Protected Medical Material</p>
+                  <p className="text-[11px] text-teal-600 mt-0.5">Direct file download is restricted for students. Study materials are protected under LMS copyright.</p>
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                  <i className="fas fa-exclamation-triangle text-yellow-600 mb-1" />
+                  <p className="text-xs text-yellow-700 font-medium">Document content is unavailable.</p>
+                  <p className="text-[11px] text-yellow-600 mt-1">Please contact the instructor for material access.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Fullscreen Document Overlay */}
+        {isFullscreen && (
+          <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col w-screen h-screen">
+            <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between text-white z-20 shadow-md">
+              <div className="flex items-center gap-3">
+                <i className={`fas ${getFileIcon()} text-lg`} />
+                <div>
+                  <h3 className="text-sm font-bold truncate max-w-xs sm:max-w-md">{resource.title}</h3>
+                  <p className="text-[10px] text-slate-400">{resource.subject || resource.subjectName || 'Document'} • Fullscreen Preview</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(false)}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow"
+                title="Exit Fullscreen (Esc)"
+              >
+                <i className="fas fa-compress text-xs" />
+                <span>Exit Fullscreen</span>
+              </button>
+            </div>
+
+            <div className="watermark pointer-events-none select-none text-white/10 z-10">{watermarkText}</div>
+
+            <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+              <div className="text-center max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-white">
+                <div className="w-24 h-24 rounded-3xl bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto mb-4">
+                  <i className={`fas ${getFileIcon()} text-4xl`} />
+                </div>
+                <h2 className="text-xl font-bold mb-1">{resource.title}</h2>
+                <p className="text-xs text-slate-400 mb-6">{resource.subject || resource.subjectName} • {resource.examCategory || 'Medical LMS'}</p>
+                
+                <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/80 text-left space-y-2.5 mb-6 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">File Type</span>
+                    <span className="font-semibold text-teal-400">{resource.type || resource.resource_type || 'Document'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">File Size</span>
+                    <span className="font-semibold text-slate-200">{resource.sizeFormatted || resource.size}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Uploaded By</span>
+                    <span className="font-semibold text-slate-200">{resource.uploaderName || resource.creatorName}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Upload Date</span>
+                    <span className="font-semibold text-slate-200">{resource.date || resource.created_at?.split('T')[0]}</span>
+                  </div>
+                </div>
+
+                {isStudent ? (
+                  <div className="p-3 bg-teal-950/60 border border-teal-800/60 rounded-xl text-center">
+                    <i className="fas fa-shield-alt text-teal-400 text-lg mb-1 block" />
+                    <p className="text-xs font-bold text-teal-300">Protected Medical Material</p>
+                    <p className="text-[11px] text-teal-400/80 mt-0.5">Direct file download is restricted for students. Study materials are protected under LMS copyright.</p>
+                  </div>
+                ) : (
+                  (resource.fileData || resolvedUrl) && (
+                    <button onClick={handleDownload} className="btn-primary w-full py-2.5 flex items-center justify-center gap-2">
+                      <i className="fas fa-download" />
+                      <span>Download Document</span>
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DocumentProtectionWrapper>
   );

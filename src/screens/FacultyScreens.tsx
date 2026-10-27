@@ -633,6 +633,29 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
 
 // ==================== CREATE QUIZ / ASSESSMENT ====================
 export function CreateQuiz({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+
+  if (user?.role === 'admin') {
+    return (
+      <div className="p-4">
+        <Header title="Assessment Authoring" showBack onBack={onBack} gradient={false} />
+        <div className="card text-center py-10 shadow-sm mt-4">
+          <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
+            <i className="fas fa-user-shield text-xl" />
+          </div>
+          <h3 className="text-base font-bold text-gray-900">Faculty Authoring Privileges Required</h3>
+          <p className="text-xs text-gray-500 mt-2 max-w-sm mx-auto leading-relaxed">
+            Quiz authoring is restricted to Faculty members. 
+            Administrators retain governance, moderation, and auditing controls in the Assessment Engine.
+          </p>
+          <button onClick={onBack} className="btn-primary max-w-xs mx-auto mt-5">
+            Return to Assessment Overview
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return <AssessmentCreator onBack={onBack} />;
 }
 
@@ -797,8 +820,14 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
                     {a.pinned && <i className="fas fa-thumbtack text-teal-500 text-xs" />}
                     <p className="text-sm font-bold text-gray-800">{a.title}</p>
                   </div>
-                  <p className="text-xs text-gray-600 mt-1">{a.content}</p>
-                  <p className="text-[10px] text-gray-400 mt-1">By {a.authorName} • {a.date}</p>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-[10px] text-gray-500 font-medium">By {a.authorName} ({a.authorRole})</span>
+                    <span className="text-[10px] text-gray-300">•</span>
+                    <span className="text-[10px] text-teal-700 font-semibold flex items-center gap-1 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60">
+                      <i className="far fa-clock text-[9px]" />
+                      <span>{a.date}{a.time ? ` at ${a.time}` : ''}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -835,7 +864,10 @@ export function FacultyCommunity({ onBack }: { onBack: () => void }) {
               <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-sm">{msg.authorRole === 'Faculty' ? '👨‍⚕️' : '👩‍🎓'}</div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-gray-800">{msg.authorName}</p>
-                <p className="text-[10px] text-gray-400">{msg.time}</p>
+                <p className="text-[10px] text-gray-400 font-medium flex items-center gap-1 mt-0.5">
+                  <i className="far fa-clock text-[9px] text-teal-600" />
+                  <span>{msg.time}</span>
+                </p>
               </div>
             </div>
             <p className="text-sm text-gray-700">{msg.message}</p>

@@ -77,7 +77,7 @@ export function QuizList({
   const [filter, setFilter] = useState<string>('All');
   const [search, setSearch] = useState<string>('');
 
-  const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
+  const isFaculty = user?.role === 'faculty';
 
   // Merge unified assessments with legacy quizzes
   const allAssessments = useMemo(() => {
@@ -139,11 +139,11 @@ export function QuizList({
                 title="Syncing assessments..."
               />
             )}
-            {isFacultyOrAdmin && (
+            {isFaculty && (
               <button
                 onClick={() => onNavigate('create-quiz')}
                 className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-                title="Create new assessment"
+                title="Create new assessment (Faculty only)"
               >
                 <i className="fas fa-plus text-[10px]" />
                 <span className="hidden sm:inline">New Test</span>

@@ -13,6 +13,7 @@ import {
   getFullCurriculum,
   createChapter,
   createTopic,
+  reorderTopics,
   deleteChapter,
   deleteTopic,
   seedCurriculumIfEmpty,
@@ -120,6 +121,14 @@ export function useCurriculum(initialSubjectId?: string) {
     return success;
   };
 
+  const changeTopicOrder = async (chapterId: string, orderedTopicIds: string[]) => {
+    const success = await reorderTopics(chapterId, orderedTopicIds);
+    if (success) {
+      await loadCurriculum();
+    }
+    return success;
+  };
+
   return {
     curriculum,
     subjects: curriculum.map(({ chapters, ...s }) => s),
@@ -134,6 +143,7 @@ export function useCurriculum(initialSubjectId?: string) {
     addTopic,
     removeChapter,
     removeTopic,
+    reorderTopics: changeTopicOrder,
   };
 }
 

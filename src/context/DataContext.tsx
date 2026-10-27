@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { format } from 'date-fns';
 
 export interface User {
   id: string;
@@ -63,10 +64,24 @@ export interface Announcement {
   title: string;
   content: string;
   date: string;
+  time?: string;
+  timestamp?: string;
   pinned: boolean;
   authorId: string;
   authorName: string;
   authorRole: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // e.g. 10:30 AM
+  timestamp?: string;
+  type: 'announcement' | 'exam' | 'lecture' | 'deadline';
+  authorName?: string;
+  authorRole?: string;
 }
 
 export interface CommunityMessage {
@@ -76,6 +91,7 @@ export interface CommunityMessage {
   authorRole: string;
   message: string;
   time: string;
+  timestamp?: string;
   likes: number;
   replies: number;
   pinned: boolean;
@@ -161,6 +177,11 @@ interface DataContextType {
   deleteAnnouncement: (id: string) => void;
   updateAnnouncement: (id: string, data: Partial<Announcement>) => void;
 
+  // Academic Calendar
+  calendarEvents: CalendarEvent[];
+  addCalendarEvent: (event: Omit<CalendarEvent, 'id'>) => void;
+  deleteCalendarEvent: (id: string) => void;
+
   // Community
   communityMessages: CommunityMessage[];
   addCommunityMessage: (msg: Omit<CommunityMessage, 'id' | 'time' | 'likes' | 'replies'>) => void;
@@ -214,7 +235,86 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [courses, setCourses] = useState<Course[]>(() => loadFromStorage('sim_courses', []));
   const [resources, setResources] = useState<Resource[]>(() => loadFromStorage('sim_resources', []));
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => loadFromStorage('sim_announcements', []));
-  const [communityMessages, setCommunityMessages] = useState<CommunityMessage[]>(() => loadFromStorage('sim_community', []));
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => {
+    return loadFromStorage('sim_calendar_events', [
+      {
+        id: 'cal-default-1',
+        title: 'Comprehensive NEET-UG Diagnostic Mock 1',
+        description: 'Full syllabus 200 questions timing drill with all-India percentile ranking.',
+        date: new Date().toISOString().split('T')[0],
+        time: '09:00 AM',
+        timestamp: new Date().toISOString(),
+        type: 'exam',
+        authorName: 'Academic Directorate',
+        authorRole: 'Admin'
+      },
+      {
+        id: 'cal-default-2',
+        title: 'Clinical Case Discussion: Acid-Base Disorders',
+        description: 'Interactive case study with Dr. Jenkins on arterial blood gas and renal compensation.',
+        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        time: '04:00 PM',
+        timestamp: new Date(Date.now() + 86400000).toISOString(),
+        type: 'lecture',
+        authorName: 'Dr. Sarah Jenkins',
+        authorRole: 'Faculty'
+      }
+    ]);
+  });
+  const [communityMessages, setCommunityMessages] = useState<CommunityMessage[]>(() => {
+    const stored = loadFromStorage<CommunityMessage[]>('sim_community', []);
+    if (!stored || stored.length === 0) {
+      return [
+        {
+          id: 'comm-msg-1',
+          authorId: 'u-faculty-1',
+          authorName: 'Dr. Sarah Jenkins',
+          authorRole: 'Faculty',
+          message: 'Welcome everyone! For this week’s Human Physiology module, please pay special attention to the Frank-Starling cardiac relationship and renal clearance mechanisms. Feel free to ask questions here!',
+          time: format(new Date(Date.now() - 7200000), 'dd MMM yyyy, hh:mm a'),
+          timestamp: new Date(Date.now() - 7200000).toISOString(),
+          likes: 12,
+          replies: 4,
+          pinned: true,
+        },
+        {
+          id: 'comm-msg-2',
+          authorId: 'u-student-1',
+          authorName: 'Mary',
+          authorRole: 'Student',
+          message: 'Could someone clarify whether secondary active transport in renal tubules uses ATP directly or relies on the sodium-potassium ATPase electrochemical gradient?',
+          time: format(new Date(Date.now() - 3600000), 'dd MMM yyyy, hh:mm a'),
+          timestamp: new Date(Date.now() - 3600000).toISOString(),
+          likes: 5,
+          replies: 2,
+          pinned: false,
+        },
+        {
+          id: 'comm-msg-3',
+          authorId: 'u-admin-1',
+          authorName: 'Alice Kernel',
+          authorRole: 'Admin',
+          message: 'All students: The upcoming NEET Diagnostic Drill 1 has been scheduled on the Academic Calendar. Please ensure you review your allocated topics in the Curriculum Browser.',
+          time: format(new Date(Date.now() - 1800000), 'dd MMM yyyy, hh:mm a'),
+          timestamp: new Date(Date.now() - 1800000).toISOString(),
+          likes: 8,
+          replies: 1,
+          pinned: false,
+        }
+      ];
+    }
+    return stored.map((msg, idx) => {
+      if (!msg.time || msg.time === 'Just now') {
+        const msgDate = msg.timestamp ? new Date(msg.timestamp) : new Date(Date.now() - (idx + 1) * 3600000);
+        return {
+          ...msg,
+          time: format(msgDate, 'dd MMM yyyy, hh:mm a'),
+          timestamp: msg.timestamp || msgDate.toISOString(),
+        };
+      }
+      return msg;
+    });
+  });
   const [quizzes, setQuizzes] = useState<Quiz[]>(() => loadFromStorage('sim_quizzes', []));
   const [notifications, setNotifications] = useState<Notification[]>(() => loadFromStorage('sim_notifications', []));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => loadFromStorage('sim_audit', []));
@@ -225,6 +325,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveToStorage('sim_courses', courses); }, [courses]);
   useEffect(() => { saveToStorage('sim_resources', resources); }, [resources]);
   useEffect(() => { saveToStorage('sim_announcements', announcements); }, [announcements]);
+  useEffect(() => { saveToStorage('sim_calendar_events', calendarEvents); }, [calendarEvents]);
   useEffect(() => { saveToStorage('sim_community', communityMessages); }, [communityMessages]);
   useEffect(() => { saveToStorage('sim_quizzes', quizzes); }, [quizzes]);
   useEffect(() => { saveToStorage('sim_notifications', notifications); }, [notifications]);
@@ -343,14 +444,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Announcements
   const addAnnouncement = (ann: Omit<Announcement, 'id' | 'date'>) => {
-    const newAnn: Announcement = { ...ann, id: generateId(), date: new Date().toISOString().split('T')[0] };
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeFormatted = format(now, 'hh:mm a');
+    const newAnn: Announcement = {
+      ...ann,
+      id: generateId(),
+      date: dateStr,
+      time: timeFormatted,
+      timestamp: now.toISOString(),
+    };
     setAnnouncements(prev => [...prev, newAnn]);
-    addAuditLog({ action: 'Announcement Created', userId: ann.authorId, userName: ann.authorName, details: `Created announcement: ${ann.title}` });
+
+    // Automatically sync into Academic Calendar!
+    const newCalEvent: CalendarEvent = {
+      id: `cal-ann-${newAnn.id}`,
+      title: `[Announcement] ${ann.title}`,
+      description: ann.content,
+      date: dateStr,
+      time: timeFormatted,
+      timestamp: now.toISOString(),
+      type: 'announcement',
+      authorName: ann.authorName,
+      authorRole: ann.authorRole,
+    };
+    setCalendarEvents(prev => [newCalEvent, ...prev]);
+
+    addAuditLog({
+      action: 'Announcement Created',
+      userId: ann.authorId,
+      userName: ann.authorName,
+      details: `Created announcement: ${ann.title} (synced to Academic Calendar)`
+    });
   };
 
   const deleteAnnouncement = (id: string) => {
     const ann = announcements.find(a => a.id === id);
     setAnnouncements(prev => prev.filter(a => a.id !== id));
+    setCalendarEvents(prev => prev.filter(e => e.id !== `cal-ann-${id}`));
     addAuditLog({ action: 'Announcement Deleted', userId: 'system', userName: 'System', details: `Deleted announcement: ${ann?.title}` });
   };
 
@@ -358,9 +489,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, ...data } : a));
   };
 
+  // Calendar Events
+  const addCalendarEvent = (event: Omit<CalendarEvent, 'id'>) => {
+    const newEvent: CalendarEvent = { ...event, id: generateId() };
+    setCalendarEvents(prev => [newEvent, ...prev]);
+    addAuditLog({
+      action: 'Calendar Event Scheduled',
+      userId: 'system',
+      userName: event.authorName || 'Academic Directorate',
+      details: `Scheduled event: ${event.title} on ${event.date} at ${event.time || 'TBD'}`
+    });
+  };
+
+  const deleteCalendarEvent = (id: string) => {
+    setCalendarEvents(prev => prev.filter(e => e.id !== id));
+  };
+
   // Community
   const addCommunityMessage = (msg: Omit<CommunityMessage, 'id' | 'time' | 'likes' | 'replies'>) => {
-    const newMsg: CommunityMessage = { ...msg, id: generateId(), time: 'Just now', likes: 0, replies: 0 };
+    const now = new Date();
+    const formattedDate = format(now, 'dd MMM yyyy, hh:mm a');
+    const newMsg: CommunityMessage = {
+      ...msg,
+      id: generateId(),
+      time: formattedDate,
+      timestamp: now.toISOString(),
+      likes: 0,
+      replies: 0,
+    };
     setCommunityMessages(prev => [newMsg, ...prev]);
   };
 
@@ -391,7 +547,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Notifications
   const addNotification = (notif: Omit<Notification, 'id' | 'time' | 'read'>) => {
-    const newNotif: Notification = { ...notif, id: generateId(), time: 'Just now', read: false };
+    const now = new Date();
+    const newNotif: Notification = {
+      ...notif,
+      id: generateId(),
+      time: format(now, 'dd MMM, hh:mm a'),
+      read: false
+    };
     setNotifications(prev => [newNotif, ...prev]);
   };
 
@@ -416,6 +578,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       courses, addCourse, deleteCourse, updateCourse, enrollStudents, unenrollStudent,
       resources, addResource, deleteResource, updateResource,
       announcements, addAnnouncement, deleteAnnouncement, updateAnnouncement,
+      calendarEvents, addCalendarEvent, deleteCalendarEvent,
       communityMessages, addCommunityMessage, deleteCommunityMessage, togglePinMessage,
       quizzes, addQuiz, deleteQuiz, updateQuiz,
       notifications, addNotification, markNotificationRead, markAllRead,

@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext';
 import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../components/Navigation';
 import { CurriculumBrowser } from '../features/curriculum';
 import { useResources } from '../features/resources';
+import { PerformanceAnalyticsView, useStudentAnalytics } from '../features/attempts';
 
 // ==================== HOME SCREEN ====================
 export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
@@ -33,9 +34,9 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             <p className="text-teal-300 text-lg font-bold">{myCourses.length}</p>
             <p className="text-gray-300 text-[10px]">Courses</p>
           </div>
-          <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-teal-300 text-lg font-bold">{quizzes.filter(q => q.status === 'active').length}</p>
-            <p className="text-gray-300 text-[10px]">Active Quizzes</p>
+          <div onClick={() => onNavigate('quizzes')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/20 active:scale-95 transition">
+            <p className="text-teal-300 text-lg font-bold">{quizzes.filter(q => q.status === 'active').length || 4}</p>
+            <p className="text-gray-300 text-[10px]">Active Drills</p>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
             <p className="text-teal-300 text-lg font-bold">{departments.length}</p>
@@ -182,24 +183,36 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
 // ==================== COURSES SCREEN ====================
 export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { courses } = useData();
+  const { courses, enrollStudents } = useData();
   const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
+  const [courseFilterMode, setCourseFilterMode] = useState<'my-courses' | 'explore'>('my-courses');
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const categories = ['All', 'NEET', 'IMAT', 'UCAT', 'MCAT'];
   
-  let filteredCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
-  if (filter !== 'All') filteredCourses = filteredCourses.filter(c => c.category === filter);
-  if (search) filteredCourses = filteredCourses.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+  const myEnrolledCourses = useMemo(() => {
+    return courses.filter(c => c.studentIds.includes(user?.id || ''));
+  }, [courses, user?.id]);
+
+  let displayedCourses = courseFilterMode === 'my-courses' ? myEnrolledCourses : courses;
+  if (filter !== 'All') displayedCourses = displayedCourses.filter(c => c.category === filter);
+  if (search) displayedCourses = displayedCourses.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+
+  const handleSelfEnroll = (course: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user?.id) return;
+    enrollStudents(course.id, [user.id], { id: user.id, name: user.name || 'Student' });
+    alert(`🎉 Successfully enrolled in ${course.name}! You now have full access to study notes, mock tests, and faculty resources.`);
+  };
 
   return (
     <div>
       <Header 
-        title={viewMode === 'courses' ? 'My Courses' : 'Medical Curriculum'} 
-        subtitle={viewMode === 'courses' ? `${filteredCourses.length} courses enrolled` : '3-Tier Academic Hierarchy'} 
+        title={viewMode === 'courses' ? 'Medical Courses' : 'Medical Curriculum'} 
+        subtitle={viewMode === 'courses' ? `${myEnrolledCourses.length} enrolled • ${courses.length} available` : '3-Tier Academic Hierarchy'} 
       />
 
-      {/* Tab Switcher */}
+      {/* Primary Tab Switcher: Courses vs Curriculum Hierarchy */}
       <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mb-3">
         <button
           onClick={() => setViewMode('courses')}
@@ -208,7 +221,7 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
           }`}
         >
           <i className="fas fa-book-medical text-[11px]" />
-          <span>My Courses</span>
+          <span>Courses</span>
         </button>
         <button
           onClick={() => setViewMode('curriculum')}
@@ -227,31 +240,132 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
         </div>
       ) : (
         <>
+          {/* Sub-tab: My Enrolled vs Explore All Courses */}
+          <div className="flex gap-2 px-4 mb-3">
+            <button
+              onClick={() => setCourseFilterMode('my-courses')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                courseFilterMode === 'my-courses'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <i className="fas fa-check-circle" />
+              <span>My Enrolled ({myEnrolledCourses.length})</span>
+            </button>
+            <button
+              onClick={() => setCourseFilterMode('explore')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                courseFilterMode === 'explore'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <i className="fas fa-compass" />
+              <span>Explore All Courses ({courses.length})</span>
+            </button>
+          </div>
+
           <SearchBar value={search} onChange={setSearch} placeholder="Search courses..." />
           <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
             {categories.map((cat) => (
-              <button key={cat} onClick={() => setFilter(cat)} className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === cat ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{cat}</button>
+              <button 
+                key={cat} 
+                onClick={() => setFilter(cat)} 
+                className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
+                  filter === cat ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {cat}
+              </button>
             ))}
           </div>
-          <div className="px-4 space-y-3">
-            {filteredCourses.map((course) => (
-              <div key={course.id} onClick={() => onNavigate('course-detail', course)} className="card cursor-pointer active:bg-gray-50">
-                <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
-                    <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-800">{course.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{course.description}</p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <span className="text-[10px] text-gray-400"><i className="fas fa-clock mr-1" />{course.duration}</span>
-                      <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length}</span>
+
+          <div className="px-4 space-y-3 pb-6">
+            {courseFilterMode === 'explore' && (
+              <div className="bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200 p-3 rounded-xl text-xs flex items-center gap-2.5">
+                <i className="fas fa-graduation-cap text-teal-600 text-lg flex-shrink-0" />
+                <p className="text-teal-900 leading-snug">
+                  Click <span className="font-bold">"Enroll Now"</span> on any available medical course to get immediate access to questions, video lectures, and revision notes.
+                </p>
+              </div>
+            )}
+
+            {displayedCourses.map((course) => {
+              const isEnrolled = course.studentIds.includes(user?.id || '');
+              return (
+                <div 
+                  key={course.id} 
+                  onClick={() => onNavigate('course-detail', course)} 
+                  className="card cursor-pointer hover:border-teal-200 active:bg-gray-50 transition"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
+                      <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <p className="text-sm font-bold text-gray-800 truncate">{course.name}</p>
+                        {isEnrolled ? (
+                          <span className="badge bg-emerald-100 text-emerald-800 text-[10px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1">
+                            <i className="fas fa-check text-[9px]" /> Enrolled
+                          </span>
+                        ) : (
+                          <span className="badge bg-teal-50 text-teal-700 text-[10px] font-semibold py-0.5 px-1.5 flex-shrink-0">
+                            Available
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 line-clamp-2">{course.description}</p>
+                      
+                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-100">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-gray-400"><i className="fas fa-clock mr-1" />{course.duration}</span>
+                          <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length} students</span>
+                        </div>
+
+                        {!isEnrolled ? (
+                          <button
+                            onClick={(e) => handleSelfEnroll(course, e)}
+                            className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs active:scale-95"
+                          >
+                            <i className="fas fa-plus text-[10px]" />
+                            <span>Enroll Now</span>
+                          </button>
+                        ) : (
+                          <span className="text-xs text-teal-600 font-semibold hover:underline flex items-center gap-1">
+                            <span>View Course</span>
+                            <i className="fas fa-chevron-right text-[9px]" />
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
+              );
+            })}
+
+            {displayedCourses.length === 0 && (
+              <div className="card text-center py-8">
+                <i className="fas fa-book-open text-3xl text-gray-300 mb-2" />
+                <p className="text-sm font-semibold text-gray-700">
+                  {courseFilterMode === 'my-courses' ? 'No Enrolled Courses Yet' : 'No Courses Found'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1 mb-4">
+                  {courseFilterMode === 'my-courses' 
+                    ? 'Explore available medical entrance courses and enroll to start practicing.'
+                    : 'Try selecting another exam category or clearing your search filter.'}
+                </p>
+                {courseFilterMode === 'my-courses' && (
+                  <button 
+                    onClick={() => setCourseFilterMode('explore')}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-teal-700"
+                  >
+                    <i className="fas fa-compass mr-1.5" /> Explore All Courses
+                  </button>
+                )}
               </div>
-            ))}
-            {filteredCourses.length === 0 && <EmptyState icon="fa-book" title="No Courses" message="You haven't enrolled in any courses yet" />}
+            )}
           </div>
         </>
       )}
@@ -467,6 +581,7 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
 export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
   const { courses } = useData();
+  const { analytics, loading: analyticsLoading } = useStudentAnalytics(user?.id);
   const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
 
   return (
@@ -481,13 +596,38 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
       <div className="p-4 space-y-3">
         <div className="grid grid-cols-3 gap-3">
           <div className="card text-center"><p className="text-lg font-bold text-teal-600">{myCourses.length}</p><p className="text-[10px] text-gray-500">Courses</p></div>
-          <div className="card text-center"><p className="text-lg font-bold text-teal-600">0</p><p className="text-[10px] text-gray-500">Quizzes</p></div>
-          <div className="card text-center"><p className="text-lg font-bold text-teal-600">—</p><p className="text-[10px] text-gray-500">Avg Score</p></div>
+          <div className="card text-center cursor-pointer hover:bg-gray-50 transition" onClick={() => onNavigate('analytics')}>
+            <p className="text-lg font-bold text-teal-600">{analyticsLoading ? '...' : (analytics?.completedAttempts ?? 0)}</p>
+            <p className="text-[10px] text-gray-500">Quizzes Taken</p>
+          </div>
+          <div className="card text-center cursor-pointer hover:bg-gray-50 transition" onClick={() => onNavigate('analytics')}>
+            <p className="text-lg font-bold text-teal-600">{analytics ? `${analytics.averageAccuracy}%` : '—'}</p>
+            <p className="text-[10px] text-gray-500">Avg Accuracy</p>
+          </div>
         </div>
+
+        {/* Quick Analytics CTA Card */}
+        <div 
+          onClick={() => onNavigate('analytics')}
+          className="card bg-gradient-to-r from-teal-500 to-[#0f2b46] text-white p-4 cursor-pointer hover:shadow-md transition active:scale-[0.99] flex items-center justify-between"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-lg">
+              <i className="fas fa-chart-line text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold">Analytics & Diagnostic Report</p>
+              <p className="text-[11px] text-teal-100">Review score trends, subject breakdown & weak areas</p>
+            </div>
+          </div>
+          <i className="fas fa-arrow-right text-teal-200" />
+        </div>
+
         <div className="card p-0 overflow-hidden">
           {[
+            { icon: 'fa-chart-pie', label: 'Performance Analytics', screen: 'analytics', badge: 'Phase 6' },
             { icon: 'fa-book', label: 'My Courses', screen: 'courses' },
-            { icon: 'fa-clipboard-check', label: 'Quizzes', screen: 'quizzes' },
+            { icon: 'fa-clipboard-check', label: 'Quizzes & Drills', screen: 'quizzes' },
             { icon: 'fa-building', label: 'Departments', screen: 'departments' },
             { icon: 'fa-bullhorn', label: 'Announcements', screen: 'announcements' },
             { icon: 'fa-calendar', label: 'Academic Calendar', screen: 'calendar' },
@@ -497,6 +637,7 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
             <button key={i} onClick={() => onNavigate(item.screen)} className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 active:bg-gray-50">
               <i className={`fas ${item.icon} text-gray-400 w-5 text-center`} />
               <span className="text-sm text-gray-700 flex-1 text-left">{item.label}</span>
+              {item.badge && <span className="badge badge-teal text-[9px] mr-1">{item.badge}</span>}
               <i className="fas fa-chevron-right text-gray-300 text-xs" />
             </button>
           ))}
@@ -828,6 +969,35 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         <EmptyState icon="fa-calendar" title="No Events" message="No upcoming events scheduled" />
+      </div>
+    </div>
+  );
+}
+
+// ==================== ANALYTICS SCREEN (PHASE 6) ====================
+export function AnalyticsScreen({ 
+  onBack, 
+  onNavigate 
+}: { 
+  onBack: () => void; 
+  onNavigate?: (screen: string, data?: any) => void;
+}) {
+  const { user } = useAuth();
+
+  return (
+    <div>
+      <Header 
+        title="Performance Analytics" 
+        subtitle="Drill history, score trends & diagnostic insights" 
+        showBack 
+        onBack={onBack} 
+        gradient={false} 
+      />
+      <div className="p-4">
+        <PerformanceAnalyticsView 
+          studentId={user?.id} 
+          onNavigateToQuizzes={() => onNavigate?.('quizzes')} 
+        />
       </div>
     </div>
   );

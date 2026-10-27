@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { BottomNav } from './components/Navigation';
 import { SplashScreen, LoginScreen } from './screens/AuthScreens';
-import { StudentHome, StudentCourses, StudentResources, StudentCommunity, StudentProfile, NotificationsScreen, AnnouncementsScreen, AboutScreen, DepartmentsScreen, HelpScreen, CalendarScreen } from './screens/StudentScreens';
+import { StudentHome, StudentCourses, StudentResources, StudentCommunity, StudentProfile, NotificationsScreen, AnnouncementsScreen, AboutScreen, DepartmentsScreen, HelpScreen, CalendarScreen, AnalyticsScreen } from './screens/StudentScreens';
 import { QuizList, QuizDetail, ActiveQuiz, QuizResults } from './screens/QuizScreens';
 import { FacultyDashboard, FacultyCourses, UploadResource, CreateQuiz, FacultySubmissions, FacultyNotifications, FacultyProfile, FacultyAnnouncements, FacultyCommunity, FacultyResources } from './screens/FacultyScreens';
 import { AdminDashboard, AdminUsers, AdminDepartments, AdminCourses, AdminResources, AdminNotifications, AuditLogs, AdminSettings, AdminCommunity, AdminAnnouncements, AddUser, SendAnnouncement, SendNotification } from './screens/AdminScreens';
@@ -100,6 +100,7 @@ function AppContent() {
         case 'resources': return <StudentResources onNavigate={handleNavigate} />;
         case 'community': return <StudentCommunity onNavigate={handleNavigate} />;
         case 'profile': return <StudentProfile onNavigate={handleNavigate} />;
+        case 'analytics': return <AnalyticsScreen onBack={handleBack} onNavigate={handleNavigate} />;
         case 'notifications': return <NotificationsScreen onBack={handleBack} />;
         case 'announcements': return <AnnouncementsScreen onBack={handleBack} />;
         case 'about': return <AboutScreen onBack={handleBack} />;
@@ -108,7 +109,7 @@ function AppContent() {
         case 'calendar': return <CalendarScreen onBack={handleBack} />;
         case 'quizzes': return <QuizList onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quiz-detail': return <QuizDetail onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
-        case 'active-quiz': return <ActiveQuiz onBack={handleBack} onNavigate={handleNavigate} />;
+        case 'active-quiz': return <ActiveQuiz onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
         case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
@@ -126,11 +127,13 @@ function AppContent() {
         case 'submissions': return <FacultySubmissions onBack={handleBack} />;
         case 'notifications': return <FacultyNotifications onBack={handleBack} />;
         case 'profile': return <FacultyProfile onNavigate={handleNavigate} />;
+        case 'analytics': return <AnalyticsScreen onBack={handleBack} onNavigate={handleNavigate} />;
         case 'announcements': return <FacultyAnnouncements onBack={handleBack} />;
         case 'community': return <FacultyCommunity onBack={handleBack} />;
         case 'help': return <HelpScreen onBack={handleBack} />;
         case 'quizzes': return <QuizList onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quiz-detail': return <QuizDetail onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
+        case 'active-quiz': return <ActiveQuiz onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
         case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
@@ -149,6 +152,7 @@ function AppContent() {
         case 'courses': return <AdminCourses onBack={handleBack} />;
         case 'resources': return <AdminResources onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quizzes': return <QuizList onBack={handleBack} onNavigate={handleNavigate} />;
+        case 'analytics': return <AnalyticsScreen onBack={handleBack} onNavigate={handleNavigate} />;
         case 'announcements': return <AdminAnnouncements onBack={handleBack} onNavigate={handleNavigate} />;
         case 'send-announcement': return <SendAnnouncement onBack={handleBack} />;
         case 'send-notification': return <SendNotification onBack={handleBack} />;
@@ -157,6 +161,7 @@ function AppContent() {
         case 'audit-logs': return <AuditLogs onBack={handleBack} />;
         case 'settings': return <AdminSettings onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quiz-detail': return <QuizDetail onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
+        case 'active-quiz': return <ActiveQuiz onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
         case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;

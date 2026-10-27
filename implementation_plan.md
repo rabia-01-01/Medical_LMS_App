@@ -307,9 +307,9 @@ src/
 - [x] **Step 2**: Create `.env.example` and connect project to Supabase. *(Completed)*
 - [x] **Step 3**: Migrate `AuthContext.tsx` to Supabase Auth while keeping existing UI intact. *(Completed)*
 - [x] **Step 4**: Wire curriculum data (Exams, Subjects, Chapters) from PostgreSQL. *(Completed)*
-- [ ] **Step 5**: Wire Resources and connect uploads to Supabase Storage bucket `resources`.
-- [ ] **Step 6**: Connect the Assessment Engine and interactive test runner to `assessments` & `questions`.
-- [ ] **Step 7**: Connect Attempt submission and evaluation to `attempts` & `attempt_answers`.
-- [ ] **Step 8**: Implement Recharts analytics dashboard for students and faculty.
-- [ ] **Step 9**: Connect single/multiple student enrollment to `student_subjects` & `batches`.
-- [ ] **Step 10**: Verify RLS policies, typecheck, and validate production build.
+- [x] **Step 5**: Wire Resources and connect uploads to Supabase Storage bucket `resources` (Phase 4). *(Completed)*
+- [x] **Step 6**: Connect the Assessment Engine and interactive test runner to `assessments` & `questions` (Phase 5). *(Completed)*
+- [x] **Step 7**: Connect Attempt submission and evaluation to `attempts` & `attempt_answers` (Phase 6). *(Completed)*
+- [x] **Step 8**: Implement Recharts analytics dashboard for students and faculty (Phase 6). *(Completed)*
+- [x] **Step 9**: Connect single/multiple student enrollment to `student_subjects` & `batches`, implement DRM document protection (anti-download & anti-screenshot), student course self-enrollment, and admin course visibility in faculty dashboard (Phase 7). *(Completed)*
+- [ ] **Step 10**: Verify RLS policies, typecheck, and validate production build (Phase 8).

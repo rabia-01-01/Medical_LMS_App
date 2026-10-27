@@ -5,13 +5,16 @@ import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 import { CurriculumBrowser, useSubjects, useChapters } from '../features/curriculum';
 import { resourceService, normalizeResourceType, useResources } from '../features/resources';
+import { AssessmentCreator } from '../features/assessments';
 
 // ==================== FACULTY DASHBOARD ====================
 export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses, resources, quizzes, notifications } = useData();
   const { resources: cloudResources } = useResources();
-  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
+  const assignedCourses = useMemo(() => courses.filter(c => (c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
+  const adminCourses = useMemo(() => courses.filter(c => !(c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
+
   const myResources = useMemo(() => {
     const ids = new Set<string>();
     const list: any[] = [];
@@ -50,8 +53,8 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div onClick={() => onNavigate('courses')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
-            <p className="text-teal-300 text-lg font-bold">{myCourses.length}</p>
-            <p className="text-gray-300 text-[10px]">Courses</p>
+            <p className="text-teal-300 text-lg font-bold">{courses.length}</p>
+            <p className="text-gray-300 text-[10px]">Courses ({assignedCourses.length} assigned)</p>
           </div>
           <div onClick={() => onNavigate('faculty-resources')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
             <p className="text-teal-300 text-lg font-bold">{myResources.length}</p>
@@ -84,30 +87,46 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
           </button>
         </div>
 
+        {/* Assigned and Admin Uploaded Courses */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-gray-800 font-bold text-sm">My Courses</h2>
+            <div>
+              <h2 className="text-gray-800 font-bold text-sm">Courses ({courses.length})</h2>
+              <p className="text-[10px] text-gray-400">Assigned courses & courses uploaded by Admin</p>
+            </div>
             <button onClick={() => onNavigate('courses')} className="text-teal-600 text-xs font-medium hover:underline">View All</button>
           </div>
-          {myCourses.length === 0 ? (
-            <div className="card text-center py-4"><p className="text-xs text-gray-500">No courses assigned yet</p></div>
+          {courses.length === 0 ? (
+            <div className="card text-center py-4"><p className="text-xs text-gray-500">No courses available yet</p></div>
           ) : (
-            myCourses.slice(0, 3).map((course) => (
-              <div 
-                key={course.id} 
-                onClick={() => onNavigate('course-detail', course)} 
-                className="card flex items-center gap-3 mb-2 cursor-pointer hover:border-teal-300 active:bg-gray-50 transition"
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
-                  <i className={`fas ${course.icon}`} style={{ color: course.color }} />
+            courses.slice(0, 4).map((course) => {
+              const isAssigned = (course.facultyIds || []).includes(user?.id || '');
+              return (
+                <div 
+                  key={course.id} 
+                  onClick={() => onNavigate('course-detail', course)} 
+                  className="card flex items-center gap-3 mb-2 cursor-pointer hover:border-teal-300 active:bg-gray-50 transition"
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
+                    <i className={`fas ${course.icon}`} style={{ color: course.color }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{course.name}</p>
+                      {isAssigned ? (
+                        <span className="badge badge-teal text-[9px] py-0 px-1.5 flex-shrink-0">Assigned</span>
+                      ) : (
+                        <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[9px] py-0 px-1.5 flex-shrink-0 flex items-center gap-0.5">
+                          <i className="fas fa-user-shield text-[8px]" /> Admin Course
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">{course.studentIds.length} students enrolled • {course.category}</p>
+                  </div>
+                  <i className="fas fa-chevron-right text-gray-300 text-xs" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{course.name}</p>
-                  <p className="text-xs text-gray-500">{course.studentIds.length} students enrolled</p>
-                </div>
-                <i className="fas fa-chevron-right text-gray-300 text-xs" />
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -154,17 +173,26 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
   const { user } = useAuth();
   const { courses } = useData();
   const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'assigned' | 'admin'>('all');
   const [enrollingCourse, setEnrollingCourse] = useState<Course | null>(null);
-  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
+
+  const assignedCourses = useMemo(() => courses.filter(c => (c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
+  const adminCourses = useMemo(() => courses.filter(c => !(c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
+
+  const displayedCourses = useMemo(() => {
+    if (scopeFilter === 'assigned') return assignedCourses;
+    if (scopeFilter === 'admin') return adminCourses;
+    return courses;
+  }, [courses, assignedCourses, adminCourses, scopeFilter]);
 
   return (
     <div>
       <Header 
-        title={viewMode === 'courses' ? 'My Courses' : 'Academic Curriculum'} 
-        subtitle={viewMode === 'courses' ? `${myCourses.length} assigned` : 'Subjects, Chapters & Topics'} 
+        title={viewMode === 'courses' ? 'Faculty Courses' : 'Academic Curriculum'} 
+        subtitle={viewMode === 'courses' ? `${courses.length} courses (${assignedCourses.length} assigned • ${adminCourses.length} admin)` : 'Subjects, Chapters & Topics'} 
       />
 
-      {/* Tab Switcher */}
+      {/* Primary Tab Switcher */}
       <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mb-3">
         <button
           onClick={() => setViewMode('courses')}
@@ -173,7 +201,7 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
           }`}
         >
           <i className="fas fa-book-medical text-[11px]" />
-          <span>Assigned Courses</span>
+          <span>Courses ({courses.length})</span>
         </button>
         <button
           onClick={() => setViewMode('curriculum')}
@@ -192,10 +220,46 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
         </div>
       ) : (
         <div className="p-4 space-y-3">
-          {myCourses.length === 0 ? (
-            <EmptyState icon="fa-book" title="No Courses" message="No courses assigned to you yet" />
+          {/* Scope Filter: All vs Assigned vs Admin-uploaded */}
+          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => setScopeFilter('all')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                scopeFilter === 'all'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              All Courses ({courses.length})
+            </button>
+            <button
+              onClick={() => setScopeFilter('assigned')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                scopeFilter === 'assigned'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              My Assigned ({assignedCourses.length})
+            </button>
+            <button
+              onClick={() => setScopeFilter('admin')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                scopeFilter === 'admin'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              Admin Uploaded ({adminCourses.length})
+            </button>
+          </div>
+
+          {displayedCourses.length === 0 ? (
+            <EmptyState icon="fa-book" title="No Courses" message="No courses found in this category" />
           ) : (
-          myCourses.map((course) => (
+          displayedCourses.map((course) => {
+            const isAssigned = (course.facultyIds || []).includes(user?.id || '');
+            return (
             <div key={course.id} className="card">
               <div className="flex items-start gap-3">
                 <div 
@@ -207,11 +271,23 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
                 </div>
                 <div className="flex-1 min-w-0">
                   <div onClick={() => onNavigate('course-detail', course)} className="cursor-pointer">
-                    <p className="text-sm font-bold text-gray-800 hover:text-teal-600 transition truncate">{course.name}</p>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="text-sm font-bold text-gray-800 hover:text-teal-600 transition truncate">{course.name}</p>
+                      {isAssigned ? (
+                        <span className="badge badge-teal text-[9px] py-0 px-1.5 flex-shrink-0">Assigned</span>
+                      ) : (
+                        <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[9px] py-0 px-1.5 flex-shrink-0 flex items-center gap-0.5">
+                          <i className="fas fa-shield-alt text-[8px]" /> Admin Uploaded
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{course.description}</p>
                     <div className="flex items-center gap-3 mt-2">
                       <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">
                         <i className="fas fa-users mr-1" />{course.studentIds.length} students enrolled
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        {course.category} • {course.duration}
                       </span>
                     </div>
                   </div>
@@ -239,7 +315,8 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
       )}
@@ -347,7 +424,7 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
         title: formData.title,
         description: `${formData.examCategory} • ${formData.subject || 'General'}`,
         resourceType: normalizeResourceType(formData.type),
-        subjectId: formData.subjectId || 'sub-general',
+        subjectId: formData.subjectId || subjects[0]?.id || 'sub-general',
         chapterId: formData.chapterId || null,
         status: 'PUBLISHED',
         file: fileToUpload,
@@ -554,109 +631,9 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ==================== CREATE QUIZ ====================
+// ==================== CREATE QUIZ / ASSESSMENT ====================
 export function CreateQuiz({ onBack }: { onBack: () => void }) {
-  const { user } = useAuth();
-  const { courses, addQuiz } = useData();
-  const [title, setTitle] = useState('');
-  const [courseId, setCourseId] = useState('');
-  const [duration, setDuration] = useState(45);
-  const [negativeMarking, setNegativeMarking] = useState(1);
-  const [questions, setQuestions] = useState([{ question: '', options: ['', '', '', ''], correctAnswer: 0 }]);
-  const [success, setSuccess] = useState(false);
-
-  const myCourses = courses.filter(c => c.facultyIds.includes(user?.id || ''));
-
-  const addQuestion = () => setQuestions([...questions, { question: '', options: ['', '', '', ''], correctAnswer: 0 }]);
-
-  const handleSubmit = () => {
-    if (!title || !courseId || !user) return;
-    const validQuestions = questions.filter(q => q.question && q.options.every(o => o));
-    if (validQuestions.length === 0) return;
-
-    addQuiz({
-      title,
-      subject: myCourses.find(c => c.id === courseId)?.subjects[0] || 'General',
-      courseId,
-      questions: validQuestions.map((q, i) => ({ id: i + 1, question: q.question, options: q.options, correctAnswer: q.correctAnswer, marks: 4, negativeMarks: negativeMarking })),
-      duration,
-      marks: validQuestions.length * 4,
-      negativeMarking,
-      status: 'active',
-      createdById: user.id,
-      createdByName: user.name,
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    });
-    setSuccess(true);
-    setTimeout(() => onBack(), 1500);
-  };
-
-  if (success) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3"><i className="fas fa-check text-green-500 text-2xl" /></div>
-          <p className="text-sm font-semibold text-gray-800">Quiz Created!</p>
-          <p className="text-xs text-gray-500 mt-1">Redirecting...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <Header title="Create Quiz" showBack onBack={onBack} gradient={false} />
-      <div className="p-4 space-y-4">
-        <div className="card">
-          <h3 className="text-sm font-bold text-gray-800 mb-3">Quiz Details</h3>
-          <div className="space-y-3">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quiz Title *" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-            <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-              <option value="">Select Course *</option>
-              {myCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              {myCourses.length === 0 && courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[10px] text-gray-500">Duration (min)</label><input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" /></div>
-              <div><label className="text-[10px] text-gray-500">Negative Marks</label><input type="number" value={negativeMarking} onChange={(e) => setNegativeMarking(Number(e.target.value))} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" /></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-gray-800">Questions ({questions.length})</h3>
-          <button onClick={addQuestion} className="text-xs text-teal-600 font-medium"><i className="fas fa-plus mr-1" />Add</button>
-        </div>
-
-        {questions.map((q, qIdx) => (
-          <div key={qIdx} className="card">
-            <div className="flex items-center justify-between mb-2">
-              <span className="badge badge-navy">Q{qIdx + 1}</span>
-              {qIdx > 0 && <button onClick={() => setQuestions(questions.filter((_, i) => i !== qIdx))} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>}
-            </div>
-            <textarea value={q.question} onChange={(e) => { const u = [...questions]; u[qIdx].question = e.target.value; setQuestions(u); }} placeholder="Enter question..." className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2 resize-none" rows={2} />
-            <div className="space-y-2">
-              {q.options.map((opt, oIdx) => (
-                <div key={oIdx} className="flex items-center gap-2">
-                  <button onClick={() => { const u = [...questions]; u[qIdx].correctAnswer = oIdx; setQuestions(u); }} className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${q.correctAnswer === oIdx ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'}`}>{String.fromCharCode(65 + oIdx)}</button>
-                  <input value={opt} onChange={(e) => { const u = [...questions]; u[qIdx].options[oIdx] = e.target.value; setQuestions(u); }} placeholder={`Option ${String.fromCharCode(65 + oIdx)}`} className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        <button onClick={addQuestion} className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500"><i className="fas fa-plus mr-2" />Add Question</button>
-
-        <div className="card bg-orange-50 border-l-4 border-orange-400">
-          <p className="text-xs text-orange-800"><i className="fas fa-shield-alt mr-1" /><strong>Confidentiality:</strong> Once submitted, quiz questions and answer keys cannot be retrieved.</p>
-        </div>
-
-        <button onClick={handleSubmit} disabled={!title || !courseId} className="btn-primary disabled:opacity-50">Submit Quiz</button>
-      </div>
-    </div>
-  );
+  return <AssessmentCreator onBack={onBack} />;
 }
 
 // ==================== FACULTY SUBMISSIONS ====================

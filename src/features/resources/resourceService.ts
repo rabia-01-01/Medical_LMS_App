@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import type {
   CreateResourceInput,
@@ -315,8 +316,8 @@ export async function createResource(
   const chapterSlug = input.chapterId || 'general';
   const storagePath = `${subjectSlug}/${chapterSlug}/${Date.now()}_${safeFileName}`;
 
-  const resourceId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `res_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const fileId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const resourceId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : uuidv4();
+  const fileId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : uuidv4();
 
   if (isSupabaseConfigured()) {
     try {

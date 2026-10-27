@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 import { CurriculumBrowser } from '../features/curriculum';
-import { resourceService, useResources } from '../features/resources';
+import { resourceService, useResources, DocumentProtectionWrapper } from '../features/resources';
 
 // Helper function to download base64 file
 function downloadFile(fileData: string, fileName: string, mimeType: string) {
@@ -159,10 +159,16 @@ export function ResourceViewer({ onBack, resource }: { onBack: () => void; resou
 function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user, isViewingAs, viewingAsUser } = useAuth();
   const displayUser = isViewingAs ? viewingAsUser : user;
+  const isStudent = displayUser?.role === 'student';
   const watermarkText = `${displayUser?.name || 'User'} • ${new Date().toLocaleDateString()}`;
   const { resolvedUrl, loading } = useResourceUrl(resource);
 
   const handleDownload = async () => {
+    if (isStudent) {
+      alert('Downloading study materials is disabled for student accounts.');
+      return;
+    }
+
     const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
     const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'document'}.pdf`;
     const mimeType = resource.mimeType || resource.file?.mime_type || 'application/pdf';
@@ -184,117 +190,132 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
   };
 
   const handleOpenFullscreen = () => {
+    if (isStudent) return;
     if (resolvedUrl) {
       window.open(resolvedUrl, '_blank');
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-100">
-      <Header 
-        title={resource.title} 
-        showBack 
-        onBack={onBack} 
-        gradient={false}
-        rightAction={
-          <div className="flex items-center gap-2">
-            {resolvedUrl && (
-              <button 
-                onClick={handleOpenFullscreen} 
-                className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
-                title="Open in new window / full screen"
-              >
-                <i className="fas fa-external-link-alt text-[10px]" />
-                <span className="hidden sm:inline">Fullscreen</span>
-              </button>
-            )}
-            {(resource.fileData || resolvedUrl) && (
-              <button 
-                onClick={handleDownload} 
-                className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
-                title="Download PDF"
-              >
-                <i className="fas fa-download text-[10px]" />
-                <span className="hidden sm:inline">Download</span>
-              </button>
-            )}
-          </div>
-        }
-      />
-
-      <div className="watermark pointer-events-none select-none">{watermarkText}</div>
-
-      <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <i className="fas fa-shield-alt text-yellow-600 text-xs" />
-          <p className="text-[11px] text-yellow-800 font-medium">Protected Document • Watermarked</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] text-gray-500">{resource.sizeFormatted || resource.size}</span>
-          {resolvedUrl && (
-            <button onClick={handleOpenFullscreen} className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1">
-              <i className="fas fa-expand text-[10px]" /> Open in Tab
-            </button>
-          )}
-        </div>
-      </div>
-      
-      {resolvedUrl ? (
-        <div className="flex-1 w-full h-full relative overflow-hidden bg-gray-200">
-          <object
-            data={resolvedUrl}
-            type="application/pdf"
-            className="w-full h-full"
-          >
-            <iframe 
-              src={resolvedUrl} 
-              className="w-full h-full border-0"
-              title={resource.title}
-            />
-          </object>
-          
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-gray-200 flex items-center gap-3">
-            <span className="text-[11px] text-gray-600">Viewing PDF Document</span>
-            <button 
-              onClick={handleOpenFullscreen}
-              className="text-xs text-teal-700 font-bold hover:underline flex items-center gap-1"
-            >
-              <i className="fas fa-external-link-alt text-[10px]" /> Open Fullscreen
-            </button>
-          </div>
-        </div>
-      ) : loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            <p className="text-xs text-gray-500">Loading secure cloud stream...</p>
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center card max-w-sm p-6 shadow-sm">
-            <i className="fas fa-file-pdf text-5xl text-red-500 mb-3" />
-            <h3 className="text-base font-bold text-gray-800">{resource.title}</h3>
-            <p className="text-xs text-gray-500 mt-1">{resource.subject || resource.subjectName} • {resource.sizeFormatted || resource.size}</p>
-            <div className="mt-4 p-3 bg-gray-50 rounded-xl text-xs text-gray-600">
-              <p>Uploaded by <span className="font-semibold text-gray-800">{resource.uploaderName || resource.creatorName}</span> on {resource.date || resource.created_at?.split('T')[0]}</p>
-              <p className="text-[11px] text-gray-400 mt-1">Direct PDF stream is not available or stored as offline preview.</p>
+    <DocumentProtectionWrapper resourceTitle={resource.title}>
+      <div className="flex flex-col h-full bg-gray-100">
+        <Header 
+          title={resource.title} 
+          showBack 
+          onBack={onBack} 
+          gradient={false}
+          rightAction={
+            <div className="flex items-center gap-2">
+              {isStudent ? (
+                <span className="px-2 py-1 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                  <i className="fas fa-shield-alt text-yellow-600" />
+                  <span>Protected Document</span>
+                </span>
+              ) : (
+                <>
+                  {resolvedUrl && (
+                    <button 
+                      onClick={handleOpenFullscreen} 
+                      className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      title="Open in new window / full screen"
+                    >
+                      <i className="fas fa-external-link-alt text-[10px]" />
+                      <span className="hidden sm:inline">Fullscreen</span>
+                    </button>
+                  )}
+                  {(resource.fileData || resolvedUrl) && (
+                    <button 
+                      onClick={handleDownload} 
+                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      title="Download PDF"
+                    >
+                      <i className="fas fa-download text-[10px]" />
+                      <span className="hidden sm:inline">Download</span>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
-            {resource.fileData && (
-              <button onClick={handleDownload} className="btn-primary mt-4">
-                <i className="fas fa-download mr-1.5" />Download PDF
+          }
+        />
+
+        <div className="watermark pointer-events-none select-none">{watermarkText}</div>
+
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <i className="fas fa-shield-alt text-yellow-600 text-xs" />
+            <p className="text-[11px] text-yellow-800 font-medium">
+              {isStudent ? 'DRM Protected • Screenshots & Downloads Blocked' : 'Protected Document • Watermarked'}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-gray-500">{resource.sizeFormatted || resource.size}</span>
+            {!isStudent && resolvedUrl && (
+              <button onClick={handleOpenFullscreen} className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1">
+                <i className="fas fa-expand text-[10px]" /> Open in Tab
               </button>
             )}
           </div>
         </div>
-      )}
-    </div>
+        
+        {resolvedUrl ? (
+          <div className="flex-1 w-full h-full relative overflow-hidden bg-gray-200">
+            <object
+              data={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+              type="application/pdf"
+              className="w-full h-full pointer-events-auto"
+            >
+              <iframe 
+                src={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`} 
+                className="w-full h-full border-0"
+                title={resource.title}
+              />
+            </object>
+            
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full shadow-lg border border-gray-200 flex items-center gap-2 text-[11px] text-gray-600">
+              <i className="fas fa-book-reader text-teal-600" />
+              <span>Viewing Protected PDF in App</span>
+            </div>
+          </div>
+        ) : loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-xs text-gray-500">Loading secure cloud stream...</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center card max-w-sm p-6 shadow-sm">
+              <i className="fas fa-file-pdf text-5xl text-red-500 mb-3" />
+              <h3 className="text-base font-bold text-gray-800">{resource.title}</h3>
+              <p className="text-xs text-gray-500 mt-1">{resource.subject || resource.subjectName} • {resource.sizeFormatted || resource.size}</p>
+              <div className="mt-4 p-3 bg-gray-50 rounded-xl text-xs text-gray-600">
+                <p>Uploaded by <span className="font-semibold text-gray-800">{resource.uploaderName || resource.creatorName}</span> on {resource.date || resource.created_at?.split('T')[0]}</p>
+                <p className="text-[11px] text-gray-400 mt-1">Direct PDF stream is not available or stored as offline preview.</p>
+              </div>
+              {!isStudent && resource.fileData ? (
+                <button onClick={handleDownload} className="btn-primary mt-4">
+                  <i className="fas fa-download mr-1.5" />Download PDF
+                </button>
+              ) : isStudent ? (
+                <div className="mt-4 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-500">
+                  <i className="fas fa-lock mr-1 text-teal-600" />
+                  Direct PDF download is restricted for students.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
+    </DocumentProtectionWrapper>
   );
 }
 
 // ==================== TEXT / NOTES VIEWER ====================
 function TextViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
+  const isStudent = user?.role === 'student';
   const [copied, setCopied] = useState(false);
   const [remoteText, setRemoteText] = useState<string | null>(null);
   const watermarkText = `${user?.name || 'User'} • ${new Date().toLocaleDateString()}`;
@@ -315,6 +336,11 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
   }, [resource.fileData, resolvedUrl]);
 
   const handleDownload = async () => {
+    if (isStudent) {
+      alert('Downloading notes is disabled for student accounts.');
+      return;
+    }
+
     const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
     const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'notes'}.txt`;
     const mimeType = resource.mimeType || resource.file?.mime_type || 'text/plain';
@@ -336,6 +362,10 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
   };
 
   const handleCopy = () => {
+    if (isStudent) {
+      alert('Copying protected notes is disabled.');
+      return;
+    }
     if (textContent) {
       navigator.clipboard.writeText(textContent);
       setCopied(true);
@@ -347,90 +377,108 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
   const lineCount = textContent ? textContent.split('\n').length : 0;
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      <Header 
-        title={resource.title} 
-        showBack 
-        onBack={onBack} 
-        gradient={false}
-        rightAction={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopy}
-              className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
-              title="Copy text"
-            >
-              <i className={`fas ${copied ? 'fa-check text-green-600' : 'fa-copy'} text-[10px]`} />
-              <span>{copied ? 'Copied' : 'Copy'}</span>
-            </button>
-            {(resource.fileData || resolvedUrl) && (
-              <button
-                onClick={handleDownload}
-                className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
-                title="Download document"
-              >
-                <i className="fas fa-download text-[10px]" />
-                <span className="hidden sm:inline">Download</span>
-              </button>
-            )}
-          </div>
-        }
-      />
-
-      <div className="watermark pointer-events-none select-none">{watermarkText}</div>
-
-      <div className="bg-teal-50/70 border-b border-teal-100 px-4 py-2 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2 text-teal-800">
-          <i className="fas fa-sticky-note text-teal-600 text-xs" />
-          <span className="font-semibold">{resource.type || resource.resource_type || 'Notes'} Document</span>
-        </div>
-        <div className="flex items-center gap-3 text-[11px] text-gray-500">
-          <span>{lineCount} lines</span>
-          <span>•</span>
-          <span>{wordCount} words</span>
-          <span>•</span>
-          <span>{resource.sizeFormatted || resource.size}</span>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-5 sm:p-7 min-h-[400px]">
-          <div className="border-b border-gray-100 pb-3 mb-4">
-            <h1 className="text-lg font-bold text-gray-900">{resource.title}</h1>
-            <p className="text-xs text-gray-500 mt-1">
-              Subject: <span className="font-semibold text-gray-700">{resource.subject || resource.subjectName}</span> • Uploaded by {resource.uploaderName || resource.creatorName} on {resource.date || resource.created_at?.split('T')[0]}
-            </p>
-          </div>
-
-          {textContent ? (
-            <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed font-normal select-text">
-              {textContent}
-            </pre>
-          ) : (
-            <div className="text-center py-12 text-gray-400">
-              <i className="fas fa-file-alt text-4xl mb-3 text-gray-300" />
-              <p className="text-sm font-medium text-gray-600">Text content preview not available.</p>
-              <p className="text-xs text-gray-400 mt-1">Please download the file to view its full content.</p>
-              {(resource.fileData || resolvedUrl) && (
-                <button onClick={handleDownload} className="btn-primary max-w-xs mx-auto mt-4">
-                  <i className="fas fa-download mr-1.5" />Download Document
-                </button>
+    <DocumentProtectionWrapper resourceTitle={resource.title}>
+      <div className="flex flex-col h-full bg-gray-50">
+        <Header 
+          title={resource.title} 
+          showBack 
+          onBack={onBack} 
+          gradient={false}
+          rightAction={
+            <div className="flex items-center gap-2">
+              {isStudent ? (
+                <span className="px-2 py-1 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                  <i className="fas fa-lock text-yellow-600" />
+                  <span>Protected Notes</span>
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={handleCopy}
+                    className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                    title="Copy text"
+                  >
+                    <i className={`fas ${copied ? 'fa-check text-green-600' : 'fa-copy'} text-[10px]`} />
+                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                  </button>
+                  {(resource.fileData || resolvedUrl) && (
+                    <button
+                      onClick={handleDownload}
+                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                      title="Download document"
+                    >
+                      <i className="fas fa-download text-[10px]" />
+                      <span className="hidden sm:inline">Download</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
-          )}
+          }
+        />
+
+        <div className="watermark pointer-events-none select-none">{watermarkText}</div>
+
+        <div className="bg-teal-50/70 border-b border-teal-100 px-4 py-2 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 text-teal-800">
+            <i className="fas fa-sticky-note text-teal-600 text-xs" />
+            <span className="font-semibold">{resource.type || resource.resource_type || 'Notes'} Document</span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500">
+            <span>{lineCount} lines</span>
+            <span>•</span>
+            <span>{wordCount} words</span>
+            <span>•</span>
+            <span>{resource.sizeFormatted || resource.size}</span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-5 sm:p-7 min-h-[400px]">
+            <div className="border-b border-gray-100 pb-3 mb-4">
+              <h1 className="text-lg font-bold text-gray-900">{resource.title}</h1>
+              <p className="text-xs text-gray-500 mt-1">
+                Subject: <span className="font-semibold text-gray-700">{resource.subject || resource.subjectName}</span> • Uploaded by {resource.uploaderName || resource.creatorName} on {resource.date || resource.created_at?.split('T')[0]}
+              </p>
+            </div>
+
+            {textContent ? (
+              <pre className={`whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed font-normal ${isStudent ? 'select-none' : 'select-text'}`}>
+                {textContent}
+              </pre>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <i className="fas fa-file-alt text-4xl mb-3 text-gray-300" />
+                <p className="text-sm font-medium text-gray-600">Text content preview not available.</p>
+                {!isStudent && (resource.fileData || resolvedUrl) ? (
+                  <button onClick={handleDownload} className="btn-primary max-w-xs mx-auto mt-4">
+                    <i className="fas fa-download mr-1.5" />Download Document
+                  </button>
+                ) : isStudent ? (
+                  <p className="text-xs text-teal-600 mt-2 font-semibold">Protected notes are only readable in online mode.</p>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </DocumentProtectionWrapper>
   );
 }
 
 // ==================== IMAGE VIEWER ====================
 function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
+  const isStudent = user?.role === 'student';
   const watermarkText = `${user?.name || 'User'}`;
   const { resolvedUrl } = useResourceUrl(resource);
 
   const handleDownload = async () => {
+    if (isStudent) {
+      alert('Downloading images is disabled for student accounts.');
+      return;
+    }
+
     const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
     const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'image'}.jpg`;
     const mimeType = resource.mimeType || resource.file?.mime_type || 'image/jpeg';
@@ -452,72 +500,96 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
   };
 
   const handleOpenFullscreen = () => {
+    if (isStudent) return;
     if (resolvedUrl) window.open(resolvedUrl, '_blank');
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-900">
-      <Header 
-        title={resource.title} 
-        showBack 
-        onBack={onBack} 
-        rightAction={
-          <div className="flex items-center gap-2">
-            {resolvedUrl && (
-              <button onClick={handleOpenFullscreen} className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-medium transition" title="Open Full Image">
-                <i className="fas fa-expand text-[10px] mr-1" />Fullscreen
-              </button>
-            )}
-            {(resource.fileData || resolvedUrl) && (
-              <button onClick={handleDownload} className="px-2.5 py-1 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium transition" title="Download Image">
-                <i className="fas fa-download text-[10px] mr-1" />Download
-              </button>
-            )}
+    <DocumentProtectionWrapper resourceTitle={resource.title}>
+      <div className="flex flex-col h-full bg-gray-900">
+        <Header 
+          title={resource.title} 
+          showBack 
+          onBack={onBack} 
+          rightAction={
+            <div className="flex items-center gap-2">
+              {isStudent ? (
+                <span className="px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded-lg text-[10px] font-bold flex items-center gap-1 border border-yellow-500/30">
+                  <i className="fas fa-lock" />
+                  <span>Protected Image</span>
+                </span>
+              ) : (
+                <>
+                  {resolvedUrl && (
+                    <button onClick={handleOpenFullscreen} className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-medium transition" title="Open Full Image">
+                      <i className="fas fa-expand text-[10px] mr-1" />Fullscreen
+                    </button>
+                  )}
+                  {(resource.fileData || resolvedUrl) && (
+                    <button onClick={handleDownload} className="px-2.5 py-1 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium transition" title="Download Image">
+                      <i className="fas fa-download text-[10px] mr-1" />Download
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          }
+        />
+        <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
+        
+        {resolvedUrl || resource.fileData ? (
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+            <img 
+              src={resolvedUrl || resource.fileData} 
+              alt={resource.title}
+              className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${isStudent ? 'pointer-events-none select-none' : ''}`}
+              draggable={!isStudent}
+            />
           </div>
-        }
-      />
-      <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
-      
-      {resolvedUrl || resource.fileData ? (
-        <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
-          <img 
-            src={resolvedUrl || resource.fileData} 
-            alt={resource.title}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-          />
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <i className="fas fa-image text-5xl text-gray-500 mb-3" />
-            <p className="text-sm text-gray-300">Image not available</p>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <i className="fas fa-image text-5xl text-gray-500 mb-3" />
+              <p className="text-sm text-gray-300">Image not available</p>
+            </div>
           </div>
-        </div>
-      )}
-      
-      <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-gray-200 font-medium">{resource.fileName || resource.title}</p>
-          <p className="text-[10px] text-gray-400">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
-        </div>
-        {(resource.fileData || resolvedUrl) && (
-          <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
-            <i className="fas fa-download text-xs" />
-            <span>Download</span>
-          </button>
         )}
+        
+        <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-200 font-medium">{resource.fileName || resource.title}</p>
+            <p className="text-[10px] text-gray-400">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
+          </div>
+          {!isStudent && (resource.fileData || resolvedUrl) && (
+            <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+              <i className="fas fa-download text-xs" />
+              <span>Download</span>
+            </button>
+          )}
+          {isStudent && (
+            <span className="text-[10px] text-gray-400 flex items-center gap-1">
+              <i className="fas fa-shield-alt text-teal-400" /> Protected Visual Asset
+            </span>
+          )}
+        </div>
       </div>
-    </div>
+    </DocumentProtectionWrapper>
   );
 }
 
 // ==================== VIDEO PLAYER ====================
 function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
+  const isStudent = user?.role === 'student';
   const watermarkText = `${user?.name || 'User'}`;
   const { resolvedUrl } = useResourceUrl(resource);
 
   const handleDownload = async () => {
+    if (isStudent) {
+      alert('Downloading videos is disabled for student accounts.');
+      return;
+    }
+
     const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
     const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'video'}.mp4`;
     const mimeType = resource.mimeType || resource.file?.mime_type || 'video/mp4';
@@ -539,67 +611,81 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
   };
 
   return (
-    <div className="flex flex-col h-full bg-black">
-      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent px-4 py-3">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-white text-base"><i className="fas fa-arrow-left" /></button>
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-bold truncate">{resource.title}</p>
-            <p className="text-gray-300 text-[10px]">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
+    <DocumentProtectionWrapper resourceTitle={resource.title}>
+      <div className="flex flex-col h-full bg-black">
+        <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent px-4 py-3">
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className="text-white text-base"><i className="fas fa-arrow-left" /></button>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-bold truncate">{resource.title}</p>
+              <p className="text-gray-300 text-[10px]">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
+            </div>
+            {!isStudent && (resource.fileData || resolvedUrl) && (
+              <button onClick={handleDownload} className="text-white bg-white/20 hover:bg-white/30 text-xs px-2.5 py-1 rounded-lg">
+                <i className="fas fa-download mr-1" />Download
+              </button>
+            )}
+            {isStudent && (
+              <span className="text-[10px] text-teal-300 bg-white/10 px-2 py-0.5 rounded flex items-center gap-1">
+                <i className="fas fa-lock" />Protected
+              </span>
+            )}
           </div>
-          {(resource.fileData || resolvedUrl) && (
-            <button onClick={handleDownload} className="text-white bg-white/20 hover:bg-white/30 text-xs px-2.5 py-1 rounded-lg">
-              <i className="fas fa-download mr-1" />Download
+        </div>
+        <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
+        
+        {resolvedUrl || resource.fileData ? (
+          <div className="flex-1 flex items-center justify-center p-2">
+            <video 
+              src={resolvedUrl || resource.fileData} 
+              controls 
+              className="max-w-full max-h-full rounded-lg shadow-xl"
+              controlsList="nodownload noplaybackrate"
+              disablePictureInPicture={isStudent}
+            >
+              Your browser does not support video playback.
+            </video>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
+                <i className="fas fa-play text-3xl text-white ml-1" />
+              </div>
+              <p className="text-white/60 text-xs">Video data not available</p>
+            </div>
+          </div>
+        )}
+        
+        <div className="bg-gray-900 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <i className="fas fa-lock text-teal-400 text-xs" />
+            <p className="text-[11px] text-gray-400">Protected Video Stream</p>
+          </div>
+          {!isStudent && (resource.fileData || resolvedUrl) && (
+            <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium">
+              <i className="fas fa-download mr-1" />Save Video
             </button>
           )}
         </div>
       </div>
-      <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
-      
-      {resolvedUrl || resource.fileData ? (
-        <div className="flex-1 flex items-center justify-center p-2">
-          <video 
-            src={resolvedUrl || resource.fileData} 
-            controls 
-            className="max-w-full max-h-full rounded-lg shadow-xl"
-            controlsList="nodownload"
-          >
-            Your browser does not support video playback.
-          </video>
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
-              <i className="fas fa-play text-3xl text-white ml-1" />
-            </div>
-            <p className="text-white/60 text-xs">Video data not available</p>
-          </div>
-        </div>
-      )}
-      
-      <div className="bg-gray-900 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <i className="fas fa-lock text-teal-400 text-xs" />
-          <p className="text-[11px] text-gray-400">Protected Video Playback</p>
-        </div>
-        {(resource.fileData || resolvedUrl) && (
-          <button onClick={handleDownload} className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-medium">
-            <i className="fas fa-download mr-1" />Save Video
-          </button>
-        )}
-      </div>
-    </div>
+    </DocumentProtectionWrapper>
   );
 }
 
 // ==================== FILE VIEWER (for Word, Excel, PPT, etc.) ====================
 function FileViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
+  const isStudent = user?.role === 'student';
   const watermarkText = `${user?.name || 'User'} • ${new Date().toLocaleDateString()}`;
   const { resolvedUrl } = useResourceUrl(resource);
 
   const handleDownload = async () => {
+    if (isStudent) {
+      alert('Downloading document files is restricted for student accounts.');
+      return;
+    }
+
     const storagePath = resource.storagePath || resource.storage_path || resource.file?.storage_path;
     const fileName = resource.fileName || resource.file?.file_name || `${resource.title || 'resource'}.bin`;
     const mimeType = resource.mimeType || resource.file?.mime_type || 'application/octet-stream';
@@ -621,6 +707,7 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
   };
 
   const handleOpenBrowser = () => {
+    if (isStudent) return;
     if (resolvedUrl) {
       window.open(resolvedUrl, '_blank');
     }
@@ -640,95 +727,109 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      <Header 
-        title={resource.title} 
-        showBack 
-        onBack={onBack} 
-        gradient={false}
-        rightAction={
-          (resource.fileData || resolvedUrl) && (
-            <button onClick={handleDownload} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition">
-              <i className="fas fa-download text-[10px]" />
-              <span>Download</span>
-            </button>
-          )
-        }
-      />
-      <div className="watermark pointer-events-none select-none">{watermarkText}</div>
-      
-      <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
-        <div className="text-center max-w-sm w-full">
-          <div className="w-24 h-24 rounded-3xl bg-white shadow-md flex items-center justify-center mx-auto mb-4 border border-gray-100">
-            <i className={`fas ${getFileIcon()} text-4xl`} />
-          </div>
-          
-          <h2 className="text-lg font-bold text-gray-800 mb-1">{resource.title}</h2>
-          <p className="text-xs text-gray-500 mb-4">{resource.subject || resource.subjectName} • {resource.examCategory || 'Medical LMS'}</p>
-          
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 text-left space-y-2.5">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-500">Document Type</span>
-              <span className="font-semibold text-gray-800 badge badge-teal">{resource.type || resource.resource_type || 'Document'}</span>
+    <DocumentProtectionWrapper resourceTitle={resource.title}>
+      <div className="flex flex-col h-full bg-gray-50">
+        <Header 
+          title={resource.title} 
+          showBack 
+          onBack={onBack} 
+          gradient={false}
+          rightAction={
+            !isStudent && (resource.fileData || resolvedUrl) ? (
+              <button onClick={handleDownload} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition">
+                <i className="fas fa-download text-[10px]" />
+                <span>Download</span>
+              </button>
+            ) : isStudent ? (
+              <span className="px-2 py-1 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                <i className="fas fa-lock text-yellow-600" />
+                <span>Protected</span>
+              </span>
+            ) : undefined
+          }
+        />
+        <div className="watermark pointer-events-none select-none">{watermarkText}</div>
+        
+        <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+          <div className="text-center max-w-sm w-full">
+            <div className="w-24 h-24 rounded-3xl bg-white shadow-md flex items-center justify-center mx-auto mb-4 border border-gray-100">
+              <i className={`fas ${getFileIcon()} text-4xl`} />
             </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-500">File Size</span>
-              <span className="font-semibold text-gray-700">{resource.sizeFormatted || resource.size}</span>
+            
+            <h2 className="text-lg font-bold text-gray-800 mb-1">{resource.title}</h2>
+            <p className="text-xs text-gray-500 mb-4">{resource.subject || resource.subjectName} • {resource.examCategory || 'Medical LMS'}</p>
+            
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 text-left space-y-2.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500">Document Type</span>
+                <span className="font-semibold text-gray-800 badge badge-teal">{resource.type || resource.resource_type || 'Document'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500">File Size</span>
+                <span className="font-semibold text-gray-700">{resource.sizeFormatted || resource.size}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500">Uploaded By</span>
+                <span className="font-semibold text-gray-700">{resource.uploaderName || resource.creatorName}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500">Upload Date</span>
+                <span className="font-semibold text-gray-700">{resource.date || resource.created_at?.split('T')[0]}</span>
+              </div>
+              {(resource.fileName || resource.file?.file_name) && (
+                <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-100">
+                  <span className="text-gray-500">File Name</span>
+                  <span className="font-medium text-gray-700 truncate ml-2 max-w-[180px]">{resource.fileName || resource.file?.file_name}</span>
+                </div>
+              )}
             </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-500">Uploaded By</span>
-              <span className="font-semibold text-gray-700">{resource.uploaderName || resource.creatorName}</span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-500">Upload Date</span>
-              <span className="font-semibold text-gray-700">{resource.date || resource.created_at?.split('T')[0]}</span>
-            </div>
-            {(resource.fileName || resource.file?.file_name) && (
-              <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-100">
-                <span className="text-gray-500">File Name</span>
-                <span className="font-medium text-gray-700 truncate ml-2 max-w-[180px]">{resource.fileName || resource.file?.file_name}</span>
+
+            {!isStudent && (resource.fileData || resolvedUrl) ? (
+              <div className="space-y-2">
+                <button onClick={handleDownload} className="btn-primary flex items-center justify-center gap-2 shadow-sm">
+                  <i className="fas fa-download" />
+                  <span>Download Document ({resource.sizeFormatted || resource.size})</span>
+                </button>
+                {resolvedUrl && (
+                  <button 
+                    onClick={handleOpenBrowser} 
+                    className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
+                  >
+                    <i className="fas fa-external-link-alt text-[10px]" />
+                    <span>Open Document in Browser</span>
+                  </button>
+                )}
+              </div>
+            ) : isStudent ? (
+              <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-center">
+                <i className="fas fa-shield-alt text-teal-600 text-lg mb-1 block" />
+                <p className="text-xs font-bold text-teal-800">Protected Medical Material</p>
+                <p className="text-[11px] text-teal-600 mt-0.5">Direct file download is restricted for students. Study materials are protected under LMS copyright.</p>
+              </div>
+            ) : (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <i className="fas fa-exclamation-triangle text-yellow-600 mb-1" />
+                <p className="text-xs text-yellow-700 font-medium">Document content is unavailable.</p>
+                <p className="text-[11px] text-yellow-600 mt-1">Please contact the instructor for material access.</p>
               </div>
             )}
           </div>
-
-          {resource.fileData || resolvedUrl ? (
-            <div className="space-y-2">
-              <button onClick={handleDownload} className="btn-primary flex items-center justify-center gap-2 shadow-sm">
-                <i className="fas fa-download" />
-                <span>Download Document ({resource.sizeFormatted || resource.size})</span>
-              </button>
-              {resolvedUrl && (
-                <button 
-                  onClick={handleOpenBrowser} 
-                  className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
-                >
-                  <i className="fas fa-external-link-alt text-[10px]" />
-                  <span>Open Document in Browser</span>
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-              <i className="fas fa-exclamation-triangle text-yellow-600 mb-1" />
-              <p className="text-xs text-yellow-700 font-medium">Document content is unavailable.</p>
-              <p className="text-[11px] text-yellow-600 mt-1">Please contact the instructor for material access.</p>
-            </div>
-          )}
         </div>
       </div>
-    </div>
+    </DocumentProtectionWrapper>
   );
 }
 
-// ==================== COURSE DETAIL ====================
 export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => void; course?: any; onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { resources: localResources, users } = useData();
+  const { resources: localResources, users, enrollStudents } = useData();
   const { resources: cloudResources } = useResources();
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const c = course;
 
   const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
+  const isStudent = user?.role === 'student';
+  const isEnrolled = isStudent ? (c?.studentIds || []).includes(user?.id || '') : false;
 
   const courseResources = useMemo(() => {
     if (!c) return [];
@@ -787,7 +888,7 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
         showBack 
         onBack={onBack} 
         rightAction={
-          isFacultyOrAdmin && (
+          isFacultyOrAdmin ? (
             <button 
               onClick={() => setShowEnrollModal(true)} 
               className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
@@ -796,7 +897,25 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
               <i className="fas fa-user-plus text-[10px]" />
               <span>Enroll</span>
             </button>
-          )
+          ) : isStudent && !isEnrolled ? (
+            <button
+              onClick={() => {
+                if (user?.id) {
+                  enrollStudents(c.id, [user.id], { id: user.id, name: user.name });
+                  alert(`Congratulations! You have enrolled in ${c.name}.`);
+                }
+              }}
+              className="px-2.5 py-1 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <i className="fas fa-plus text-[10px]" />
+              <span>Enroll</span>
+            </button>
+          ) : isStudent && isEnrolled ? (
+            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-md text-[10px] font-bold flex items-center gap-1">
+              <i className="fas fa-check" />
+              <span>Enrolled</span>
+            </span>
+          ) : undefined
         }
       />
       <div className="p-4 space-y-4">
@@ -840,6 +959,38 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
                 <i className="fas fa-user-plus text-[10px]" />
                 <span>Enroll / Manage Students</span>
               </button>
+            </div>
+          )}
+
+          {/* Student Self-Enrollment Banner */}
+          {isStudent && !isEnrolled && (
+            <div className="mt-3 pt-3 border-t border-gray-100 bg-gradient-to-r from-teal-50 to-blue-50 p-3 rounded-xl border border-teal-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-teal-900">Get Enrolled in this Course</p>
+                <p className="text-[10px] text-teal-700">Access full curriculum, lecture notes and mock tests</p>
+              </div>
+              <button
+                onClick={() => {
+                  if (user?.id) {
+                    enrollStudents(c.id, [user.id], { id: user.id, name: user.name });
+                    alert(`Congratulations! You have enrolled in ${c.name}.`);
+                  }
+                }}
+                className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+              >
+                <i className="fas fa-graduation-cap" />
+                <span>Enroll Now</span>
+              </button>
+            </div>
+          )}
+
+          {isStudent && isEnrolled && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 text-xs">
+              <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+                <i className="fas fa-check-circle text-emerald-600" />
+                <span>You are currently enrolled in this course</span>
+              </div>
+              <span className="badge bg-emerald-100 text-emerald-800 text-[9px] font-bold">Active Student</span>
             </div>
           )}
         </div>

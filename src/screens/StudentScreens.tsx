@@ -609,18 +609,21 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
         {/* Quick Analytics CTA Card */}
         <div 
           onClick={() => onNavigate('analytics')}
-          className="card bg-gradient-to-r from-teal-500 to-[#0f2b46] text-white p-4 cursor-pointer hover:shadow-md transition active:scale-[0.99] flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #0d9488 0%, #0f2b46 100%)' }}
+          className="rounded-xl text-white p-4 cursor-pointer hover:shadow-lg transition active:scale-[0.99] flex items-center justify-between mb-3 shadow-md border border-teal-600/30"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-lg">
-              <i className="fas fa-chart-line text-white" />
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-lg text-white shadow-2xs">
+              <i className="fas fa-chart-line" />
             </div>
             <div>
-              <p className="text-sm font-bold">Analytics & Diagnostic Report</p>
-              <p className="text-[11px] text-teal-100">Review score trends, subject breakdown & weak areas</p>
+              <p className="text-sm font-bold text-white tracking-wide">Analytics & Diagnostic Report</p>
+              <p className="text-xs text-teal-100 font-medium">Review score trends, subject breakdown & weak areas</p>
             </div>
           </div>
-          <i className="fas fa-arrow-right text-teal-200" />
+          <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-white hover:bg-white/25 transition">
+            <i className="fas fa-arrow-right text-xs" />
+          </div>
         </div>
 
         <div className="card p-0 overflow-hidden">

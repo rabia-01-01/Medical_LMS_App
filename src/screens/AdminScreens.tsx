@@ -6,76 +6,147 @@ import { signUpUser } from '../features/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { CurriculumBrowser } from '../features/curriculum';
 import { useResources, resourceService } from '../features/resources';
+import { useAdmin, adminService } from '../features/admin';
 
-// ==================== ADMIN DASHBOARD ====================
+// ==================== OPERATIONAL ADMIN DASHBOARD ====================
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
-  const { users, departments, courses, resources, quizzes, announcements } = useData();
+  const { users, departments, courses, resources, quizzes, announcements, auditLogs } = useData();
+  const { metrics, loading: metricsLoading, refreshMetrics, exportAuditLogs } = useAdmin();
 
   return (
     <div>
       <div className="gradient-header pb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-gray-300 text-xs">Admin Panel</p>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span className="badge bg-teal-400/20 text-teal-200 border border-teal-400/30 text-[9px] py-0 px-1.5">
+                Phase 8 Admin
+              </span>
+              <p className="text-teal-200 text-xs font-medium">Operational Control Center</p>
+            </div>
             <h1 className="text-white text-lg font-bold">{user?.name || 'Administrator'}</h1>
           </div>
-          <div className="flex items-center gap-3 relative z-10">
-            <button onClick={() => onNavigate('notifications')} className="relative w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+          <div className="flex items-center gap-2 relative z-10">
+            <button 
+              onClick={() => refreshMetrics()} 
+              disabled={metricsLoading}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xs transition"
+              title="Refresh System Metrics"
+            >
+              <i className={`fas fa-sync-alt ${metricsLoading ? 'animate-spin text-teal-300' : ''}`} />
+            </button>
+            <button onClick={() => onNavigate('notifications')} className="relative w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">
               <i className="fas fa-bell text-white text-sm" />
             </button>
             <button onClick={() => onNavigate('settings')} className="w-9 h-9 rounded-full bg-purple-500/30 flex items-center justify-center text-lg">{user?.avatar}</button>
           </div>
         </div>
+
+        {/* Database & Cloud Connectivity Badge */}
+        <div className="bg-white/10 backdrop-blur-md rounded-xl p-2.5 mb-3 border border-white/15 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${metrics?.dbConnected ? 'bg-emerald-400 animate-pulse' : 'bg-yellow-400'}`} />
+            <span className="text-white font-medium text-[11px]">
+              {metrics?.dbConnected ? 'PostgreSQL Supabase Connected' : 'Local Storage Fallback Mode'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-teal-200">
+            {metrics?.dbConnected && <span>{metrics.dbLatencyMs}ms ping</span>}
+            <span className="badge bg-white/15 text-white text-[9px] py-0 px-1.5">
+              {metrics?.systemStatus || 'ACTIVE'}
+            </span>
+          </div>
+        </div>
+
+        {/* 6 Executive KPI Metrics Grid */}
         <div className="grid grid-cols-3 gap-2">
-          {[
-            { label: 'Users', value: users.length, icon: 'fa-users' },
-            { label: 'Courses', value: courses.length, icon: 'fa-book' },
-            { label: 'Departments', value: departments.length, icon: 'fa-building' },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-white/10 rounded-xl p-2 text-center backdrop-blur-sm">
-              <i className={`fas ${stat.icon} text-teal-300 text-sm mb-1`} />
-              <p className="text-white text-sm font-bold">{stat.value}</p>
-              <p className="text-gray-400 text-[9px]">{stat.label}</p>
-            </div>
-          ))}
+          <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
+            <i className="fas fa-user-graduate text-teal-300 text-sm mb-1 block" />
+            <p className="text-white text-base font-bold">{metrics?.totalStudents ?? users.filter(u => u.role === 'student').length}</p>
+            <p className="text-gray-300 text-[9px]">Students</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
+            <i className="fas fa-user-md text-blue-300 text-sm mb-1 block" />
+            <p className="text-white text-base font-bold">{metrics?.totalFaculty ?? users.filter(u => u.role === 'faculty').length}</p>
+            <p className="text-gray-300 text-[9px]">Faculty</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
+            <i className="fas fa-book-medical text-emerald-300 text-sm mb-1 block" />
+            <p className="text-white text-base font-bold">{metrics?.totalCourses ?? courses.length}</p>
+            <p className="text-gray-300 text-[9px]">Courses</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
+            <i className="fas fa-folder-open text-amber-300 text-sm mb-1 block" />
+            <p className="text-white text-base font-bold">{metrics?.publishedResources ?? resources.filter(r => r.status === 'published').length}</p>
+            <p className="text-gray-300 text-[9px]">Published Docs</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
+            <i className="fas fa-clipboard-check text-purple-300 text-sm mb-1 block" />
+            <p className="text-white text-base font-bold">{quizzes.length}</p>
+            <p className="text-gray-300 text-[9px]">Quizzes</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
+            <i className="fas fa-history text-cyan-300 text-sm mb-1 block" />
+            <p className="text-white text-base font-bold">{auditLogs.length}</p>
+            <p className="text-gray-300 text-[9px]">Audit Events</p>
+          </div>
         </div>
       </div>
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
 
       <div className="p-4 space-y-4">
-        {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => onNavigate('add-user')} className="card flex flex-col items-center py-3 active:bg-gray-50">
-            <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center mb-1"><i className="fas fa-user-plus text-teal-600" /></div>
+        {/* Quick Admin Actions */}
+        <div className="grid grid-cols-4 gap-2">
+          <button onClick={() => onNavigate('add-user')} className="card flex flex-col items-center py-2.5 active:bg-gray-50 mb-0 shadow-xs">
+            <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center mb-1 text-teal-600"><i className="fas fa-user-plus text-xs" /></div>
             <span className="text-[10px] font-medium text-gray-700">Add User</span>
           </button>
-          <button onClick={() => onNavigate('send-announcement')} className="card flex flex-col items-center py-3 active:bg-gray-50">
-            <div className="w-9 h-9 rounded-full bg-orange-50 flex items-center justify-center mb-1"><i className="fas fa-bullhorn text-orange-600" /></div>
+          <button onClick={() => onNavigate('send-announcement')} className="card flex flex-col items-center py-2.5 active:bg-gray-50 mb-0 shadow-xs">
+            <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center mb-1 text-orange-600"><i className="fas fa-bullhorn text-xs" /></div>
             <span className="text-[10px] font-medium text-gray-700">Announce</span>
           </button>
-          <button onClick={() => onNavigate('send-notification')} className="card flex flex-col items-center py-3 active:bg-gray-50">
-            <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center mb-1"><i className="fas fa-paper-plane text-blue-600" /></div>
+          <button onClick={() => onNavigate('send-notification')} className="card flex flex-col items-center py-2.5 active:bg-gray-50 mb-0 shadow-xs">
+            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center mb-1 text-blue-600"><i className="fas fa-paper-plane text-xs" /></div>
             <span className="text-[10px] font-medium text-gray-700">Notify</span>
+          </button>
+          <button 
+            onClick={() => {
+              const formattedLogs = auditLogs.map(l => ({
+                id: l.id,
+                action: l.action,
+                userId: l.userId,
+                userName: l.userName,
+                details: l.details,
+                timestamp: l.timestamp,
+                severity: 'info' as const
+              }));
+              adminService.exportAuditLogs(formattedLogs);
+            }} 
+            className="card flex flex-col items-center py-2.5 active:bg-gray-50 mb-0 shadow-xs"
+            title="Download audit trail as JSON"
+          >
+            <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center mb-1 text-purple-600"><i className="fas fa-file-download text-xs" /></div>
+            <span className="text-[10px] font-medium text-gray-700">Export Logs</span>
           </button>
         </div>
 
-        {/* Management */}
-        <div className="card p-0 overflow-hidden">
+        {/* Operational Modules Navigation */}
+        <div className="card p-0 overflow-hidden shadow-xs">
           {[
-            { icon: 'fa-users', label: 'Manage Users', desc: `${users.length} users`, screen: 'users' },
+            { icon: 'fa-users', label: 'User Management', desc: `${users.length} registered profiles (${metrics?.activeUsers || users.length} active)`, screen: 'users' },
+            { icon: 'fa-book-medical', label: 'Academic & Course Management', desc: `${courses.length} courses, curriculum & cohorts`, screen: 'courses' },
             { icon: 'fa-building', label: 'Departments', desc: `${departments.length} departments`, screen: 'departments' },
-            { icon: 'fa-book-medical', label: 'Courses', desc: `${courses.length} courses`, screen: 'courses' },
-            { icon: 'fa-folder-open', label: 'Resources', desc: `${resources.length} resources`, screen: 'resources' },
-            { icon: 'fa-clipboard-check', label: 'Quizzes', desc: `${quizzes.length} quizzes`, screen: 'quizzes' },
-            { icon: 'fa-bullhorn', label: 'Announcements', desc: `${announcements.length} announcements`, screen: 'announcements' },
-            { icon: 'fa-comments', label: 'Community', desc: 'Moderate messages', screen: 'community' },
-            { icon: 'fa-bell', label: 'Notifications', desc: 'Send & manage', screen: 'notifications' },
-            { icon: 'fa-history', label: 'Audit Logs', desc: 'Security logs', screen: 'audit-logs' },
-            { icon: 'fa-cog', label: 'Settings', desc: 'Configuration', screen: 'settings' },
+            { icon: 'fa-shield-alt', label: 'Resource Governance & Moderation', desc: `${resources.length} resources (${resources.filter(r => r.status === 'published').length} published)`, screen: 'resources' },
+            { icon: 'fa-clipboard-check', label: 'Assessment & Quiz Engine', desc: `${quizzes.length} exams & mock drills`, screen: 'quizzes' },
+            { icon: 'fa-history', label: 'Security & Audit Logs', desc: `${auditLogs.length} events logged`, screen: 'audit-logs' },
+            { icon: 'fa-bullhorn', label: 'Announcements', desc: `${announcements.length} broadcasts`, screen: 'announcements' },
+            { icon: 'fa-comments', label: 'Community Moderation', desc: 'Manage discussions', screen: 'community' },
+            { icon: 'fa-bell', label: 'Alerts & Push Notifications', desc: 'System alerts', screen: 'notifications' },
+            { icon: 'fa-cog', label: 'System Configuration', desc: 'Environment & settings', screen: 'settings' },
           ].map((item, i) => (
-            <button key={i} onClick={() => onNavigate(item.screen)} className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 active:bg-gray-50">
-              <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center"><i className={`fas ${item.icon} text-gray-600 text-sm`} /></div>
+            <button key={i} onClick={() => onNavigate(item.screen)} className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 active:bg-gray-50 transition">
+              <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center"><i className={`fas ${item.icon} text-teal-700 text-sm`} /></div>
               <div className="flex-1 text-left">
                 <p className="text-sm font-semibold text-gray-800">{item.label}</p>
                 <p className="text-[10px] text-gray-400">{item.desc}</p>
@@ -170,58 +241,166 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 
 // ==================== MANAGE USERS ====================
 export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
+  const { user: currentUser, startViewingAs } = useAuth();
   const { users, deleteUser, updateUser } = useData();
   const [filter, setFilter] = useState('All');
+  const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const roles = ['All', 'Students', 'Faculty', 'Admins'];
+  const roles = ['All', 'Students', 'Faculty', 'Admins', 'Suspended'];
 
   let filtered = users;
   if (filter === 'Students') filtered = users.filter(u => u.role === 'student');
   if (filter === 'Faculty') filtered = users.filter(u => u.role === 'faculty');
   if (filter === 'Admins') filtered = users.filter(u => u.role === 'admin');
+  if (filter === 'Suspended') filtered = users.filter(u => u.status !== 'active');
 
-  const handleDelete = (id: string) => {
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(u =>
+      u.name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      (u.targetExam && u.targetExam.toLowerCase().includes(q))
+    );
+  }
+
+  const handleDelete = async (id: string) => {
+    const target = users.find(u => u.id === id);
     deleteUser(id);
+    if (currentUser) {
+      await adminService.recordAuditLog({
+        action: 'USER_DELETED',
+        entityType: 'USER',
+        entityId: id,
+        userId: currentUser.id,
+        userName: currentUser.name || 'Admin',
+        details: `Deleted user profile for ${target?.name || id} (${target?.email})`,
+        severity: 'critical',
+      });
+    }
     setConfirmDelete(null);
   };
 
-  const toggleStatus = (id: string) => {
-    const user = users.find(u => u.id === id);
-    if (user) updateUser(id, { status: user.status === 'active' ? 'suspended' : 'active' });
+  const toggleStatus = async (id: string) => {
+    const target = users.find(u => u.id === id);
+    if (!target) return;
+    const newStatus = target.status === 'active' ? 'suspended' : 'active';
+    updateUser(id, { status: newStatus });
+    if (currentUser) {
+      await adminService.recordAuditLog({
+        action: `USER_${newStatus.toUpperCase()}`,
+        entityType: 'USER',
+        entityId: id,
+        userId: currentUser.id,
+        userName: currentUser.name || 'Admin',
+        details: `Changed status of ${target.name} to ${newStatus}`,
+        severity: newStatus === 'suspended' ? 'warning' : 'info',
+      });
+    }
   };
 
   return (
     <div>
-      <Header title="Manage Users" subtitle={`${filtered.length} users`} showBack onBack={onBack} rightAction={
-        <button onClick={() => onNavigate('add-user')} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
+      <Header title="User Management" subtitle={`${filtered.length} users`} showBack onBack={onBack} rightAction={
+        <button onClick={() => onNavigate('add-user')} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm" title="Add New User">
+          <i className="fas fa-plus" />
+        </button>
       } />
-      <div className="flex gap-2 px-4 py-3 overflow-x-auto">
-        {roles.map((r) => (
-          <button key={r} onClick={() => setFilter(r)} className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${filter === r ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{r}</button>
-        ))}
-      </div>
-      <div className="px-4 space-y-2">
+
+      <div className="p-4 space-y-3">
+        {/* Search Input */}
+        <div className="relative">
+          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, or exam (NEET, IMAT)..."
+            className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">
+              <i className="fas fa-times" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
+          {roles.map((r) => (
+            <button 
+              key={r} 
+              onClick={() => setFilter(r)} 
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+                filter === r ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+
+        {/* User Cards List */}
         {filtered.length === 0 ? (
-          <EmptyState icon="fa-users" title="No Users" message="No users found. Add users to get started." />
+          <EmptyState icon="fa-users" title="No Users" message="No users match the search criteria." />
         ) : (
           filtered.map((u) => (
-            <div key={u.id} className="card flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm ${u.role === 'student' ? 'bg-teal-100' : u.role === 'faculty' ? 'bg-blue-100' : 'bg-purple-100'}`}>
-                {u.avatar}
+            <div key={u.id} className="card flex items-center gap-3 p-3 mb-0 hover:border-teal-200 border border-gray-100 transition">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${
+                u.role === 'student' ? 'bg-teal-100 text-teal-800' : u.role === 'faculty' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+              }`}>
+                {u.avatar || '👤'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
-                <p className="text-[10px] text-gray-400">{u.email}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
+                  {u.targetExam && <span className="badge badge-teal text-[8px] py-0 px-1">{u.targetExam}</span>}
+                </div>
+                <p className="text-[10px] text-gray-400 truncate">{u.email}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`badge ${u.role === 'student' ? 'badge-teal' : u.role === 'faculty' ? 'badge-navy' : 'badge-green'}`}>{u.role}</span>
-                  <span className={`text-[10px] ${u.status === 'active' ? 'text-green-500' : 'text-red-500'}`}>{u.status}</span>
+                  <span className={`badge text-[9px] py-0 px-1.5 ${
+                    u.role === 'student' ? 'badge-teal' : u.role === 'faculty' ? 'badge-navy' : 'badge-green'
+                  }`}>
+                    {u.role}
+                  </span>
+                  <span className={`text-[10px] font-semibold flex items-center gap-1 ${u.status === 'active' ? 'text-emerald-600' : 'text-red-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    {u.status}
+                  </span>
                 </div>
               </div>
-              <div className="flex flex-col gap-1">
-                <button onClick={() => toggleStatus(u.id)} className={`text-[10px] px-2 py-1 rounded ${u.status === 'active' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                  {u.status === 'active' ? 'Suspend' : 'Activate'}
-                </button>
-                <button onClick={() => setConfirmDelete(u.id)} className="text-[10px] px-2 py-1 rounded bg-red-50 text-red-600"><i className="fas fa-trash mr-1" />Delete</button>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-1 flex-shrink-0">
+                {u.id !== currentUser?.id && (
+                  <button
+                    onClick={() => {
+                      startViewingAs(u, 'Administrative preview and test');
+                      onNavigate(u.role === 'student' ? 'home' : 'dashboard');
+                    }}
+                    className="text-[10px] px-2 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition flex items-center gap-1"
+                    title="Impersonate & test user experience"
+                  >
+                    <i className="fas fa-eye text-[8px]" />
+                    <span>View As</span>
+                  </button>
+                )}
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => toggleStatus(u.id)} 
+                    className={`text-[10px] px-2 py-0.5 rounded font-medium transition ${
+                      u.status === 'active' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {u.status === 'active' ? 'Suspend' : 'Activate'}
+                  </button>
+                  <button 
+                    onClick={() => setConfirmDelete(u.id)} 
+                    className="text-[10px] p-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition"
+                    title="Delete user"
+                  >
+                    <i className="fas fa-trash text-[9px]" />
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -460,6 +639,7 @@ export function AdminCourses({ onBack }: { onBack: () => void }) {
 
 // ==================== ADMIN RESOURCES ====================
 export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onNavigate?: (screen: string, data?: any) => void }) {
+  const { user } = useAuth();
   const { resources: localResources, deleteResource, updateResource } = useData();
   const { resources: cloudResources, loading: cloudLoading, deleteResource: deleteCloudResource } = useResources();
   const [search, setSearch] = useState('');
@@ -508,11 +688,15 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
   const cloudCount = allResources.filter(r => r.isCloud).length;
   const publishedCount = allResources.filter(r => r.status === 'published').length;
 
-  const filters = ['All', 'Cloud', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment'];
+  const filters = ['All', 'Published', 'Draft', 'Cloud', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment'];
 
   let filtered = allResources;
   if (filter === 'Cloud') {
     filtered = filtered.filter(r => r.isCloud);
+  } else if (filter === 'Published') {
+    filtered = filtered.filter(r => r.status === 'published');
+  } else if (filter === 'Draft') {
+    filtered = filtered.filter(r => r.status === 'draft');
   } else if (filter !== 'All') {
     filtered = filtered.filter(r => r.type === filter);
   }
@@ -525,6 +709,19 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
       (r.uploaderName && r.uploaderName.toLowerCase().includes(q))
     );
   }
+
+  const handleTogglePublish = async (resourceId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'published' ? 'draft' : 'published';
+    updateResource(resourceId, { status: newStatus as any });
+    if (user) {
+      await adminService.moderateResource(
+        resourceId,
+        newStatus as any,
+        { id: user.id, name: user.name || 'Admin' },
+        `Admin toggled status to ${newStatus}`
+      );
+    }
+  };
 
   const handleDelete = async (resourceId: string) => {
     const target = allResources.find(res => res.id === resourceId);
@@ -640,7 +837,24 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <StatusBadge status={r.status} />
+                  <button
+                    onClick={() => handleTogglePublish(r.id, r.status)}
+                    className="cursor-pointer"
+                    title={`Click to ${r.status === 'published' ? 'unpublish' : 'publish'}`}
+                  >
+                    <StatusBadge status={r.status} />
+                  </button>
+                  <button
+                    onClick={() => handleTogglePublish(r.id, r.status)}
+                    className={`px-1.5 py-1 rounded-lg text-[10px] font-semibold transition ${
+                      r.status === 'published'
+                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-700'
+                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
+                    }`}
+                    title={r.status === 'published' ? 'Move to Draft' : 'Approve & Publish'}
+                  >
+                    <i className={`fas ${r.status === 'published' ? 'fa-eye-slash' : 'fa-check'} text-[9px]`} />
+                  </button>
                   {onNavigate && (
                     <button
                       onClick={() => onNavigate('resource-view', r)}
@@ -892,23 +1106,118 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
 // ==================== AUDIT LOGS ====================
 export function AuditLogs({ onBack }: { onBack: () => void }) {
   const { auditLogs } = useData();
+  const [filter, setFilter] = useState('All');
+  const [search, setSearch] = useState('');
+
+  const categories = ['All', 'USER', 'RESOURCE', 'ENROLLMENT', 'ANNOUNCEMENT'];
+
+  let filtered = auditLogs;
+  if (filter !== 'All') {
+    filtered = filtered.filter(l => l.action.toUpperCase().includes(filter));
+  }
+
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(l =>
+      l.action.toLowerCase().includes(q) ||
+      l.userName.toLowerCase().includes(q) ||
+      l.details.toLowerCase().includes(q)
+    );
+  }
+
+  const handleExport = () => {
+    const formattedLogs = auditLogs.map(l => ({
+      id: l.id,
+      action: l.action,
+      userId: l.userId,
+      userName: l.userName,
+      details: l.details,
+      timestamp: l.timestamp,
+      severity: 'info' as const,
+    }));
+    adminService.exportAuditLogs(formattedLogs);
+  };
+
   return (
     <div>
-      <Header title="Audit Logs" subtitle="Security & access tracking" showBack onBack={onBack} />
-      <div className="p-4 space-y-2">
-        {auditLogs.length === 0 ? (
-          <EmptyState icon="fa-history" title="No Logs" message="No activity recorded yet" />
+      <Header 
+        title="Audit Logs" 
+        subtitle={`${filtered.length} recorded events`} 
+        showBack 
+        onBack={onBack}
+        rightAction={
+          <button 
+            onClick={handleExport} 
+            className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+            title="Export audit log report as JSON"
+          >
+            <i className="fas fa-download text-[10px]" />
+            <span>Export</span>
+          </button>
+        } 
+      />
+
+      <div className="p-4 space-y-3">
+        {/* Search Input */}
+        <div className="relative">
+          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search audit trail by action, actor, or details..."
+            className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">
+              <i className="fas fa-times" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
+          {categories.map((c) => (
+            <button 
+              key={c} 
+              onClick={() => setFilter(c)} 
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+                filter === c ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
+        {/* Logs List */}
+        {filtered.length === 0 ? (
+          <EmptyState icon="fa-history" title="No Logs" message="No activity records match the criteria." />
         ) : (
-          auditLogs.map((log) => (
-            <div key={log.id} className="card">
-              <div className="flex items-center justify-between mb-1">
-                <span className="badge badge-navy">{log.action}</span>
-                <span className="text-[10px] text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+          filtered.map((log) => {
+            const isCritical = log.action.includes('DELETE') || log.action.includes('SUSPEND');
+            const isEnrollment = log.action.includes('Enroll');
+            const isResource = log.action.includes('Resource');
+
+            return (
+              <div key={log.id} className="card p-3 mb-0 border border-gray-100 hover:border-teal-200 transition">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${isCritical ? 'bg-red-500' : isEnrollment ? 'bg-teal-500' : isResource ? 'bg-blue-500' : 'bg-gray-400'}`} />
+                    <span className="badge badge-navy text-[9px] py-0 px-1.5 font-bold tracking-wide">{log.action}</span>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+                </div>
+                <div className="text-xs text-gray-700 bg-gray-50/80 p-2 rounded-lg border border-gray-100">
+                  <p className="font-semibold text-gray-800 text-[11px] mb-0.5">
+                    <i className="fas fa-user-shield text-teal-600 mr-1" />
+                    {log.userName}
+                  </p>
+                  <p className="text-[11px] text-gray-600">{log.details}</p>
+                </div>
               </div>
-              <p className="text-xs text-gray-700 mt-1"><strong>User:</strong> {log.userName}</p>
-              <p className="text-xs text-gray-500">{log.details}</p>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

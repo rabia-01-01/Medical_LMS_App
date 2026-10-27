@@ -8,6 +8,7 @@ import { QuizList, QuizDetail, ActiveQuiz, QuizResults } from './screens/QuizScr
 import { FacultyDashboard, FacultyCourses, UploadResource, CreateQuiz, FacultySubmissions, FacultyNotifications, FacultyProfile, FacultyAnnouncements, FacultyCommunity, FacultyResources } from './screens/FacultyScreens';
 import { AdminDashboard, AdminUsers, AdminDepartments, AdminCourses, AdminResources, AdminNotifications, AuditLogs, AdminSettings, AdminCommunity, AdminAnnouncements, AddUser, SendAnnouncement, SendNotification } from './screens/AdminScreens';
 import { ResourceViewer, CourseDetail } from './screens/ResourceScreens';
+import { FullscreenControl, DisplayMode } from './components/FullscreenControl';
 
 const studentNavItems = [
   { id: 'home', icon: 'fa-home', label: 'Home' },
@@ -36,6 +37,22 @@ const adminNavItems = [
 function AppContent() {
   const { user, isAuthenticated, isLoading, isViewingAs, viewingAsUser, stopViewingAs } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
+    try {
+      const saved = localStorage.getItem('lms_display_mode');
+      return (saved as DisplayMode) || 'mobile';
+    } catch {
+      return 'mobile';
+    }
+  });
+
+  const handleDisplayModeChange = (mode: DisplayMode) => {
+    setDisplayMode(mode);
+    try {
+      localStorage.setItem('lms_display_mode', mode);
+    } catch {}
+  };
+
   const [currentScreen, setCurrentScreen] = useState(() => {
     return user?.role === 'admin' || user?.role === 'faculty' ? 'dashboard' : 'home';
   });
@@ -172,8 +189,13 @@ function AppContent() {
     return null;
   };
 
+  const containerClass = `app-container ${
+    displayMode === 'wide' ? 'app-wide' : displayMode === 'fullscreen' ? 'app-fullscreen' : ''
+  }`;
+
   return (
-    <div className="app-container">
+    <div className={containerClass}>
+      <FullscreenControl mode={displayMode} onModeChange={handleDisplayModeChange} />
       {ViewingAsBanner}
       <div className="screen-content">{renderScreen()}</div>
       {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}

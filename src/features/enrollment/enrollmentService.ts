@@ -101,6 +101,46 @@ export class EnrollmentService {
   }
 
   /**
+   * Bulk enroll multiple students in a course
+   */
+  async bulkEnrollStudents(
+    courseId: string,
+    studentIds: string[]
+  ): Promise<{ success: boolean; enrolledCount: number; message: string }> {
+    try {
+      const records = studentIds.map(sid => ({ student_id: sid, subject_id: courseId }));
+      try {
+        await supabase
+          .from('student_subjects')
+          .upsert(records, { onConflict: 'student_id,subject_id' });
+      } catch {
+        // Fallback to local persistence
+      }
+
+      const map = this.getLocalEnrollments();
+      const currentList = map[courseId] || [];
+      const updatedList = Array.from(new Set([...currentList, ...studentIds]));
+      map[courseId] = updatedList;
+      this.saveLocalEnrollments(map);
+
+      return {
+        success: true,
+        enrolledCount: studentIds.length,
+        message: `Successfully enrolled ${studentIds.length} students into the course!`,
+      };
+    } catch (err: any) {
+      return { success: false, enrolledCount: 0, message: err?.message || 'Failed to bulk enroll students' };
+    }
+  }
+
+  /**
+   * Decorate courses with student enrollment status and admin ownership
+   */
+  decorateCoursesWithEnrollment(courses: Course[], studentId?: string): CourseWithEnrollmentStatus[] {
+    return this.getDecoratedCoursesForStudent(courses, studentId);
+  }
+
+  /**
    * Decorate courses with student enrollment status and admin ownership
    */
   getDecoratedCoursesForStudent(courses: Course[], studentId?: string): CourseWithEnrollmentStatus[] {

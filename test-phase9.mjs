@@ -231,15 +231,15 @@ try {
     if (url && key) {
       const client = createClient(url, key);
       const { data: chaptersData, error: chErr } = await client.from('chapters').select('id, name').limit(3);
-      if (!chErr) {
-        assert(true, `PostgreSQL Supabase connection live: retrieved ${chaptersData.length} curriculum chapters`);
-      } else {
-        assert(true, `Supabase connection verified (tables initialized or fallback local mode active)`);
-      }
+      assert(!chErr && chaptersData && chaptersData.length > 0, `PostgreSQL Supabase connection live: retrieved ${chaptersData?.length || 0} curriculum chapters`);
+    } else {
+      assert(false, 'Missing Supabase URL or Key in .env');
     }
+  } else {
+    assert(false, '.env file missing');
   }
 } catch (e) {
-  assert(true, `Cloud test handled safely: ${e.message}`);
+  assert(false, `Cloud backend error: ${e.message}`);
 }
 
 console.log(`\n${colors.bold}${colors.blue}================================================================${colors.reset}`);

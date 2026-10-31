@@ -102,7 +102,7 @@ export function EnrollStudentsModal({ course, onClose, onSuccess }: EnrollStuden
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up">
+      <div className="bg-white rounded-2xl w-full max-w-[395px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up">
         {/* Modal Header */}
         <div className="p-4 bg-gradient-to-r from-[#0f2b46] to-[#1a3a5c] text-white flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">

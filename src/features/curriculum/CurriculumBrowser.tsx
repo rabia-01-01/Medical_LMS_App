@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import {
@@ -19,13 +19,95 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '../../context/AuthContext';
+import { useData } from '../../context/DataContext';
+import { useResources, formatFileSize } from '../resources';
 import { useCurriculum } from './useCurriculum';
 import type { ChapterWithTopics, SubjectWithChapters, Topic } from './types';
 
 interface CurriculumBrowserProps {
   initialSubjectId?: string;
   onSelectTopic?: (topicId: string, topicName: string) => void;
+  onNavigateToResource?: (resource: any) => void;
   canManage?: boolean;
+}
+
+
+// Format details and icon helper for uploaded study materials
+function getFormatInfo(mat: any) {
+  const fileName = (mat?.fileName || mat?.file?.file_name || mat?.title || '').toLowerCase();
+  const mime = (mat?.mimeType || mat?.file?.mime_type || '').toLowerCase();
+  const type = (mat?.resource_type || mat?.type || '').toLowerCase();
+
+  if (type === 'video' || mime.startsWith('video/') || fileName.endsWith('.mp4') || fileName.endsWith('.webm') || fileName.endsWith('.mkv') || fileName.endsWith('.mov') || fileName.endsWith('.avi')) {
+    return {
+      icon: 'fa-play-circle text-rose-500',
+      bg: 'bg-rose-50',
+      badge: 'VIDEO',
+      color: 'text-rose-600',
+    };
+  }
+  if (fileName.endsWith('.docx') || fileName.endsWith('.doc') || mime.includes('word') || mime.includes('officedocument.wordprocessingml')) {
+    return {
+      icon: 'fa-file-word text-blue-600',
+      bg: 'bg-blue-50',
+      badge: 'DOCX',
+      color: 'text-blue-600',
+    };
+  }
+  if (fileName.endsWith('.pptx') || fileName.endsWith('.ppt') || mime.includes('presentation') || mime.includes('powerpoint')) {
+    return {
+      icon: 'fa-file-powerpoint text-amber-600',
+      bg: 'bg-amber-50',
+      badge: 'PPTX',
+      color: 'text-amber-600',
+    };
+  }
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv') || mime.includes('spreadsheet') || mime.includes('excel')) {
+    return {
+      icon: 'fa-file-excel text-emerald-600',
+      bg: 'bg-emerald-50',
+      badge: 'EXCEL',
+      color: 'text-emerald-600',
+    };
+  }
+  if (mime.startsWith('image/') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.webp') || fileName.endsWith('.svg') || fileName.endsWith('.gif')) {
+    return {
+      icon: 'fa-file-image text-purple-600',
+      bg: 'bg-purple-50',
+      badge: 'IMAGE',
+      color: 'text-purple-600',
+    };
+  }
+  if (type === 'pdf' || mime === 'application/pdf' || fileName.endsWith('.pdf')) {
+    return {
+      icon: 'fa-file-pdf text-red-500',
+      bg: 'bg-red-50',
+      badge: 'PDF',
+      color: 'text-red-600',
+    };
+  }
+  if (type === 'pyq') {
+    return {
+      icon: 'fa-clipboard-check text-indigo-600',
+      bg: 'bg-indigo-50',
+      badge: 'PYQ',
+      color: 'text-indigo-600',
+    };
+  }
+  if (type === 'dpp') {
+    return {
+      icon: 'fa-tasks text-emerald-600',
+      bg: 'bg-emerald-50',
+      badge: 'DPP',
+      color: 'text-emerald-600',
+    };
+  }
+  return {
+    icon: 'fa-file-alt text-teal-600',
+    bg: 'bg-teal-50',
+    badge: (type || 'DOCUMENT').toUpperCase(),
+    color: 'text-teal-600',
+  };
 }
 
 function SortableTopicItem({
@@ -171,9 +253,23 @@ function getChapterStudyGuide(chapterName: string, subjectName?: string) {
 export function CurriculumBrowser({
   initialSubjectId,
   onSelectTopic,
+  onNavigateToResource,
   canManage = false,
 }: CurriculumBrowserProps) {
-  const { user } = useAuth();
+  const { user, isViewingAs, viewingAsUser } = useAuth();
+  const activeUser = isViewingAs && viewingAsUser ? viewingAsUser : user;
+  const userRole = (activeUser?.role || '').toLowerCase();
+  const isAdmin = userRole === 'admin';
+  const isFaculty = userRole === 'faculty';
+  const isStudent = userRole === 'student' || (!isAdmin && !isFaculty);
+  const isFacultyOrAdmin = (canManage || isAdmin || isFaculty) && !isStudent;
+  const canUploadMaterials = (isAdmin || isFaculty) && !isStudent;
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const { resources: contextResources, addResource, deleteResource: deleteContextResource } = useData();
+  const { resources: cloudResources, uploadResource, deleteResource: deleteCloudResource } = useResources();
+  const savedSubjectId = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_subject') || undefined : undefined;
+  const effectiveInitialSubjectId = initialSubjectId || savedSubjectId;
+
   const {
     curriculum,
     activeSubject,
@@ -186,7 +282,7 @@ export function CurriculumBrowser({
     removeChapter,
     removeTopic,
     reorderTopics,
-  } = useCurriculum(initialSubjectId);
+  } = useCurriculum(effectiveInitialSubjectId);
 
   const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
   const [showAddChapter, setShowAddChapter] = useState(false);
@@ -200,6 +296,303 @@ export function CurriculumBrowser({
 
   // Chapter Study Hub Modal state
   const [activeStudyChapter, setActiveStudyChapter] = useState<{ chapter: ChapterWithTopics; idx: number } | null>(null);
+  // Topic Details & Uploaded Study Materials Modal state
+  const [activeStudyTopic, setActiveStudyTopic] = useState<{
+    topic: Topic;
+    chapter: ChapterWithTopics;
+    chapterIdx: number;
+    topicIdx: number;
+  } | null>(null);
+
+  // Preview resource fallback modal
+  const [selectedPreviewResource, setSelectedPreviewResource] = useState<any | null>(null);
+
+  // Material upload state inside Topic Study Modal
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadResourceType, setUploadResourceType] = useState<'NOTE' | 'VIDEO' | 'DOCX' | 'BOOK' | 'DPP' | 'PYQ'>('NOTE');
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Unified study materials list
+  const allMaterials = useMemo<any[]>(() => {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    (cloudResources || []).forEach((cr: any) => {
+      seen.add(cr.id);
+      const topicId = cr.topic_id || cr.topicId;
+      if (cr.title && topicId) {
+        seen.add(`${cr.title.trim().toLowerCase()}_${topicId}`);
+      }
+      list.push(cr);
+    });
+
+    (contextResources || []).forEach((ctxR: any) => {
+      const topicId = ctxR.topicId || (ctxR as any).topic_id;
+      const titleKey = (ctxR.title && topicId) ? `${ctxR.title.trim().toLowerCase()}_${topicId}` : null;
+      if (!seen.has(ctxR.id) && (!titleKey || !seen.has(titleKey))) {
+        seen.add(ctxR.id);
+        if (titleKey) seen.add(titleKey);
+        list.push({
+          ...ctxR,
+          id: ctxR.id,
+          title: ctxR.title,
+          description: ctxR.description || `${ctxR.subject} study material`,
+          resource_type: ctxR.type?.toUpperCase() || 'NOTE',
+          subjectName: ctxR.subject,
+          subject_id: ctxR.courseId || ctxR.subjectId,
+          chapter_id: ctxR.chapterId || null,
+          topic_id: topicId || null,
+          fileName: ctxR.fileName,
+          mimeType: ctxR.mimeType,
+          fileData: ctxR.fileData,
+          sizeFormatted: ctxR.size,
+          creatorName: ctxR.uploaderName,
+        });
+      }
+    });
+
+    return list;
+  }, [cloudResources, contextResources]);
+
+  // Materials matched to currently opened topic
+  const topicMaterials = useMemo<any[]>(() => {
+    if (!activeStudyTopic) return [];
+    const tId = activeStudyTopic.topic.id;
+    const tName = activeStudyTopic.topic.name.toLowerCase().trim();
+
+    // STRICT: Only match materials explicitly uploaded or linked to this specific topic!
+    // Never show default / fallback materials by ourselves.
+    return allMaterials.filter((m: any) => {
+      if (m.topic_id && m.topic_id === tId) return true;
+      if (m.topicId && m.topicId === tId) return true;
+      if (m.topicName && m.topicName.toLowerCase().trim() === tName) return true;
+      return false;
+    });
+  }, [activeStudyTopic, allMaterials]);
+
+  const handleCloseTopicModal = () => {
+    setActiveStudyTopic(null);
+    setShowUploadForm(false);
+    setUploadFile(null);
+    setUploadTitle('');
+    setUploadDescription('');
+    setUploadError(null);
+    setUploadSuccessMessage(null);
+    try {
+      sessionStorage.removeItem('lms_curriculum_active_topic');
+      sessionStorage.removeItem('lms_curriculum_active_subject');
+    } catch {}
+  };
+
+  const handleTopicClick = (
+    topic: Topic,
+    chapter: ChapterWithTopics,
+    chapterIdx: number,
+    topicIdx: number
+  ) => {
+    onSelectTopic?.(topic.id, topic.name);
+    const topicState = {
+      topic,
+      chapter,
+      chapterIdx,
+      topicIdx,
+    };
+    setActiveStudyTopic(topicState);
+    try {
+      sessionStorage.setItem('lms_curriculum_active_topic', JSON.stringify(topicState));
+      sessionStorage.setItem('lms_curriculum_active_subject', activeSubject?.id || activeSubjectId);
+    } catch (e) {
+      console.warn('Failed to save active topic to sessionStorage', e);
+    }
+  };
+
+  const handleOpenMaterial = (material: any) => {
+    if (activeStudyTopic) {
+      try {
+        sessionStorage.setItem('lms_curriculum_active_topic', JSON.stringify(activeStudyTopic));
+        sessionStorage.setItem('lms_curriculum_active_subject', activeSubject?.id || activeSubjectId);
+      } catch (e) {
+        console.warn('Failed to save active topic to sessionStorage', e);
+      }
+    }
+    if (onNavigateToResource) {
+      onNavigateToResource(material);
+    } else {
+      setSelectedPreviewResource(material);
+    }
+  };
+
+  const handleDeleteMaterial = async (mat: any) => {
+    if (!isAdmin) {
+      alert('Only administrators can delete study materials from curriculum hierarchy.');
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete "${mat.title}" from this topic?`)) {
+      return;
+    }
+
+    try {
+      setIsDeletingId(mat.id);
+      const storagePath = mat.storagePath || mat.storage_path || mat.file?.storage_path;
+      // 1. Delete from Cloud / Supabase Storage via useResources
+      if (deleteCloudResource) {
+        await deleteCloudResource(mat.id, storagePath).catch((err) => {
+          console.warn('[CurriculumBrowser] Cloud delete warning:', err);
+        });
+      }
+      // 2. Delete from DataContext
+      if (deleteContextResource) {
+        deleteContextResource(mat.id);
+      }
+      setUploadSuccessMessage(`Successfully deleted "${mat.title}"`);
+      setTimeout(() => setUploadSuccessMessage(null), 3000);
+    } catch (err: any) {
+      console.error('[CurriculumBrowser] Error deleting material:', err);
+      setUploadError(err?.message || 'Failed to delete study material');
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFile(file);
+    setUploadError(null);
+
+    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+    if (!uploadTitle.trim()) {
+      setUploadTitle(nameWithoutExt);
+    }
+
+    const fn = file.name.toLowerCase();
+    const mime = (file.type || '').toLowerCase();
+    if (fn.endsWith('.mp4') || fn.endsWith('.webm') || fn.endsWith('.mkv') || fn.endsWith('.mov') || fn.endsWith('.avi') || mime.startsWith('video/')) {
+      setUploadResourceType('VIDEO');
+    } else if (fn.endsWith('.docx') || fn.endsWith('.doc')) {
+      setUploadResourceType('DOCX');
+    } else if (fn.includes('pyq') || fn.includes('question') || fn.includes('exam')) {
+      setUploadResourceType('PYQ');
+    } else if (fn.includes('dpp') || fn.includes('practice') || fn.includes('drill')) {
+      setUploadResourceType('DPP');
+    } else {
+      setUploadResourceType('NOTE');
+    }
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canUploadMaterials) {
+      setUploadError('Students are not permitted to upload study materials.');
+      return;
+    }
+    if (!uploadFile || uploadFile.size === 0) {
+      setUploadError('Please select a valid, non-empty file to upload');
+      return;
+    }
+    if (!uploadTitle.trim()) {
+      setUploadError('Please enter a title for the study material');
+      return;
+    }
+    if (!activeStudyTopic) {
+      setUploadError('No active topic selected');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Corrupt or unreadable file buffer'));
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file data'));
+        reader.readAsDataURL(uploadFile);
+      });
+
+      if (!base64Data || base64Data.length < 10) {
+        throw new Error('File data appears corrupted or empty.');
+      }
+
+      const topicId = activeStudyTopic.topic.id;
+      const topicName = activeStudyTopic.topic.name;
+      const chapterId = activeStudyTopic.chapter.id;
+      const subjectId = activeSubject?.id || 'sub-bio';
+      const subjectName = activeSubject?.name || 'Medical';
+      const cleanFileName = uploadFile.name;
+      const mimeType = uploadFile.type || 'application/octet-stream';
+      const fileSize = uploadFile.size;
+
+      const resType = uploadResourceType === 'DOCX' ? 'NOTE' : uploadResourceType;
+
+      // 1. Upload via useResources (cloud storage + local cache)
+      const created = await uploadResource({
+        title: uploadTitle.trim(),
+        description: uploadDescription.trim() || `Study material for ${topicName}`,
+        resourceType: resType as any,
+        subjectId,
+        chapterId,
+        topicId,
+        status: 'PUBLISHED',
+        file: uploadFile,
+        fileName: cleanFileName,
+        mimeType,
+        fileSize,
+        base64Data,
+      });
+
+      // 2. Sync to DataContext using the EXACT SAME ID to avoid creating a second/corrupt duplicate
+      addResource({
+        id: created.id,
+        title: uploadTitle.trim(),
+        type: (uploadResourceType === 'DOCX' ? 'docx' : resType).toLowerCase(),
+        subject: subjectName,
+        courseId: subjectId,
+        uploaderId: user?.id || 'usr-faculty-1',
+        uploaderName: user?.name || (isAdmin ? 'Admin' : 'Faculty'),
+        size: formatFileSize(fileSize),
+        status: 'published',
+        examCategory: (activeSubject as any)?.examCategory || 'Medical',
+        fileName: cleanFileName,
+        fileData: base64Data,
+        mimeType,
+        storagePath: created.file?.storage_path,
+        signedUrl: created.signedUrl || undefined,
+        subjectId,
+        chapterId,
+        topicId,
+      });
+
+      // Clear the file input and state completely
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setUploadFile(null);
+      setUploadTitle('');
+      setUploadDescription('');
+      setShowUploadForm(false);
+      setUploadSuccessMessage(`Successfully uploaded "${uploadTitle.trim()}"`);
+      setTimeout(() => setUploadSuccessMessage(null), 4000);
+    } catch (err: any) {
+      console.error('[CurriculumBrowser] Error uploading study material:', err);
+      setUploadError(err?.message || 'Failed to upload study material. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const [chapterMasteredMap, setChapterMasteredMap] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem('lms_mastered_chapters');
@@ -208,8 +601,6 @@ export function CurriculumBrowser({
       return {};
     }
   });
-
-  const isFacultyOrAdmin = canManage || user?.role === 'faculty' || user?.role === 'admin';
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -572,7 +963,7 @@ export function CurriculumBrowser({
                       chapter.topics.map((topic, tIdx) => (
                         <div
                           key={topic.id}
-                          onClick={() => onSelectTopic?.(topic.id, topic.name)}
+                          onClick={() => handleTopicClick(topic, chapter, idx, tIdx)}
                           className={`p-2 rounded-lg bg-white border border-gray-100 flex items-center justify-between text-left transition ${
                             onSelectTopic ? 'hover:border-teal-300 cursor-pointer shadow-2xs' : ''
                           }`}
@@ -790,7 +1181,7 @@ export function CurriculumBrowser({
                               chapterIdx={activeStudyChapter.idx}
                               isFacultyOrAdmin={isFacultyOrAdmin}
                               onSelect={() => {
-                                onSelectTopic?.(t.id, t.name);
+                                handleTopicClick(t, activeStudyChapter.chapter, activeStudyChapter.idx, tIdx);
                                 handleCloseChapterStudyHub();
                               }}
                             />
@@ -866,6 +1257,439 @@ export function CurriculumBrowser({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Topic Details & Uploaded Study Materials Modal */}
+      <AnimatePresence>
+        {activeStudyTopic && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+            onClick={handleCloseTopicModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl max-w-[395px] w-full max-h-[85vh] sm:max-h-[82dvh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="gradient-header p-4 text-white relative shrink-0">
+                <button
+                  onClick={handleCloseTopicModal}
+                  className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-xs transition"
+                  aria-label="Close"
+                >
+                  <i className="fas fa-times" />
+                </button>
+
+                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                  <span className="badge bg-teal-400/30 text-teal-200 text-[10px] font-bold py-0.5 px-2 rounded-full border border-teal-400/30">
+                    {activeSubject?.name} • Topic {activeStudyTopic.chapterIdx + 1}.{activeStudyTopic.topicIdx + 1}
+                  </span>
+                  <span className="badge bg-white/20 text-white text-[10px] font-bold py-0.5 px-2 rounded-full">
+                    Chapter {activeStudyTopic.chapterIdx + 1}
+                  </span>
+                </div>
+
+                <h2 className="text-lg font-extrabold text-white leading-tight">
+                  {activeStudyTopic.topic.name}
+                </h2>
+                <p className="text-teal-100 text-xs mt-0.5 leading-snug">
+                  {activeStudyTopic.chapter.name}
+                </p>
+              </div>
+              <div className="italy-accent shrink-0"><div className="green" /><div className="white" /><div className="red" /></div>
+
+              {/* Modal Scrollable Body */}
+              <div className="p-4 space-y-3.5 flex-1 overflow-y-auto overscroll-contain">
+                {/* About This Topic Card */}
+                <div className="bg-teal-50/60 border border-teal-200/80 rounded-xl p-3">
+                  <h4 className="text-xs font-bold text-teal-900 flex items-center gap-1.5 uppercase tracking-wide mb-1.5">
+                    <i className="fas fa-book-open text-teal-600" />
+                    <span>About this Topic & Core Concepts</span>
+                  </h4>
+                  <p className="text-xs text-gray-700 leading-relaxed mb-2 break-words">
+                    {activeStudyTopic.topic.description ||
+                      `Key clinical objectives, high-yield examination pearls, and fundamental mechanisms for ${activeStudyTopic.topic.name}.`}
+                  </p>
+                  <div className="pt-2 border-t border-teal-200/60 text-[11px] text-teal-800 bg-white/70 p-2 rounded-lg flex items-start gap-1.5">
+                    <i className="fas fa-microscope text-teal-600 mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-teal-950">Clinical Scope:</p>
+                      <p className="break-words">
+                        High-yield medical focus for competitive entrance (NEET, IMAT, UCAT). Review associated lecture handouts and question drills below.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Uploaded Study Materials Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-2 gap-1.5">
+                    <h4 className="text-xs font-bold text-gray-800 flex items-center gap-1.5 uppercase tracking-wider min-w-0">
+                      <i className="fas fa-file-medical text-teal-600" />
+                      <span className="truncate">Study Materials ({topicMaterials.length})</span>
+                    </h4>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {canUploadMaterials && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUploadForm((prev: boolean) => !prev);
+                            setUploadError(null);
+                          }}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-2xs ${
+                            showUploadForm
+                              ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                              : 'bg-teal-600 hover:bg-teal-700 text-white'
+                          }`}
+                        >
+                          <i className={`fas ${showUploadForm ? 'fa-times' : 'fa-plus'} text-[9px]`} />
+                          <span>{showUploadForm ? 'Cancel' : 'Upload Material'}</span>
+                        </button>
+                      )}
+                      <span className="text-[10px] text-teal-700 font-semibold bg-teal-50 px-1.5 py-0.5 rounded-full border border-teal-200 shrink-0">
+                        DRM
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Feedback Banners */}
+                  {uploadSuccessMessage && (
+                    <div className="mb-2.5 p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                      <i className="fas fa-check-circle text-emerald-600 shrink-0" />
+                      <span className="font-medium text-[11px] flex-1">{uploadSuccessMessage}</span>
+                    </div>
+                  )}
+
+                  {uploadError && (
+                    <div className="mb-2.5 p-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-center gap-2">
+                      <i className="fas fa-exclamation-circle text-red-600 shrink-0" />
+                      <span className="font-medium text-[11px] flex-1">{uploadError}</span>
+                    </div>
+                  )}
+
+                  {/* Upload Form Card */}
+                  {showUploadForm && (
+                    <form onSubmit={handleUploadSubmit} className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2.5 mb-3">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-teal-200/60">
+                        <span className="text-xs font-bold text-teal-900 flex items-center gap-1.5">
+                          <i className="fas fa-cloud-upload-alt text-teal-600" />
+                          <span>Upload Study Material</span>
+                        </span>
+                        <span className="text-[9px] text-teal-700 bg-white px-1.5 py-0.5 rounded-md border border-teal-200 font-semibold">
+                          Multiple Formats
+                        </span>
+                      </div>
+
+                      {/* Hidden File Input */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.mp4,.webm,.mkv,.mov,.avi,.png,.jpg,.jpeg,.gif,.webp,.svg,.txt,.md,.zip"
+                        onChange={handleFileChange}
+                      />
+
+                      {/* File Dropzone */}
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`p-3 border-2 border-dashed rounded-xl cursor-pointer text-center transition flex flex-col items-center justify-center gap-1 ${
+                          uploadFile ? 'border-teal-500 bg-white shadow-2xs' : 'border-teal-300 hover:border-teal-500 bg-white/80'
+                        }`}
+                      >
+                        {uploadFile ? (
+                          <div className="w-full flex items-center justify-between gap-2 text-left">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <div className={`w-8 h-8 rounded-lg ${getFormatInfo({ fileName: uploadFile.name, mimeType: uploadFile.type }).bg} flex items-center justify-center shrink-0`}>
+                                <i className={`fas ${getFormatInfo({ fileName: uploadFile.name, mimeType: uploadFile.type }).icon} text-sm`} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-gray-800 truncate">{uploadFile.name}</p>
+                                <p className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                                  <span>{formatFileSize(uploadFile.size)}</span>
+                                  <span>•</span>
+                                  <span className="font-bold uppercase text-teal-700">
+                                    {getFormatInfo({ fileName: uploadFile.name, mimeType: uploadFile.type }).badge}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                fileInputRef.current?.click();
+                              }}
+                              className="px-2 py-0.5 text-[10px] font-bold text-teal-700 bg-teal-50 rounded border border-teal-200 hover:bg-teal-100 shrink-0"
+                            >
+                              Change
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <i className="fas fa-cloud-upload-alt text-teal-500 text-xl" />
+                            <p className="text-xs font-bold text-gray-700">Select Study Material</p>
+                            <p className="text-[10px] text-gray-500">
+                              PDF, Video (MP4), DOCX, PPTX, Images, Text
+                            </p>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Title Field */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                          Material Title <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={uploadTitle}
+                          onChange={(e) => setUploadTitle(e.target.value)}
+                          placeholder="e.g. Clinical Mechanism Lecture Notes"
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:border-teal-500 text-gray-800"
+                        />
+                      </div>
+
+                      {/* Format / Type Field */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">Format Category</label>
+                          <select
+                            value={uploadResourceType}
+                            onChange={(e) => setUploadResourceType(e.target.value as any)}
+                            className="w-full px-2 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:border-teal-500 text-gray-800"
+                          >
+                            <option value="NOTE">Clinical Notes / PDF</option>
+                            <option value="VIDEO">Video Lecture / Clip</option>
+                            <option value="DOCX">Word Document (.docx)</option>
+                            <option value="BOOK">Textbook / Chapter</option>
+                            <option value="DPP">Practice Drill / DPP</option>
+                            <option value="PYQ">Past Exam Paper / PYQ</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">Selected Topic</label>
+                          <input
+                            type="text"
+                            disabled
+                            value={activeStudyTopic.topic.name}
+                            className="w-full px-2 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded-lg text-gray-500 truncate"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Optional Description */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                          Description / Clinical Scope (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={uploadDescription}
+                          onChange={(e) => setUploadDescription(e.target.value)}
+                          placeholder="e.g. High-yield summary for NEET preparation"
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:border-teal-500 text-gray-800"
+                        />
+                      </div>
+
+                      {/* Submit Actions */}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowUploadForm(false)}
+                          className="flex-1 py-1.5 px-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold transition"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isUploading || !uploadFile}
+                          className="flex-1 py-1.5 px-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs"
+                        >
+                          {isUploading ? (
+                            <>
+                              <i className="fas fa-spinner fa-spin text-xs" />
+                              <span>Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <i className="fas fa-cloud-upload-alt text-xs" />
+                              <span>Upload Material</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Materials List or Empty State */}
+                  {topicMaterials.length === 0 && !showUploadForm ? (
+                    <div className="text-center py-6 px-4 bg-gray-50 border border-dashed border-gray-200 rounded-xl space-y-2">
+                      <i className="fas fa-folder-open text-gray-300 text-2xl" />
+                      <p className="text-xs font-semibold text-gray-700">No Study Materials Uploaded Yet</p>
+                      <p className="text-[10px] text-gray-400">
+                        {canUploadMaterials
+                          ? 'Upload study materials for this topic in different formats (PDF, Videos, DOCX, and other formats).'
+                          : 'Faculty will upload supplementary lecture notes, diagrams, and video walkthroughs for this topic soon.'}
+                      </p>
+                      {canUploadMaterials && (
+                        <button
+                          type="button"
+                          onClick={() => setShowUploadForm(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+                        >
+                          <i className="fas fa-cloud-upload-alt text-xs" />
+                          <span>Upload Study Material</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {topicMaterials.map((mat: any) => {
+                        const fmt = getFormatInfo(mat);
+                        return (
+                          <div
+                            key={mat.id}
+                            className="p-3 bg-white hover:bg-teal-50/40 border border-gray-200 rounded-xl transition flex items-center justify-between gap-2.5 shadow-2xs"
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <div className={`w-8 h-8 rounded-lg ${fmt.bg} flex items-center justify-center shrink-0 mt-0.5`}>
+                                <i className={`fas ${fmt.icon} text-sm`} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-gray-800 leading-snug break-words">
+                                  {mat.title}
+                                </p>
+                                <p className="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                  <span>{mat.sizeFormatted || mat.size || (mat.file?.file_size ? formatFileSize(mat.file.file_size) : 'File')}</span>
+                                  <span>•</span>
+                                  <span className={`font-semibold uppercase ${fmt.color}`}>{fmt.badge}</span>
+                                  {mat.creatorName && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="truncate max-w-[100px]">{mat.creatorName}</span>
+                                    </>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => handleOpenMaterial(mat)}
+                                className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold shrink-0 transition flex items-center gap-1 shadow-xs"
+                              >
+                                <span>Study</span>
+                                <i className="fas fa-external-link-alt text-[9px]" />
+                              </button>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteMaterial(mat);
+                                  }}
+                                  disabled={isDeletingId === mat.id}
+                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition border border-rose-200/60"
+                                  title="Delete uploaded material"
+                                  aria-label="Delete material"
+                                >
+                                  <i className={`fas ${isDeletingId === mat.id ? 'fa-spinner fa-spin text-rose-500' : 'fa-trash-alt'} text-xs`} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="p-3 bg-white border-t border-gray-100 flex items-center justify-between gap-2 shrink-0">
+                <button
+                  onClick={handleCloseTopicModal}
+                  className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition text-center"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Fallback In-App Study Material Preview Modal */}
+      <AnimatePresence>
+        {selectedPreviewResource && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+            onClick={() => setSelectedPreviewResource(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl max-w-[395px] w-full p-4 shadow-2xl border border-gray-200 space-y-3"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className={`w-8 h-8 rounded-lg ${getFormatInfo(selectedPreviewResource).bg} flex items-center justify-center shrink-0`}>
+                    <i className={`fas ${getFormatInfo(selectedPreviewResource).icon} text-sm`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xs font-bold text-gray-900 truncate">{selectedPreviewResource.title}</h3>
+                    <p className={`text-[10px] font-bold uppercase ${getFormatInfo(selectedPreviewResource).color}`}>
+                      {getFormatInfo(selectedPreviewResource).badge} • DRM PROTECTED
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedPreviewResource(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                  <i className="fas fa-times text-xs" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-xl text-xs space-y-1.5 text-gray-600">
+                <div className="flex justify-between">
+                  <span>File Format:</span>
+                  <span className="font-semibold text-gray-800 uppercase">{getFormatInfo(selectedPreviewResource).badge}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>File Name:</span>
+                  <span className="font-semibold text-gray-800 truncate max-w-[180px]">{selectedPreviewResource.fileName || selectedPreviewResource.file?.file_name || selectedPreviewResource.title}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Author / Faculty:</span>
+                  <span className="font-semibold text-gray-800">{selectedPreviewResource.creatorName || selectedPreviewResource.uploaderName || 'Faculty'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>File Size:</span>
+                  <span className="font-semibold text-gray-800">{selectedPreviewResource.sizeFormatted || selectedPreviewResource.size || '3.5 MB'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Protection:</span>
+                  <span className="font-semibold text-teal-700">Watermark Protected (DRM)</span>
+                </div>
+              </div>
+
+              <div className="pt-1 flex gap-2">
+                <button
+                  onClick={() => setSelectedPreviewResource(null)}
+                  className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs transition shadow-xs text-center"
+                >
+                  Done Reviewing
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

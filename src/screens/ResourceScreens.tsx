@@ -138,19 +138,21 @@ function useResourceUrl(resource: any) {
 // ==================== RESOURCE VIEWER ====================
 export function ResourceViewer({ onBack, resource }: { onBack: () => void; resource?: any }) {
   const r = resource || { title: 'Document', type: 'PDF', subject: 'General', size: '5 MB', uploaderName: 'Faculty', date: '2024-12-15' };
-  
+
   const mime = (r.mimeType || r.file?.mime_type || '').toLowerCase();
   const type = (r.type || r.resource_type || '').toLowerCase();
   const fileName = (r.fileName || r.file?.file_name || '').toLowerCase();
 
-  const isVideo = type === 'video' || mime.startsWith('video/') || fileName.endsWith('.mp4') || fileName.endsWith('.webm');
-  const isImage = mime.startsWith('image/') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.gif') || fileName.endsWith('.webp');
+  const isVideo = type === 'video' || mime.startsWith('video/') || fileName.endsWith('.mp4') || fileName.endsWith('.webm') || fileName.endsWith('.mkv') || fileName.endsWith('.mov');
+  const isImage = mime.startsWith('image/') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.gif') || fileName.endsWith('.webp') || fileName.endsWith('.svg');
   const isPDF = type === 'pdf' || mime === 'application/pdf' || fileName.endsWith('.pdf');
-  const isText = mime.startsWith('text/') || mime === 'application/json' || fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.json') || fileName.endsWith('.csv') || type === 'note' || type === 'notes';
+  const isOfficeDoc = fileName.endsWith('.doc') || fileName.endsWith('.docx') || fileName.endsWith('.ppt') || fileName.endsWith('.pptx') || fileName.endsWith('.xls') || fileName.endsWith('.xlsx') || fileName.endsWith('.zip');
+  const isText = !isOfficeDoc && (mime.startsWith('text/') || mime === 'application/json' || fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.json') || fileName.endsWith('.csv') || ((type === 'note' || type === 'notes') && (!fileName || !fileName.includes('.'))));
 
   if (isVideo) return <VideoPlayer onBack={onBack} resource={r} />;
   if (isImage) return <ImageViewer onBack={onBack} resource={r} />;
   if (isPDF) return <PDFViewer onBack={onBack} resource={r} />;
+  if (isOfficeDoc) return <FileViewer onBack={onBack} resource={r} />;
   if (isText) return <TextViewer onBack={onBack} resource={r} />;
   return <FileViewer onBack={onBack} resource={r} />;
 }
@@ -211,16 +213,16 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
       <div className="flex flex-col h-full bg-gray-100 relative">
-        <Header 
-          title={resource.title} 
-          showBack 
-          onBack={onBack} 
+        <Header
+          title={resource.title}
+          showBack
+          onBack={onBack}
           gradient={false}
           rightAction={
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 type="button"
-                onClick={() => setIsFullscreen(prev => !prev)} 
+                onClick={() => setIsFullscreen(prev => !prev)}
                 className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-teal-200 shadow-2xs"
                 title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Mode"}
               >
@@ -236,8 +238,8 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
               ) : (
                 <>
                   {resolvedUrl && (
-                    <button 
-                      onClick={handleOpenNewTab} 
+                    <button
+                      onClick={handleOpenNewTab}
                       className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition"
                       title="Open in new window"
                     >
@@ -246,8 +248,8 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                     </button>
                   )}
                   {(resource.fileData || resolvedUrl) && (
-                    <button 
-                      onClick={handleDownload} 
+                    <button
+                      onClick={handleDownload}
                       className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-2xs"
                       title="Download PDF"
                     >
@@ -272,16 +274,16 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-gray-500">{resource.sizeFormatted || resource.size}</span>
-            <button 
-              type="button" 
-              onClick={() => setIsFullscreen(true)} 
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(true)}
               className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1"
             >
               <i className="fas fa-expand text-[10px]" /> Fullscreen Mode
             </button>
           </div>
         </div>
-        
+
         {resolvedUrl ? (
           <div className="flex-1 w-full h-full relative overflow-hidden bg-gray-200">
             <object
@@ -289,19 +291,19 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
               type="application/pdf"
               className="w-full h-full pointer-events-auto"
             >
-              <iframe 
-                src={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`} 
+              <iframe
+                src={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                 className="w-full h-full border-0"
                 title={resource.title}
               />
             </object>
-            
+
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full shadow-lg border border-gray-200 flex items-center gap-2 text-[11px] text-gray-600">
               <i className="fas fa-book-reader text-teal-600" />
               <span>Viewing Protected PDF in App</span>
-              <button 
-                type="button" 
-                onClick={() => setIsFullscreen(true)} 
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(true)}
                 className="ml-2 font-bold text-teal-700 hover:text-teal-800 underline"
               >
                 Expand Fullscreen
@@ -326,9 +328,9 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                 <p className="text-[11px] text-gray-400 mt-1">Direct PDF stream is not available or stored as offline preview.</p>
               </div>
               <div className="mt-4 flex flex-col gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => setIsFullscreen(true)} 
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreen(true)}
                   className="btn-secondary w-full py-2 text-xs flex items-center justify-center gap-1.5"
                 >
                   <i className="fas fa-expand text-teal-600" /> Fullscreen Document Mode
@@ -350,7 +352,7 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
 
         {/* Fullscreen Overlay Facility */}
         {isFullscreen && (
-          <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col w-screen h-screen">
+          <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col w-full h-full">
             <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between text-white z-20 shadow-md">
               <div className="flex items-center gap-3">
                 <i className="fas fa-file-pdf text-red-400 text-lg" />
@@ -361,26 +363,26 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 text-xs">
-                  <button 
-                    type="button" 
-                    onClick={() => setZoom(z => Math.max(z - 15, 60))} 
-                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200" 
+                  <button
+                    type="button"
+                    onClick={() => setZoom(z => Math.max(z - 15, 60))}
+                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200"
                     title="Zoom Out"
                   >
                     <i className="fas fa-search-minus" />
                   </button>
                   <span className="text-[11px] font-mono px-2 text-slate-300 min-w-[42px] text-center">{zoom}%</span>
-                  <button 
-                    type="button" 
-                    onClick={() => setZoom(z => Math.min(z + 15, 200))} 
-                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200" 
+                  <button
+                    type="button"
+                    onClick={() => setZoom(z => Math.min(z + 15, 200))}
+                    className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200"
                     title="Zoom In"
                   >
                     <i className="fas fa-search-plus" />
                   </button>
-                  <button 
-                    type="button" 
-                    onClick={() => setZoom(100)} 
+                  <button
+                    type="button"
+                    onClick={() => setZoom(100)}
                     className="px-2 py-1 hover:bg-slate-700 rounded text-[10px] text-teal-400 font-semibold"
                     title="Reset Zoom"
                   >
@@ -398,18 +400,18 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                 </button>
               </div>
             </div>
-            
+
             <div className="relative flex-1 w-full h-full bg-slate-900 overflow-auto flex items-center justify-center">
               <div className="watermark pointer-events-none select-none text-white/10 z-30">{watermarkText}</div>
               {resolvedUrl ? (
-                <div 
-                  style={{ 
-                    transform: `scale(${zoom / 100})`, 
+                <div
+                  style={{
+                    transform: `scale(${zoom / 100})`,
                     transformOrigin: 'top center',
                     transition: 'transform 0.15s ease-out',
                     width: '100%',
                     height: '100%'
-                  }} 
+                  }}
                   className="w-full h-full flex justify-center"
                 >
                   <object
@@ -417,8 +419,8 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                     type="application/pdf"
                     className="w-full h-full pointer-events-auto"
                   >
-                    <iframe 
-                      src={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`} 
+                    <iframe
+                      src={`${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                       className="w-full h-full border-0"
                       title={resource.title}
                     />
@@ -518,10 +520,10 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
       <div className="flex flex-col h-full bg-gray-50 relative">
-        <Header 
-          title={resource.title} 
-          showBack 
-          onBack={onBack} 
+        <Header
+          title={resource.title}
+          showBack
+          onBack={onBack}
           gradient={false}
           rightAction={
             <div className="flex items-center gap-2">
@@ -579,9 +581,9 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
             <span>{wordCount} words</span>
             <span>•</span>
             <span>{resource.sizeFormatted || resource.size}</span>
-            <button 
-              type="button" 
-              onClick={() => setIsFullscreen(true)} 
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(true)}
               className="text-[11px] text-teal-700 font-bold hover:underline flex items-center gap-1 ml-1"
             >
               <i className="fas fa-expand text-[10px]" /> Fullscreen Reader
@@ -589,7 +591,7 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto p-4 max-w-full mx-auto w-full">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-5 sm:p-7 min-h-[400px]">
             <div className="border-b border-gray-100 pb-3 mb-4 flex items-center justify-between">
               <div>
@@ -598,8 +600,8 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
                   Subject: <span className="font-semibold text-gray-700">{resource.subject || resource.subjectName}</span> • Uploaded by {resource.uploaderName || resource.creatorName} on {resource.date || resource.created_at?.split('T')[0]}
                 </p>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setIsFullscreen(true)}
                 className="btn-secondary text-xs px-2.5 py-1.5 flex items-center gap-1 shadow-2xs"
               >
@@ -629,7 +631,7 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
 
         {/* Fullscreen Reader Modal */}
         {isFullscreen && (
-          <div className="fixed inset-0 z-50 bg-slate-900 text-slate-100 flex flex-col w-screen h-screen">
+          <div className="fixed inset-0 z-50 bg-slate-900 text-slate-100 flex flex-col w-full h-full">
             <div className="bg-slate-950 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-20 shadow-md">
               <div className="flex items-center gap-3">
                 <i className="fas fa-sticky-note text-amber-400 text-lg" />
@@ -640,18 +642,18 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 text-xs">
-                  <button 
-                    type="button" 
-                    onClick={() => setFontSize(f => f === 'xl' ? 'lg' : f === 'lg' ? 'base' : 'sm')} 
+                  <button
+                    type="button"
+                    onClick={() => setFontSize(f => f === 'xl' ? 'lg' : f === 'lg' ? 'base' : 'sm')}
                     className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200"
                     title="Smaller text"
                   >
                     A-
                   </button>
                   <span className="text-[11px] font-mono px-2 text-slate-300 uppercase">{fontSize}</span>
-                  <button 
-                    type="button" 
-                    onClick={() => setFontSize(f => f === 'sm' ? 'base' : f === 'base' ? 'lg' : 'xl')} 
+                  <button
+                    type="button"
+                    onClick={() => setFontSize(f => f === 'sm' ? 'base' : f === 'base' ? 'lg' : 'xl')}
                     className="px-2 py-1 hover:bg-slate-700 rounded text-slate-200"
                     title="Larger text"
                   >
@@ -672,7 +674,7 @@ function TextViewer({ onBack, resource }: { onBack: () => void; resource: any })
 
             <div className="watermark pointer-events-none select-none text-white/10 z-30">{watermarkText}</div>
 
-            <div className="flex-1 overflow-y-auto p-6 sm:p-10 max-w-4xl mx-auto w-full">
+            <div className="flex-1 overflow-y-auto p-6 sm:p-10 max-w-full mx-auto w-full">
               <div className="bg-slate-800/90 rounded-2xl p-6 sm:p-8 border border-slate-700 shadow-xl">
                 <h1 className="text-xl font-bold text-white mb-2">{resource.title}</h1>
                 <p className="text-xs text-slate-400 border-b border-slate-700 pb-3 mb-6">
@@ -744,15 +746,15 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
       <div className="flex flex-col h-full bg-gray-900 relative">
-        <Header 
-          title={resource.title} 
-          showBack 
-          onBack={onBack} 
+        <Header
+          title={resource.title}
+          showBack
+          onBack={onBack}
           rightAction={
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 type="button"
-                onClick={() => setIsFullscreen(prev => !prev)} 
+                onClick={() => setIsFullscreen(prev => !prev)}
                 className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-white/20"
                 title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Mode"}
               >
@@ -776,11 +778,11 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
           }
         />
         <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
-        
+
         {resolvedUrl || resource.fileData ? (
           <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
-            <img 
-              src={resolvedUrl || resource.fileData} 
+            <img
+              src={resolvedUrl || resource.fileData}
               alt={resource.title}
               className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${isStudent ? 'pointer-events-none select-none' : ''}`}
               draggable={!isStudent}
@@ -794,16 +796,16 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
             </div>
           </div>
         )}
-        
+
         <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
           <div>
             <p className="text-xs text-gray-200 font-medium">{resource.fileName || resource.title}</p>
             <p className="text-[10px] text-gray-400">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
           </div>
           <div className="flex items-center gap-3">
-            <button 
-              type="button" 
-              onClick={() => setIsFullscreen(true)} 
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(true)}
               className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1"
             >
               <i className="fas fa-expand text-xs" /> Fullscreen Mode
@@ -824,7 +826,7 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
 
         {/* Fullscreen Modal Overlay */}
         {isFullscreen && (
-          <div className="fixed inset-0 z-50 bg-black flex flex-col w-screen h-screen">
+          <div className="fixed inset-0 z-50 bg-black flex flex-col w-full h-full">
             <div className="bg-black/90 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between text-white z-20">
               <div className="flex items-center gap-3">
                 <i className="fas fa-image text-teal-400 text-lg" />
@@ -835,26 +837,26 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700 text-xs">
-                  <button 
-                    type="button" 
-                    onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} 
-                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-200" 
+                  <button
+                    type="button"
+                    onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))}
+                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-200"
                     title="Zoom Out"
                   >
                     <i className="fas fa-search-minus" />
                   </button>
                   <span className="text-[11px] font-mono px-2 text-gray-300 min-w-[42px] text-center">{Math.round(zoom * 100)}%</span>
-                  <button 
-                    type="button" 
-                    onClick={() => setZoom(z => Math.min(z + 0.25, 3))} 
-                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-200" 
+                  <button
+                    type="button"
+                    onClick={() => setZoom(z => Math.min(z + 0.25, 3))}
+                    className="px-2 py-1 hover:bg-gray-700 rounded text-gray-200"
                     title="Zoom In"
                   >
                     <i className="fas fa-search-plus" />
                   </button>
-                  <button 
-                    type="button" 
-                    onClick={() => setZoom(1)} 
+                  <button
+                    type="button"
+                    onClick={() => setZoom(1)}
                     className="px-2 py-1 hover:bg-gray-700 rounded text-[10px] text-teal-400 font-semibold"
                     title="Reset Zoom"
                   >
@@ -876,8 +878,8 @@ function ImageViewer({ onBack, resource }: { onBack: () => void; resource: any }
             <div className="watermark text-white/10 pointer-events-none select-none z-30">{watermarkText}</div>
 
             <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
-              <img 
-                src={resolvedUrl || resource.fileData} 
+              <img
+                src={resolvedUrl || resource.fileData}
                 alt={resource.title}
                 style={{
                   transform: `scale(${zoom})`,
@@ -948,9 +950,9 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
               <p className="text-white text-sm font-bold truncate">{resource.title}</p>
               <p className="text-gray-300 text-[10px]">{resource.sizeFormatted || resource.size} • {resource.subject || resource.subjectName}</p>
             </div>
-            <button 
+            <button
               type="button"
-              onClick={() => setIsFullscreen(prev => !prev)} 
+              onClick={() => setIsFullscreen(prev => !prev)}
               className="text-white bg-white/20 hover:bg-white/30 text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 transition border border-white/20"
               title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Mode"}
             >
@@ -970,12 +972,12 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
           </div>
         </div>
         <div className="watermark text-white/10 pointer-events-none select-none">{watermarkText}</div>
-        
+
         {resolvedUrl || resource.fileData ? (
           <div className="flex-1 flex items-center justify-center p-2">
-            <video 
-              src={resolvedUrl || resource.fileData} 
-              controls 
+            <video
+              src={resolvedUrl || resource.fileData}
+              controls
               className="max-w-full max-h-full rounded-lg shadow-xl"
               controlsList="nodownload noplaybackrate"
               disablePictureInPicture={isStudent}
@@ -993,16 +995,16 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
             </div>
           </div>
         )}
-        
+
         <div className="bg-gray-900 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <i className="fas fa-lock text-teal-400 text-xs" />
             <p className="text-[11px] text-gray-400">Protected Video Stream</p>
           </div>
           <div className="flex items-center gap-2">
-            <button 
-              type="button" 
-              onClick={() => setIsFullscreen(true)} 
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(true)}
               className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-teal-400 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-gray-700"
             >
               <i className="fas fa-expand text-xs" />
@@ -1018,7 +1020,7 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
 
         {/* Fullscreen Video Overlay */}
         {isFullscreen && (
-          <div className="fixed inset-0 z-50 bg-black flex flex-col w-screen h-screen">
+          <div className="fixed inset-0 z-50 bg-black flex flex-col w-full h-full">
             <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/90 to-transparent px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <i className="fas fa-play-circle text-teal-400 text-lg" />
@@ -1041,9 +1043,9 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
             <div className="watermark text-white/10 pointer-events-none select-none z-10">{watermarkText}</div>
 
             <div className="flex-1 flex items-center justify-center p-2">
-              <video 
-                src={resolvedUrl || resource.fileData} 
-                controls 
+              <video
+                src={resolvedUrl || resource.fileData}
+                controls
                 autoPlay
                 className="max-w-full max-h-full rounded-lg shadow-2xl"
                 controlsList="nodownload noplaybackrate"
@@ -1126,16 +1128,16 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
       <div className="flex flex-col h-full bg-gray-50 relative">
-        <Header 
-          title={resource.title} 
-          showBack 
-          onBack={onBack} 
+        <Header
+          title={resource.title}
+          showBack
+          onBack={onBack}
           gradient={false}
           rightAction={
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 type="button"
-                onClick={() => setIsFullscreen(prev => !prev)} 
+                onClick={() => setIsFullscreen(prev => !prev)}
                 className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-teal-200 shadow-2xs"
                 title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen Preview"}
               >
@@ -1158,16 +1160,16 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
           }
         />
         <div className="watermark pointer-events-none select-none">{watermarkText}</div>
-        
+
         <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
           <div className="text-center max-w-sm w-full">
             <div className="w-24 h-24 rounded-3xl bg-white shadow-md flex items-center justify-center mx-auto mb-4 border border-gray-100">
               <i className={`fas ${getFileIcon()} text-4xl`} />
             </div>
-            
+
             <h2 className="text-lg font-bold text-gray-800 mb-1">{resource.title}</h2>
             <p className="text-xs text-gray-500 mb-4">{resource.subject || resource.subjectName} • {resource.examCategory || 'Medical LMS'}</p>
-            
+
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-5 text-left space-y-2.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-gray-500">Document Type</span>
@@ -1194,9 +1196,9 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
             </div>
 
             <div className="space-y-2">
-              <button 
-                type="button" 
-                onClick={() => setIsFullscreen(true)} 
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(true)}
                 className="w-full py-2 bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
               >
                 <i className="fas fa-expand text-teal-600 text-xs" />
@@ -1210,8 +1212,8 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
                     <span>Download Document ({resource.sizeFormatted || resource.size})</span>
                   </button>
                   {resolvedUrl && (
-                    <button 
-                      onClick={handleOpenBrowser} 
+                    <button
+                      onClick={handleOpenBrowser}
                       className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
                     >
                       <i className="fas fa-external-link-alt text-[10px]" />
@@ -1238,7 +1240,7 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
 
         {/* Fullscreen Document Overlay */}
         {isFullscreen && (
-          <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col w-screen h-screen">
+          <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col w-full h-full">
             <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between text-white z-20 shadow-md">
               <div className="flex items-center gap-3">
                 <i className={`fas ${getFileIcon()} text-lg`} />
@@ -1267,7 +1269,7 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
                 </div>
                 <h2 className="text-xl font-bold mb-1">{resource.title}</h2>
                 <p className="text-xs text-slate-400 mb-6">{resource.subject || resource.subjectName} • {resource.examCategory || 'Medical LMS'}</p>
-                
+
                 <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/80 text-left space-y-2.5 mb-6 text-xs">
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">File Type</span>
@@ -1327,9 +1329,9 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
     const seen = new Set<string>();
 
     cloudResources.forEach((cr) => {
-      const isMatch = cr.subject_id === c.id || 
-                      (c.subjects && c.subjects.includes(cr.subject_id)) ||
-                      (c.name && cr.subjectName && c.name.toLowerCase().includes(cr.subjectName.toLowerCase()));
+      const isMatch = cr.subject_id === c.id ||
+        (c.subjects && c.subjects.includes(cr.subject_id)) ||
+        (c.name && cr.subjectName && c.name.toLowerCase().includes(cr.subjectName.toLowerCase()));
       if (isMatch) {
         seen.add(cr.id);
         list.push({
@@ -1373,14 +1375,14 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
 
   return (
     <div>
-      <Header 
-        title={c.name} 
-        showBack 
-        onBack={onBack} 
+      <Header
+        title={c.name}
+        showBack
+        onBack={onBack}
         rightAction={
           isFacultyOrAdmin ? (
-            <button 
-              onClick={() => setShowEnrollModal(true)} 
+            <button
+              onClick={() => setShowEnrollModal(true)}
               className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
               title="Enroll students into course"
             >
@@ -1442,8 +1444,8 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
           {isFacultyOrAdmin && (
             <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
               <span className="text-xs text-gray-600 font-medium">Manage Course Students</span>
-              <button 
-                onClick={() => setShowEnrollModal(true)} 
+              <button
+                onClick={() => setShowEnrollModal(true)}
                 className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
               >
                 <i className="fas fa-user-plus text-[10px]" />
@@ -1487,7 +1489,7 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
 
         {/* Academic Curriculum Hierarchy (Subjects, Chapters, Topics) */}
         <div className="card mb-0">
-          <CurriculumBrowser initialSubjectId={c.subjects?.[0]} />
+          <CurriculumBrowser initialSubjectId={c.subjects?.[0]} onNavigateToResource={(r) => onNavigate?.('resource-view', r)} />
         </div>
 
         {/* Faculty */}
@@ -1528,17 +1530,16 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
           ) : (
             <div className="space-y-2">
               {courseResources.map((r) => (
-                <button 
-                  key={r.id} 
-                  onClick={() => onNavigate('resource-view', r)} 
+                <button
+                  key={r.id}
+                  onClick={() => onNavigate('resource-view', r)}
                   className="w-full flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 hover:border-teal-200 hover:bg-teal-50/30 active:bg-gray-100 transition text-left"
                 >
                   <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    <i className={`fas ${
-                      r.type === 'Video' ? 'fa-play-circle text-blue-500' :
-                      r.type === 'PDF' ? 'fa-file-pdf text-red-500' :
-                      r.type === 'Notes' ? 'fa-sticky-note text-yellow-500' : 'fa-file-alt text-teal-600'
-                    }`} />
+                    <i className={`fas ${r.type === 'Video' ? 'fa-play-circle text-blue-500' :
+                        r.type === 'PDF' ? 'fa-file-pdf text-red-500' :
+                          r.type === 'Notes' ? 'fa-sticky-note text-yellow-500' : 'fa-file-alt text-teal-600'
+                      }`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-gray-800 truncate">{r.title}</p>
@@ -1561,8 +1562,8 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
               <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
                 Enrolled Students ({enrolledStudents.length})
               </h3>
-              <button 
-                onClick={() => setShowEnrollModal(true)} 
+              <button
+                onClick={() => setShowEnrollModal(true)}
                 className="text-xs font-semibold text-teal-600 hover:underline flex items-center gap-1"
               >
                 <i className="fas fa-user-plus text-[10px]" /> Manage
@@ -1572,7 +1573,7 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
               <div className="text-center py-5 bg-gray-50 rounded-xl">
                 <i className="fas fa-users-slash text-2xl text-gray-300 mb-1.5" />
                 <p className="text-xs text-gray-500 font-medium">No students enrolled yet</p>
-                <button 
+                <button
                   onClick={() => setShowEnrollModal(true)}
                   className="mt-2 text-xs font-semibold text-teal-600 hover:underline"
                 >

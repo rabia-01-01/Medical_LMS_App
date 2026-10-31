@@ -60,44 +60,33 @@ async function runPhase4Tests() {
     ];
 
     for (const table of resourceTables) {
-      try {
-        const { data, error } = await supabase.from(table.name).select('id').limit(1);
-        if (error) {
-          console.log(`  ${colors.yellow}⚠ ${table.name.padEnd(16)}: ${error.message} (${table.desc})${colors.reset}`);
-        } else {
-          console.log(`  ${colors.green}✔ ${table.name.padEnd(16)}: Connected & accessible (${table.desc})${colors.reset}`);
-        }
-      } catch (e) {
-        console.log(`  ${colors.yellow}⚠ ${table.name.padEnd(16)}: Local connection / pending migration (${table.desc})${colors.reset}`);
+      const { data, error } = await supabase.from(table.name).select('*', { count: 'exact', head: true });
+      if (error && (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('schema cache'))) {
+        console.log(`  ${colors.red}❌ Table '${table.name}': Not found!${colors.reset}`);
+        process.exit(1);
+      } else {
+        console.log(`  ${colors.green}✔ Table '${table.name.padEnd(16)}': Connected & accessible (${table.desc})${colors.reset}`);
       }
     }
 
     // 3. Supabase Storage Bucket Verification
     console.log(`\n${colors.bold}[Step 3] Checking Supabase Storage Bucket ('resources'):${colors.reset}`);
-    try {
-      const { data: bucket, error: bucketError } = await supabase.storage.getBucket('resources');
-      if (bucketError) {
-        console.log(`  ${colors.yellow}⚠ Storage bucket 'resources': ${bucketError.message}${colors.reset}`);
-        console.log(`  ${colors.cyan}ℹ (Note: If bucket is not yet created in Supabase dashboard, run src/db/db.sql line 380 to provision it)${colors.reset}`);
-      } else {
-        console.log(`  ${colors.green}✔ Storage bucket 'resources' exists and is ready! (Public: ${bucket.public})${colors.reset}`);
-      }
-    } catch (e) {
-      console.log(`  ${colors.yellow}⚠ Storage bucket verification skipped in offline mode.${colors.reset}`);
+    const { data: bucket, error: bucketError } = await supabase.storage.getBucket('resources');
+    if (bucketError || !bucket) {
+      console.log(`  ${colors.red}❌ Storage bucket 'resources' not found:${colors.reset}`, bucketError?.message);
+      process.exit(1);
+    } else {
+      console.log(`  ${colors.green}✔ Storage bucket 'resources' exists and is ready! (Public: ${bucket.public})${colors.reset}`);
     }
 
     // 4. Test Storage Signed URL Generation API
     console.log(`\n${colors.bold}[Step 4] Testing Signed URL Generation API:${colors.reset}`);
-    try {
-      const testPath = 'biology/sample_lecture_notes.pdf';
-      const { data: signedData, error: signedError } = await supabase.storage.from('resources').createSignedUrl(testPath, 3600);
-      if (signedError) {
-        console.log(`  ${colors.yellow}⚠ createSignedUrl('${testPath}'): ${signedError.message} (expected if object does not exist yet)${colors.reset}`);
-      } else if (signedData?.signedUrl) {
-        console.log(`  ${colors.green}✔ Successfully created signed URL for '${testPath}'${colors.reset}`);
-      }
-    } catch (e) {
-      console.log(`  ${colors.yellow}⚠ Signed URL test skipped: ${e.message}${colors.reset}`);
+    const testPath = 'biology/sample_lecture_notes.pdf';
+    const { data: signedData, error: signedError } = await supabase.storage.from('resources').createSignedUrl(testPath, 3600);
+    if (signedError) {
+      console.log(`  ${colors.yellow}⚠ createSignedUrl('${testPath}'): ${signedError.message} (expected if object does not exist yet)${colors.reset}`);
+    } else if (signedData?.signedUrl) {
+      console.log(`  ${colors.green}✔ Successfully created signed URL for '${testPath}'${colors.reset}`);
     }
 
     // 5. Test Frontend Resource Feature Module Files
@@ -107,6 +96,7 @@ async function runPhase4Tests() {
       'src/features/resources/resourceService.ts',
       'src/features/resources/useResources.ts',
       'src/features/resources/index.ts',
+      'src/features/resources/utils.js',
     ];
 
     for (const f of requiredFiles) {
@@ -122,16 +112,8 @@ async function runPhase4Tests() {
 
     // 6. Test Utility & Normalization Logic
     console.log(`\n${colors.bold}[Step 6] Verifying Resource Type Normalization & Size Formatting:${colors.reset}`);
-    let normalizeResourceType, formatFileSize;
-    try {
-      const utils = await import('./src/features/resources/utils.js');
-      normalizeResourceType = utils.normalizeResourceType;
-      formatFileSize = utils.formatFileSize;
-    } catch (e) {
-      const typesMod = await import('./src/features/resources/types.ts');
-      normalizeResourceType = typesMod.normalizeResourceType;
-      formatFileSize = typesMod.formatFileSize;
-    }
+    const utils = await import('./src/features/resources/utils.js');
+    const { normalizeResourceType, formatFileSize } = utils;
     
     const typeTests = [
       { input: 'PDF', expected: 'NOTE' },
@@ -143,34 +125,28 @@ async function runPhase4Tests() {
       { input: 'Syllabus', expected: 'BOOK' },
     ];
 
-    let allTypesPassed = true;
     for (const t of typeTests) {
       const res = normalizeResourceType(t.input);
       if (res !== t.expected) {
         console.log(`  ${colors.red}❌ normalizeResourceType('${t.input}') expected '${t.expected}', got '${res}'${colors.reset}`);
-        allTypesPassed = false;
+        process.exit(1);
       }
     }
-    if (allTypesPassed) {
-      console.log(`  ${colors.green}✔ All resource type normalizations mapped accurately (NOTE, BOOK, DPP, PYQ, VIDEO)${colors.reset}`);
-    }
+    console.log(`  ${colors.green}✔ All resource type normalizations mapped accurately (NOTE, BOOK, DPP, PYQ, VIDEO)${colors.reset}`);
 
     const sizeTests = [
       { bytes: 500, expected: '500 B' },
       { bytes: 1048576, expected: '1.0 MB' },
       { bytes: 5242880, expected: '5.0 MB' },
     ];
-    let allSizesPassed = true;
     for (const s of sizeTests) {
       const res = formatFileSize(s.bytes);
       if (res !== s.expected) {
         console.log(`  ${colors.red}❌ formatFileSize(${s.bytes}) expected '${s.expected}', got '${res}'${colors.reset}`);
-        allSizesPassed = false;
+        process.exit(1);
       }
     }
-    if (allSizesPassed) {
-      console.log(`  ${colors.green}✔ File size formatters verified (B, KB, MB, GB)${colors.reset}`);
-    }
+    console.log(`  ${colors.green}✔ File size formatters verified (B, KB, MB, GB)${colors.reset}`);
 
     // 7. Verify RLS Policies in db.sql
     console.log(`\n${colors.bold}[Step 7] Checking RLS Policies in db.sql for Resources & Storage:${colors.reset}`);
@@ -188,18 +164,13 @@ async function runPhase4Tests() {
       'Faculty and Admins can delete resources',
     ];
 
-    let allPoliciesFound = true;
     for (const policy of policiesToCheck) {
       if (dbSqlContent.includes(policy)) {
         console.log(`  ${colors.green}✔ Policy "${policy}" found in db.sql${colors.reset}`);
       } else {
         console.log(`  ${colors.red}❌ Policy "${policy}" missing in db.sql${colors.reset}`);
-        allPoliciesFound = false;
+        process.exit(1);
       }
-    }
-
-    if (!allPoliciesFound) {
-      process.exit(1);
     }
 
     console.log(`\n${colors.bold}${colors.green}====================================================${colors.reset}`);

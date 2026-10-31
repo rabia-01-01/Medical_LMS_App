@@ -35,53 +35,25 @@ export function FullscreenControl({ mode, onModeChange }: FullscreenControlProps
   };
 
   return (
-    <div className="fixed top-3 right-3 z-50 flex items-center gap-1.5 select-none print:hidden">
+    <div className="fixed top-3 right-3 z-50 hidden sm:flex items-center gap-1.5 select-none print:hidden">
       {/* Menu dropdown */}
       {showMenu && (
-        <div className="absolute right-0 top-10 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl p-2 w-48 text-white text-xs animate-slide-down">
+        <div className="absolute right-0 top-10 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl p-2 w-52 text-white text-xs animate-slide-down">
           <p className="text-[10px] uppercase font-bold text-teal-400 px-2 py-1 tracking-wider">
             Screen & Display Facility
           </p>
           <button
             onClick={() => { onModeChange('mobile'); setShowMenu(false); }}
-            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition ${
-              mode === 'mobile' ? 'bg-teal-600 text-white font-semibold' : 'hover:bg-white/10 text-slate-300'
-            }`}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-teal-600 text-white font-semibold transition"
           >
             <span className="flex items-center gap-2">
               <i className="fas fa-mobile-alt text-xs" />
               <span>Mobile Phone (430px)</span>
             </span>
-            {mode === 'mobile' && <i className="fas fa-check text-[10px]" />}
+            <span className="text-[9px] bg-white/20 px-1.5 py-0.5 rounded font-bold uppercase">Locked</span>
           </button>
 
-          <button
-            onClick={() => { onModeChange('wide'); setShowMenu(false); }}
-            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition ${
-              mode === 'wide' ? 'bg-teal-600 text-white font-semibold' : 'hover:bg-white/10 text-slate-300'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <i className="fas fa-laptop text-xs" />
-              <span>Expanded Wide</span>
-            </span>
-            {mode === 'wide' && <i className="fas fa-check text-[10px]" />}
-          </button>
-
-          <button
-            onClick={() => { onModeChange('fullscreen'); setShowMenu(false); }}
-            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition ${
-              mode === 'fullscreen' ? 'bg-teal-600 text-white font-semibold' : 'hover:bg-white/10 text-slate-300'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <i className="fas fa-desktop text-xs" />
-              <span>100% Full Width</span>
-            </span>
-            {mode === 'fullscreen' && <i className="fas fa-check text-[10px]" />}
-          </button>
-
-          <div className="h-px bg-slate-700/60 my-1" />
+          <div className="h-px bg-slate-700/60 my-1.5" />
 
           <button
             onClick={() => { toggleBrowserFullscreen(); setShowMenu(false); }}
@@ -97,17 +69,14 @@ export function FullscreenControl({ mode, onModeChange }: FullscreenControlProps
 
       {/* Main floating control pill */}
       <div className="flex items-center bg-slate-900/85 backdrop-blur-md border border-slate-700/80 rounded-full shadow-lg p-0.5 text-white">
-        {/* Quick layout toggle */}
+        {/* Quick layout indicator */}
         <button
-          onClick={() => {
-            const nextMode: DisplayMode = mode === 'mobile' ? 'wide' : mode === 'wide' ? 'fullscreen' : 'mobile';
-            onModeChange(nextMode);
-          }}
-          className="px-2 py-1 rounded-full hover:bg-white/15 text-[11px] font-medium flex items-center gap-1.5 transition text-slate-200 hover:text-white"
-          title={`Current layout: ${mode.toUpperCase()} (Click to toggle)`}
+          onClick={() => onModeChange('mobile')}
+          className="px-2.5 py-1 rounded-full hover:bg-white/15 text-[11px] font-medium flex items-center gap-1.5 transition text-slate-200 hover:text-white"
+          title="Mobile Device Aspect Ratio (Locked strictly to 430px)"
         >
-          <i className={`fas ${mode === 'mobile' ? 'fa-mobile-alt' : mode === 'wide' ? 'fa-laptop' : 'fa-desktop'} text-teal-400`} />
-          <span className="hidden sm:inline capitalize">{mode}</span>
+          <i className="fas fa-mobile-alt text-teal-400" />
+          <span className="capitalize">Mobile (430px)</span>
         </button>
 
         {/* Quick Native Browser Fullscreen Button */}

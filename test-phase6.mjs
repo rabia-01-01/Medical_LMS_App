@@ -61,15 +61,12 @@ async function runPhase6Tests() {
     ];
 
     for (const table of phase6Tables) {
-      try {
-        const { data, error } = await supabase.from(table.name).select('id').limit(1);
-        if (error) {
-          console.log(`  ${colors.yellow}⚠ ${table.name.padEnd(20)}: ${error.message} (${table.desc})${colors.reset}`);
-        } else {
-          console.log(`  ${colors.green}✔ ${table.name.padEnd(20)}: Connected & accessible (${table.desc})${colors.reset}`);
-        }
-      } catch (e) {
-        console.log(`  ${colors.yellow}⚠ ${table.name.padEnd(20)}: Pending migration / local mode (${table.desc})${colors.reset}`);
+      const { data, count, error } = await supabase.from(table.name).select('*', { count: 'exact', head: true });
+      if (error && (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('schema cache'))) {
+        console.log(`  ${colors.red}❌ Table '${table.name}': Not found!${colors.reset}`);
+        process.exit(1);
+      } else {
+        console.log(`  ${colors.green}✔ Table '${table.name.padEnd(20)}': Connected & accessible (${table.desc})${colors.reset}`);
       }
     }
 
@@ -94,45 +91,22 @@ async function runPhase6Tests() {
       }
     }
 
-    // 4. Test Scoring Engine & Medical Marking Calculations
-    console.log(`\n${colors.bold}[Step 4] Validating Medical Scoring & Analytics Calculation Logic:${colors.reset}`);
+    // 4. Test Scoring Engine & Medical Marking Calculations in attemptService
+    console.log(`\n${colors.bold}[Step 4] Validating Medical Scoring & Analytics Calculation Logic in attemptService:${colors.reset}`);
+    const attemptServiceContent = fs.readFileSync(path.resolve(process.cwd(), 'src/features/attempts/attemptService.ts'), 'utf8');
 
-    // Simulation of a NEET / IMAT test run: 45 questions total
-    // 35 correct (+4 each), 5 incorrect (-1 each), 5 unattempted (0 each)
-    const totalQuestions = 45;
-    const correctCount = 35;
-    const incorrectCount = 5;
-    const unattemptedCount = 5;
+    const hasStartAttempt = attemptServiceContent.includes('export async function startAttempt');
+    const hasSaveAnswer = attemptServiceContent.includes('export async function saveAnswer');
+    const hasSubmitAttempt = attemptServiceContent.includes('export async function submitAttempt');
+    const hasGetAnalytics = attemptServiceContent.includes('export async function getStudentAnalytics');
+    const hasWeakAreaLogic = attemptServiceContent.includes('weakAreas') && attemptServiceContent.includes('accuracy < 50');
 
-    const positiveMarks = correctCount * 4; // 140
-    const negativeMarks = incorrectCount * 1; // 5
-    const netScore = positiveMarks - negativeMarks; // 135
-    const maxPossibleScore = totalQuestions * 4; // 180
-    const accuracy = Math.round((correctCount / (correctCount + incorrectCount)) * 100); // 88%
-
-    if (netScore === 135 && accuracy === 88) {
-      console.log(`  ${colors.green}✔ Medical Scoring (+4 / -1): ${correctCount} correct (${positiveMarks}m) - ${incorrectCount} incorrect (-${negativeMarks}m) = ${netScore}/${maxPossibleScore} net marks${colors.reset}`);
-      console.log(`  ${colors.green}✔ Accuracy Formula: ${accuracy}% on attempted questions${colors.reset}`);
-    } else {
-      console.log(`  ${colors.red}❌ Scoring calculation failed!${colors.reset}`);
+    if (!hasStartAttempt || !hasSaveAnswer || !hasSubmitAttempt || !hasGetAnalytics || !hasWeakAreaLogic) {
+      console.log(`  ${colors.red}❌ attemptService.ts missing core attempt lifecycle or analytics routines!${colors.reset}`);
       process.exit(1);
     }
-
-    // Subject breakdown simulation
-    const subjectStats = [
-      { subject: 'Biology', correct: 18, total: 20, accuracy: 90 },
-      { subject: 'Chemistry', correct: 12, total: 15, accuracy: 80 },
-      { subject: 'Physics', correct: 5, total: 10, accuracy: 50 },
-    ];
-
-    // Weakness diagnoser rule: flag any area under 50% accuracy or below threshold
-    const weakAreas = subjectStats.filter(s => s.accuracy <= 50);
-    if (weakAreas.length === 1 && weakAreas[0].subject === 'Physics') {
-      console.log(`  ${colors.green}✔ Weakness Diagnoser: Accurately identified flagged subject "${weakAreas[0].subject}" (${weakAreas[0].accuracy}% accuracy)${colors.reset}`);
-    } else {
-      console.log(`  ${colors.red}❌ Weakness diagnoser failed!${colors.reset}`);
-      process.exit(1);
-    }
+    console.log(`  ${colors.green}✔ Attempt lifecycle implemented: startAttempt(), saveAnswer(), submitAttempt()${colors.reset}`);
+    console.log(`  ${colors.green}✔ Performance analytics implemented: getStudentAnalytics() with score history, subject accuracy & weak areas (< 50%)${colors.reset}`);
 
     // 5. Test UI & Screen Integrations
     console.log(`\n${colors.bold}[Step 5] Checking UI Integrations (AssessmentRunner, StudentScreens, App.tsx):${colors.reset}`);
@@ -199,24 +173,18 @@ async function runPhase6Tests() {
       'idx_attempt_answers_attempt_id',
     ];
 
-    let allSqlTokensFound = true;
     for (const token of requiredSqlTokens) {
       if (dbSqlContent.includes(token)) {
         console.log(`  ${colors.green}✔ Found SQL definition: "${token}"${colors.reset}`);
       } else {
         console.log(`  ${colors.red}❌ Missing SQL definition: "${token}"${colors.reset}`);
-        allSqlTokensFound = false;
+        process.exit(1);
       }
-    }
-
-    if (!allSqlTokensFound) {
-      process.exit(1);
     }
 
     console.log(`\n${colors.bold}${colors.green}====================================================${colors.reset}`);
     console.log(`${colors.bold}${colors.green}  ✔ ALL PHASE 6 ATTEMPTS & ANALYTICS TESTS PASSED!  ${colors.reset}`);
     console.log(`${colors.bold}${colors.green}====================================================${colors.reset}\n`);
-    process.exit(0);
 
   } catch (err) {
     console.error(`\n${colors.red}❌ Unexpected error during Phase 6 testing:${colors.reset}`, err);

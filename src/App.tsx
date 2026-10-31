@@ -37,19 +37,13 @@ const adminNavItems = [
 function AppContent() {
   const { user, isAuthenticated, isLoading, isViewingAs, viewingAsUser, stopViewingAs } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
-    try {
-      const saved = localStorage.getItem('lms_display_mode');
-      return (saved as DisplayMode) || 'mobile';
-    } catch {
-      return 'mobile';
-    }
-  });
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('mobile');
 
   const handleDisplayModeChange = (mode: DisplayMode) => {
-    setDisplayMode(mode);
+    // Strictly lock display mode to mobile device aspect ratio
+    setDisplayMode('mobile');
     try {
-      localStorage.setItem('lms_display_mode', mode);
+      localStorage.setItem('lms_display_mode', 'mobile');
     } catch {}
   };
 
@@ -71,6 +65,13 @@ function AppContent() {
   }, [user?.role, user?.id]);
 
   const handleNavigate = useCallback((screen: string, data?: any) => {
+    if (screen === 'quizzes') {
+      // Returning to Assessments: prune any quiz-attempt screens from back stack so back leads to home
+      setScreenHistory(prev => prev.filter(s => s !== 'active-quiz' && s !== 'quiz-results' && s !== 'quiz-detail' && s !== 'quizzes'));
+      setCurrentScreen('quizzes');
+      setScreenData(data || null);
+      return;
+    }
     setScreenHistory(prev => [...prev, currentScreen]);
     setCurrentScreen(screen);
     if (data) setScreenData(data);
@@ -89,6 +90,10 @@ function AppContent() {
   }, [screenHistory, user]);
 
   const handleTabChange = useCallback((tab: string) => {
+    try {
+      sessionStorage.removeItem('lms_curriculum_active_topic');
+      sessionStorage.removeItem('lms_curriculum_active_subject');
+    } catch {}
     setScreenHistory([]);
     setCurrentScreen(tab);
     setScreenData(null);
@@ -127,7 +132,7 @@ function AppContent() {
         case 'quizzes': return <QuizList onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quiz-detail': return <QuizDetail onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
         case 'active-quiz': return <ActiveQuiz onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
-        case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
+        case 'quiz-results': return <QuizResults onBack={handleBack} onNavigate={handleNavigate} quizData={screenData} />;
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
         default: return <StudentHome onNavigate={handleNavigate} />;
@@ -151,7 +156,7 @@ function AppContent() {
         case 'quizzes': return <QuizList onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quiz-detail': return <QuizDetail onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
         case 'active-quiz': return <ActiveQuiz onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
-        case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
+        case 'quiz-results': return <QuizResults onBack={handleBack} onNavigate={handleNavigate} quizData={screenData} />;
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
         case 'faculty-resources': return <FacultyResources onBack={handleBack} onNavigate={handleNavigate} />;
@@ -166,7 +171,7 @@ function AppContent() {
         case 'users': return <AdminUsers onBack={handleBack} onNavigate={handleNavigate} />;
         case 'add-user': return <AddUser onBack={handleBack} />;
         case 'departments': return <AdminDepartments onBack={handleBack} />;
-        case 'courses': return <AdminCourses onBack={handleBack} />;
+        case 'courses': return <AdminCourses onBack={handleBack} onNavigate={handleNavigate} />;
         case 'resources': return <AdminResources onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quizzes': return <QuizList onBack={handleBack} onNavigate={handleNavigate} />;
         case 'analytics': return <AnalyticsScreen onBack={handleBack} onNavigate={handleNavigate} />;
@@ -179,7 +184,7 @@ function AppContent() {
         case 'settings': return <AdminSettings onBack={handleBack} onNavigate={handleNavigate} />;
         case 'quiz-detail': return <QuizDetail onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
         case 'active-quiz': return <ActiveQuiz onBack={handleBack} onNavigate={handleNavigate} quiz={screenData} />;
-        case 'quiz-results': return <QuizResults onBack={handleBack} quizData={screenData} />;
+        case 'quiz-results': return <QuizResults onBack={handleBack} onNavigate={handleNavigate} quizData={screenData} />;
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
         default: return <AdminDashboard onNavigate={handleNavigate} />;
@@ -194,12 +199,14 @@ function AppContent() {
   }`;
 
   return (
-    <div className={containerClass}>
+    <>
       <FullscreenControl mode={displayMode} onModeChange={handleDisplayModeChange} />
-      {ViewingAsBanner}
-      <div className="screen-content">{renderScreen()}</div>
-      {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
-    </div>
+      <div className={containerClass}>
+        {ViewingAsBanner}
+        <div className="screen-content">{renderScreen()}</div>
+        {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
+      </div>
+    </>
   );
 }
 

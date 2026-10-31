@@ -451,34 +451,32 @@ export function ActiveQuiz({
   onNavigate: (screen: string, data?: any) => void;
   quiz?: any;
 }) {
-  const { quizzes } = useData();
-  const { assessments } = useAssessments();
-
   const resolvedAssessment: AssessmentWithQuestions | null = useMemo(() => {
-    if (quiz) {
-      if (quiz.questions && quiz.questions.length > 0 && quiz.questions[0].options) {
-        return quiz as AssessmentWithQuestions;
-      }
-      return mapLegacyQuizToAssessment(quiz);
+    if (!quiz) return null;
+    if (quiz.questions && quiz.questions.length > 0 && quiz.questions[0].options) {
+      return quiz as AssessmentWithQuestions;
     }
-
-    if (assessments.length > 0) {
-      return assessments[0];
-    }
-
-    const legacyActive = quizzes.find((q) => q.status === 'active') || quizzes[0];
-    return legacyActive ? mapLegacyQuizToAssessment(legacyActive) : null;
-  }, [quiz, assessments, quizzes]);
+    return mapLegacyQuizToAssessment(quiz);
+  }, [quiz]);
 
   if (!resolvedAssessment || !resolvedAssessment.questions || resolvedAssessment.questions.length === 0) {
     return (
       <div>
-        <Header title="Examination" showBack onBack={onBack} gradient={false} />
-        <EmptyState
-          icon="fa-clipboard"
-          title="No Active Examination"
-          message="No active questions found to start."
-        />
+        <Header title="Examination" showBack onBack={() => onNavigate('quizzes')} gradient={false} />
+        <div className="p-4 space-y-4">
+          <EmptyState
+            icon="fa-clipboard-list"
+            title="No Active Examination"
+            message="No active examination selected. Please choose a quiz from the assessments list."
+          />
+          <button
+            onClick={() => onNavigate('quizzes')}
+            className="btn-primary w-full flex items-center justify-center gap-2"
+          >
+            <i className="fas fa-clipboard-list" />
+            <span>Return to Assessments</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -486,7 +484,8 @@ export function ActiveQuiz({
   return (
     <AssessmentRunner
       assessment={resolvedAssessment}
-      onBack={onBack}
+      onBack={() => onNavigate('quizzes')}
+      onReturnToAssessments={() => onNavigate('quizzes')}
       onFinish={(results) => {
         onNavigate('quiz-results', { results, quiz: resolvedAssessment });
       }}
@@ -497,19 +496,31 @@ export function ActiveQuiz({
 // ==================== QUIZ RESULTS WRAPPER ====================
 export function QuizResults({
   onBack,
+  onNavigate,
   quizData,
 }: {
   onBack: () => void;
+  onNavigate?: (screen: string, data?: any) => void;
   quizData?: any;
 }) {
   const assessment = quizData?.quiz;
   const results = quizData?.results;
 
+  const handleReturnToAssessments = () => {
+    if (onNavigate) {
+      onNavigate('quizzes');
+    } else {
+      onBack();
+    }
+  };
+
   if (assessment && results) {
     return (
       <AssessmentRunner
         assessment={assessment}
-        onBack={onBack}
+        initialResults={results}
+        onBack={handleReturnToAssessments}
+        onReturnToAssessments={handleReturnToAssessments}
       />
     );
   }
@@ -517,13 +528,14 @@ export function QuizResults({
   // Fallback if results were passed via legacy format
   return (
     <div className="p-4">
-      <Header title="Results" showBack onBack={onBack} gradient={false} />
-      <div className="card text-center my-6">
+      <Header title="Results" showBack onBack={handleReturnToAssessments} gradient={false} />
+      <div className="card text-center my-6 space-y-3">
         <i className="fas fa-trophy text-4xl text-amber-500 mb-2" />
         <h3 className="text-base font-bold text-slate-800">Assessment Completed</h3>
         <p className="text-xs text-slate-500 mt-1">Review your score in the dashboard</p>
-        <button onClick={onBack} className="btn-primary mt-4">
-          Return to Dashboard
+        <button onClick={handleReturnToAssessments} className="btn-primary mt-4 w-full flex items-center justify-center gap-2">
+          <i className="fas fa-clipboard-list" />
+          <span>Return to Assessments</span>
         </button>
       </div>
     </div>

@@ -269,14 +269,14 @@ ALTER TABLE attempt_answers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Helper function: Get authenticated user role
-CREATE OR REPLACE FUNCTION auth.get_user_role()
+CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS user_role AS $$
   SELECT role FROM public.profiles WHERE id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 -- 1. PROFILES
 CREATE POLICY "Users read their own profile, Admins read all"
-ON profiles FOR SELECT USING (id = auth.uid() OR auth.get_user_role() = 'ADMIN');
+ON profiles FOR SELECT USING (id = auth.uid() OR public.get_user_role() = 'ADMIN');
 
 CREATE POLICY "Users insert their own profile"
 ON profiles FOR INSERT WITH CHECK (id = auth.uid());
@@ -286,53 +286,66 @@ ON profiles FOR UPDATE USING (id = auth.uid());
 
 -- 1.1 ROLE EXTENSIONS (Students & Faculty)
 CREATE POLICY "Users and staff access student records"
-ON students FOR ALL USING (profile_id = auth.uid() OR auth.get_user_role() IN ('FACULTY', 'ADMIN'))
-WITH CHECK (profile_id = auth.uid() OR auth.get_user_role() = 'ADMIN');
+ON students FOR ALL USING (profile_id = auth.uid() OR public.get_user_role() IN ('FACULTY', 'ADMIN'))
+WITH CHECK (profile_id = auth.uid() OR public.get_user_role() = 'ADMIN');
 
 CREATE POLICY "Users and staff access faculty records"
-ON faculty FOR ALL USING (profile_id = auth.uid() OR auth.get_user_role() = 'ADMIN')
-WITH CHECK (profile_id = auth.uid() OR auth.get_user_role() = 'ADMIN');
+ON faculty FOR ALL USING (profile_id = auth.uid() OR public.get_user_role() = 'ADMIN')
+WITH CHECK (profile_id = auth.uid() OR public.get_user_role() = 'ADMIN');
+
+-- 1.2 ACADEMIC STRUCTURE (Exams, Departments, Classes, Batches)
+CREATE POLICY "Anyone can view exams" ON exams FOR SELECT USING (true);
+CREATE POLICY "Admins manage exams" ON exams FOR ALL USING (public.get_user_role() = 'ADMIN');
+
+CREATE POLICY "Anyone can view departments" ON departments FOR SELECT USING (true);
+CREATE POLICY "Admins manage departments" ON departments FOR ALL USING (public.get_user_role() = 'ADMIN');
+
+CREATE POLICY "Anyone can view classes" ON classes FOR SELECT USING (true);
+CREATE POLICY "Admins manage classes" ON classes FOR ALL USING (public.get_user_role() = 'ADMIN');
+
+CREATE POLICY "Anyone can view batches" ON batches FOR SELECT USING (true);
+CREATE POLICY "Admins manage batches" ON batches FOR ALL USING (public.get_user_role() = 'ADMIN');
 
 -- 2. CURRICULUM (Subjects, Chapters, Topics)
 CREATE POLICY "Everyone authenticated can view academic hierarchy"
 ON subjects FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Admins manage subjects"
-ON subjects FOR ALL USING (auth.get_user_role() = 'ADMIN');
+ON subjects FOR ALL USING (public.get_user_role() = 'ADMIN');
 
 CREATE POLICY "Everyone authenticated can view chapters"
 ON chapters FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Faculty and Admins manage chapters"
-ON chapters FOR ALL USING (auth.get_user_role() IN ('FACULTY', 'ADMIN'));
+ON chapters FOR ALL USING (public.get_user_role() IN ('FACULTY', 'ADMIN'));
 
 CREATE POLICY "Everyone authenticated can view topics"
 ON topics FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Faculty and Admins manage topics"
-ON topics FOR ALL USING (auth.get_user_role() IN ('FACULTY', 'ADMIN'));
+ON topics FOR ALL USING (public.get_user_role() IN ('FACULTY', 'ADMIN'));
 
 -- 3. RESOURCES
 CREATE POLICY "Students view published resources"
 ON resources FOR SELECT USING (
     status = 'PUBLISHED' OR 
     created_by = auth.uid() OR 
-    auth.get_user_role() = 'ADMIN'
+    public.get_user_role() = 'ADMIN'
 );
 
 CREATE POLICY "Faculty create resources"
 ON resources FOR INSERT WITH CHECK (
-    auth.get_user_role() IN ('FACULTY', 'ADMIN') AND 
+    public.get_user_role() IN ('FACULTY', 'ADMIN') AND 
     created_by = auth.uid()
 );
 
 CREATE POLICY "Faculty edit own resources, Admin edit any"
 ON resources FOR UPDATE USING (
     created_by = auth.uid() OR 
-    auth.get_user_role() = 'ADMIN'
+    public.get_user_role() = 'ADMIN'
 );
 
 CREATE POLICY "Users delete own resources, Admin delete any"
 ON resources FOR DELETE USING (
     created_by = auth.uid() OR 
-    auth.get_user_role() = 'ADMIN'
+    public.get_user_role() = 'ADMIN'
 );
 
 -- 3.1 RESOURCE FILES
@@ -341,13 +354,13 @@ ON resource_files FOR SELECT USING (
     EXISTS (
         SELECT 1 FROM resources r
         WHERE r.id = resource_files.resource_id
-        AND (r.status = 'PUBLISHED' OR r.created_by = auth.uid() OR auth.get_user_role() = 'ADMIN')
+        AND (r.status = 'PUBLISHED' OR r.created_by = auth.uid() OR public.get_user_role() = 'ADMIN')
     )
 );
 
 CREATE POLICY "Faculty and Admins insert resource files"
 ON resource_files FOR INSERT WITH CHECK (
-    auth.get_user_role() IN ('FACULTY', 'ADMIN')
+    public.get_user_role() IN ('FACULTY', 'ADMIN')
 );
 
 CREATE POLICY "Faculty and Admins delete resource files"
@@ -355,7 +368,7 @@ ON resource_files FOR DELETE USING (
     EXISTS (
         SELECT 1 FROM resources r
         WHERE r.id = resource_files.resource_id
-        AND (r.created_by = auth.uid() OR auth.get_user_role() = 'ADMIN')
+        AND (r.created_by = auth.uid() OR public.get_user_role() = 'ADMIN')
     )
 );
 
@@ -364,19 +377,19 @@ CREATE POLICY "Students view published assessments"
 ON assessments FOR SELECT USING (
     status = 'PUBLISHED' OR 
     created_by = auth.uid() OR 
-    auth.get_user_role() = 'ADMIN'
+    public.get_user_role() = 'ADMIN'
 );
 
 CREATE POLICY "Faculty manage assessments"
 ON assessments FOR ALL USING (
     created_by = auth.uid() OR 
-    auth.get_user_role() = 'ADMIN'
+    public.get_user_role() = 'ADMIN'
 );
 
 CREATE POLICY "Faculty manage questions"
 ON questions FOR ALL USING (
     created_by = auth.uid() OR 
-    auth.get_user_role() = 'ADMIN'
+    public.get_user_role() = 'ADMIN'
 );
 
 CREATE POLICY "Students read options during attempt"
@@ -386,7 +399,7 @@ ON question_options FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Students manage their own attempts"
 ON attempts FOR ALL USING (
     student_id IN (SELECT id FROM students WHERE profile_id = auth.uid()) OR
-    auth.get_user_role() IN ('FACULTY', 'ADMIN')
+    public.get_user_role() IN ('FACULTY', 'ADMIN')
 );
 
 CREATE POLICY "Students record their own answers"
@@ -396,12 +409,12 @@ ON attempt_answers FOR ALL USING (
         JOIN students s ON a.student_id = s.id
         WHERE s.profile_id = auth.uid()
     ) OR
-    auth.get_user_role() IN ('FACULTY', 'ADMIN')
+    public.get_user_role() IN ('FACULTY', 'ADMIN')
 );
 
 -- 6. AUDIT LOGS
 CREATE POLICY "Admins read audit logs"
-ON audit_logs FOR SELECT USING (auth.get_user_role() = 'ADMIN');
+ON audit_logs FOR SELECT USING (public.get_user_role() = 'ADMIN');
 
 CREATE POLICY "System logs auditable events"
 ON audit_logs FOR INSERT WITH CHECK (auth.role() = 'authenticated');
@@ -410,6 +423,8 @@ ON audit_logs FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('resources', 'resources', false)
 ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Allow public read of buckets" ON storage.buckets FOR SELECT USING (true);
 
 -- RLS for Storage: Allow authenticated students & faculty to download resources
 CREATE POLICY "Students and Faculty can read resources"
@@ -424,7 +439,7 @@ CREATE POLICY "Faculty and Admins can upload resources"
 ON storage.objects FOR INSERT
 WITH CHECK (
     bucket_id = 'resources' AND
-    auth.get_user_role() IN ('FACULTY', 'ADMIN')
+    public.get_user_role() IN ('FACULTY', 'ADMIN')
 );
 
 -- RLS for Storage: Faculty and Admins can delete resources
@@ -432,7 +447,7 @@ CREATE POLICY "Faculty and Admins can delete resources"
 ON storage.objects FOR DELETE
 USING (
     bucket_id = 'resources' AND
-    auth.get_user_role() IN ('FACULTY', 'ADMIN')
+    public.get_user_role() IN ('FACULTY', 'ADMIN')
 );
 
 -- ============================================================================

@@ -8,12 +8,20 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { CurriculumBrowser } from '../features/curriculum';
 import { useResources, resourceService } from '../features/resources';
 import { useAdmin, adminService } from '../features/admin';
+import { useAssessments } from '../features/assessments';
 
 // ==================== OPERATIONAL ADMIN DASHBOARD ====================
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
   const { users, departments, courses, resources, quizzes, announcements, auditLogs } = useData();
   const { metrics, loading: metricsLoading, refreshMetrics, exportAuditLogs } = useAdmin();
+  const { assessments } = useAssessments();
+
+  const totalAssessmentsCount = useMemo(() => {
+    const seen = new Set(assessments.map(a => a.id));
+    const legacyCount = quizzes.filter(q => !seen.has(q.id)).length;
+    return assessments.length + legacyCount;
+  }, [assessments, quizzes]);
 
   return (
     <div>
@@ -84,8 +92,8 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           </div>
           <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
             <i className="fas fa-clipboard-check text-purple-300 text-sm mb-1 block" />
-            <p className="text-white text-base font-bold">{quizzes.length}</p>
-            <p className="text-gray-300 text-[9px]">Quizzes</p>
+            <p className="text-white text-base font-bold">{totalAssessmentsCount}</p>
+            <p className="text-gray-300 text-[9px]">Assessments</p>
           </div>
           <div className="bg-white/10 rounded-xl p-2.5 text-center backdrop-blur-sm border border-white/10">
             <i className="fas fa-history text-cyan-300 text-sm mb-1 block" />
@@ -139,7 +147,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
             { icon: 'fa-book-medical', label: 'Academic & Course Management', desc: `${courses.length} courses, curriculum & cohorts`, screen: 'courses' },
             { icon: 'fa-building', label: 'Departments', desc: `${departments.length} departments`, screen: 'departments' },
             { icon: 'fa-shield-alt', label: 'Resource Governance & Moderation', desc: `${resources.length} resources (${resources.filter(r => r.status === 'published').length} published)`, screen: 'resources' },
-            { icon: 'fa-clipboard-check', label: 'Assessment & Quiz Engine', desc: `${quizzes.length} exams & mock drills`, screen: 'quizzes' },
+            { icon: 'fa-clipboard-check', label: 'Assessment & Quiz Engine', desc: `${totalAssessmentsCount} exams & mock drills`, screen: 'quizzes' },
             { icon: 'fa-history', label: 'Security & Audit Logs', desc: `${auditLogs.length} events logged`, screen: 'audit-logs' },
             { icon: 'fa-bullhorn', label: 'Announcements', desc: `${announcements.length} broadcasts`, screen: 'announcements' },
             { icon: 'fa-comments', label: 'Community Moderation', desc: 'Manage discussions', screen: 'community' },
@@ -508,9 +516,12 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
 }
 
 // ==================== ADMIN COURSES ====================
-export function AdminCourses({ onBack }: { onBack: () => void }) {
+export function AdminCourses({ onBack, onNavigate }: { onBack: () => void; onNavigate?: (screen: string, data?: any) => void }) {
   const { courses, addCourse, deleteCourse, users } = useData();
-  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
+  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>(() => {
+    const savedTopic = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_topic') : null;
+    return savedTopic ? 'curriculum' : 'courses';
+  });
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: '', category: 'NEET', description: '', subjects: '', duration: '6 months', icon: 'fa-book', color: '#0d9488' });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -568,7 +579,7 @@ export function AdminCourses({ onBack }: { onBack: () => void }) {
 
       {viewMode === 'curriculum' ? (
         <div className="p-4">
-          <CurriculumBrowser canManage={true} />
+          <CurriculumBrowser canManage={true} onNavigateToResource={(r) => onNavigate ? onNavigate('resource-view', r) : undefined} />
         </div>
       ) : (
       <div className="p-4 space-y-3">
@@ -1232,6 +1243,13 @@ export function AuditLogs({ onBack }: { onBack: () => void }) {
 export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
   const { users, departments, courses, resources, auditLogs, quizzes, announcements, addNotification } = useData();
+  const { assessments } = useAssessments();
+
+  const totalAssessmentsCount = useMemo(() => {
+    const seen = new Set(assessments.map(a => a.id));
+    const legacyCount = quizzes.filter(q => !seen.has(q.id)).length;
+    return assessments.length + legacyCount;
+  }, [assessments, quizzes]);
   
   const [activeModal, setActiveModal] = useState<'security' | 'notifications' | 'database' | 'storage' | null>(null);
   const [dbPingStatus, setDbPingStatus] = useState<string | null>(null);
@@ -1365,7 +1383,7 @@ export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNa
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl p-5 w-full max-w-[390px] shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-2 border-b border-gray-100">
@@ -1404,7 +1422,7 @@ export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNa
                   <p className="text-[9px] text-gray-500">Resources</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
-                  <p className="text-sm font-bold text-gray-800">{quizzes.length}</p>
+                  <p className="text-sm font-bold text-gray-800">{totalAssessmentsCount}</p>
                   <p className="text-[9px] text-gray-500">Assessments</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
@@ -1448,7 +1466,7 @@ export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNa
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl p-5 w-full max-w-[390px] shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-2 border-b border-gray-100">
@@ -1520,7 +1538,7 @@ export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNa
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl p-5 w-full max-w-[390px] shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-2 border-b border-gray-100">
@@ -1594,7 +1612,7 @@ export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNa
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl p-5 w-full max-w-[390px] shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-2 border-b border-gray-100">

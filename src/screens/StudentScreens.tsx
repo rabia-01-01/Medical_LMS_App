@@ -7,13 +7,21 @@ import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../compon
 import { CurriculumBrowser } from '../features/curriculum';
 import { useResources } from '../features/resources';
 import { PerformanceAnalyticsView, useStudentAnalytics } from '../features/attempts';
+import { useAssessments } from '../features/assessments';
 
 // ==================== HOME SCREEN ====================
 export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses, announcements, communityMessages, quizzes, departments, notifications } = useData();
+  const { assessments } = useAssessments();
   const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
   const unreadNotifs = notifications.filter(n => !n.read).length;
+
+  const totalAssessmentsCount = useMemo(() => {
+    const seen = new Set(assessments.map(a => a.id));
+    const legacyCount = quizzes.filter(q => !seen.has(q.id)).length;
+    return assessments.length + legacyCount;
+  }, [assessments, quizzes]);
 
   return (
     <div>
@@ -37,7 +45,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             <p className="text-gray-300 text-[10px]">Courses</p>
           </div>
           <div onClick={() => onNavigate('quizzes')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/20 active:scale-95 transition">
-            <p className="text-teal-300 text-lg font-bold">{quizzes.filter(q => q.status === 'active').length || 4}</p>
+            <p className="text-teal-300 text-lg font-bold">{totalAssessmentsCount}</p>
             <p className="text-gray-300 text-[10px]">Active Drills</p>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
@@ -186,7 +194,10 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
 export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses, enrollStudents } = useData();
-  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
+  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>(() => {
+    const savedTopic = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_topic') : null;
+    return savedTopic ? 'curriculum' : 'courses';
+  });
   const [courseFilterMode, setCourseFilterMode] = useState<'my-courses' | 'explore'>('my-courses');
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
@@ -238,7 +249,7 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
 
       {viewMode === 'curriculum' ? (
         <div className="px-4 pb-4">
-          <CurriculumBrowser />
+          <CurriculumBrowser onNavigateToResource={(r) => onNavigate('resource-view', r)} />
         </div>
       ) : (
         <>
@@ -585,9 +596,16 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
 // ==================== PROFILE SCREEN ====================
 export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
-  const { courses } = useData();
+  const { courses, quizzes } = useData();
+  const { assessments } = useAssessments();
   const { analytics, loading: analyticsLoading } = useStudentAnalytics(user?.id);
   const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
+
+  const totalAssessmentsCount = useMemo(() => {
+    const seen = new Set(assessments.map(a => a.id));
+    const legacyCount = quizzes.filter(q => !seen.has(q.id)).length;
+    return assessments.length + legacyCount;
+  }, [assessments, quizzes]);
 
   return (
     <div>
@@ -635,7 +653,7 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
           {[
             { icon: 'fa-chart-pie', label: 'Performance Analytics', screen: 'analytics', badge: 'Phase 6' },
             { icon: 'fa-book', label: 'My Courses', screen: 'courses' },
-            { icon: 'fa-clipboard-check', label: 'Quizzes & Drills', screen: 'quizzes' },
+            { icon: 'fa-clipboard-check', label: 'Quizzes & Drills', screen: 'quizzes', badge: `${totalAssessmentsCount} Drills` },
             { icon: 'fa-building', label: 'Departments', screen: 'departments' },
             { icon: 'fa-bullhorn', label: 'Announcements', screen: 'announcements' },
             { icon: 'fa-calendar', label: 'Academic Calendar', screen: 'calendar' },

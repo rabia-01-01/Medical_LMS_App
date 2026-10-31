@@ -198,9 +198,15 @@ export async function startAttempt(
     }
   }
 
-  // Update local cache
+  // Update local cache and guarantee only ONE active attempt exists at a time
   const local = loadLocalAttempts();
-  saveLocalAttempts([newAttempt, ...local]);
+  const sanitized = local.map((a) => {
+    if (a.student_id === studentId && a.status === 'IN_PROGRESS') {
+      return { ...a, status: 'SUBMITTED' as const, submitted_at: startedAt };
+    }
+    return a;
+  });
+  saveLocalAttempts([newAttempt, ...sanitized]);
 
   return newAttempt;
 }

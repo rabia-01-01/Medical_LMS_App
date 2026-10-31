@@ -16,17 +16,33 @@ interface AssessmentRunnerProps {
   assessment: AssessmentWithQuestions;
   onBack: () => void;
   onFinish?: (result: AssessmentResultSummary) => void;
+  onReturnToAssessments?: () => void;
+  initialResults?: AssessmentResultSummary | null;
 }
 
-export function AssessmentRunner({ assessment, onBack, onFinish }: AssessmentRunnerProps) {
+export function AssessmentRunner({
+  assessment,
+  onBack,
+  onFinish,
+  onReturnToAssessments,
+  initialResults,
+}: AssessmentRunnerProps) {
   const questions = useMemo(() => assessment.questions || [], [assessment.questions]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, AssessmentAnswerRecord>>({});
   const [timeLeft, setTimeLeft] = useState((assessment.duration_minutes || 45) * 60);
   const [showPalette, setShowPalette] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [results, setResults] = useState<AssessmentResultSummary | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(!!initialResults);
+  const [results, setResults] = useState<AssessmentResultSummary | null>(initialResults || null);
+
+  const handleReturnAction = useCallback(() => {
+    if (onReturnToAssessments) {
+      onReturnToAssessments();
+    } else {
+      onBack();
+    }
+  }, [onReturnToAssessments, onBack]);
 
   const currentQ = questions[currentIdx];
   const currentRecord = currentQ ? answers[currentQ.id] : undefined;
@@ -174,7 +190,7 @@ export function AssessmentRunner({ assessment, onBack, onFinish }: AssessmentRun
           title="Examination Performance"
           subtitle={assessment.title}
           showBack
-          onBack={onBack}
+          onBack={handleReturnAction}
           gradient={false}
         />
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -303,8 +319,8 @@ export function AssessmentRunner({ assessment, onBack, onFinish }: AssessmentRun
                 <i className="fas fa-redo mr-1.5" /> Retake Assessment
               </button>
             )}
-            <button onClick={onBack} className="btn-primary w-full">
-              <i className="fas fa-home mr-1.5" /> Return to Assessments
+            <button onClick={handleReturnAction} className="btn-primary w-full">
+              <i className="fas fa-clipboard-list mr-1.5" /> Return to Assessments
             </button>
           </div>
         </div>

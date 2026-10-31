@@ -488,6 +488,9 @@ export async function fetchResources(filter?: ResourceFilter): Promise<ResourceW
       const { data, error } = await query;
 
       if (!error && data && data.length > 0) {
+        const local = loadLocalResources();
+        const localMap = new Map(local.map((l) => [l.id, l]));
+
         // Map database records into ResourceWithFile
         const mapped: ResourceWithFile[] = await Promise.all(
           data.map(async (row: any) => {
@@ -497,6 +500,7 @@ export async function fetchResources(filter?: ResourceFilter): Promise<ResourceW
             if (file?.storage_path) {
               signedUrl = await getSignedResourceUrl(file.storage_path, 3600);
             }
+            const localCached = localMap.get(row.id);
 
             return {
               id: row.id,
@@ -510,9 +514,10 @@ export async function fetchResources(filter?: ResourceFilter): Promise<ResourceW
               status: row.status,
               created_at: row.created_at,
               updated_at: row.updated_at,
-              file: file || null,
-              signedUrl,
-              sizeFormatted: file?.file_size ? formatFileSize(file.file_size) : undefined,
+              file: file || localCached?.file || null,
+              signedUrl: signedUrl || localCached?.signedUrl || null,
+              sizeFormatted: file?.file_size ? formatFileSize(file.file_size) : localCached?.sizeFormatted,
+              fileData: localCached?.fileData,
             };
           })
         );

@@ -75,7 +75,8 @@ async function runTests() {
   try {
     const { data: authData, error: authError } = await supabase.auth.getSession();
     if (authError) {
-      console.log(`  ${colors.yellow}⚠ Auth Service response:${colors.reset} ${authError.message}`);
+      console.log(`  ${colors.red}❌ Auth Service response failed:${colors.reset} ${authError.message}`);
+      process.exit(1);
     } else {
       console.log(`  ${colors.green}✔ Supabase Auth service is ONLINE & responding.${colors.reset}`);
     }
@@ -83,28 +84,34 @@ async function runTests() {
     // 4. Test Database Tables (from src/db/db.sql)
     console.log(`\n${colors.bold}[Step 4] Checking Database Schema (src/db/db.sql tables):${colors.reset}`);
     const tablesToCheck = ['profiles', 'exams', 'subjects', 'resources', 'assessments'];
-    
+    let anyTableFailed = false;
+
     for (const table of tablesToCheck) {
-      const { data, error } = await supabase.from(table).select('count', { count: 'exact', head: true });
+      const { data, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
       if (error) {
-        if (error.code === '42P01') {
-          console.log(`  ${colors.yellow}⚠ Table '${table}': Not found (Please run src/db/db.sql in your Supabase SQL Editor)${colors.reset}`);
+        if (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          console.log(`  ${colors.red}❌ Table '${table}': Not found in database schema!${colors.reset}`);
+          anyTableFailed = true;
         } else {
-          // Table exists but RLS restricted or empty
-          console.log(`  ${colors.green}✔ Table '${table}': Ready${colors.reset} (RLS active / status: ${error.message || 'OK'})`);
+          // Table exists and RLS allows head or reports RLS status
+          console.log(`  ${colors.green}✔ Table '${table}': Connected & Accessible${colors.reset} (RLS active / status: ${error.message || 'OK'})`);
         }
       } else {
         console.log(`  ${colors.green}✔ Table '${table}': Connected & Available${colors.reset}`);
       }
     }
 
+    if (anyTableFailed) {
+      console.log(`\n${colors.red}❌ Phase 1 Database Schema Test FAILED: Some tables are missing.${colors.reset}\n`);
+      process.exit(1);
+    }
+
     console.log(`\n${colors.bold}${colors.green}====================================================${colors.reset}`);
     console.log(`${colors.bold}${colors.green}  ✔ PHASE 1 TEST PASSED: SUPABASE CONNECTED!       ${colors.reset}`);
     console.log(`${colors.bold}${colors.green}====================================================${colors.reset}\n`);
-    console.log(`${colors.cyan}Tip:${colors.reset} If any tables showed "Not found", copy the contents of`);
-    console.log(`${colors.bold}src/db/db.sql${colors.reset} into your Supabase Dashboard -> SQL Editor and click 'Run'.\n`);
   } catch (err) {
     console.error(`\n${colors.red}❌ Network or Connectivity error:${colors.reset}`, err.message);
+    process.exit(1);
   }
 }
 

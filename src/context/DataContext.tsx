@@ -57,6 +57,7 @@ export interface Resource {
   signedUrl?: string; // Pre-signed temporary URL for viewing/download
   subjectId?: string;
   chapterId?: string;
+  topicId?: string;
 }
 
 export interface Announcement {
@@ -167,7 +168,7 @@ interface DataContextType {
 
   // Resources
   resources: Resource[];
-  addResource: (resource: Omit<Resource, 'id' | 'date'>) => void;
+  addResource: (resource: Omit<Resource, 'id' | 'date'> & { id?: string }) => void;
   deleteResource: (id: string) => void;
   updateResource: (id: string, data: Partial<Resource>) => void;
 
@@ -426,9 +427,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   // Resources
-  const addResource = (resource: Omit<Resource, 'id' | 'date'>) => {
-    const newResource: Resource = { ...resource, id: generateId(), date: new Date().toISOString().split('T')[0] };
-    setResources(prev => [...prev, newResource]);
+  const addResource = (resource: Omit<Resource, 'id' | 'date'> & { id?: string }) => {
+    const resourceId = resource.id || generateId();
+    const newResource: Resource = { ...resource, id: resourceId, date: new Date().toISOString().split('T')[0] };
+    setResources(prev => {
+      if (prev.some(r => r.id === resourceId)) {
+        return prev.map(r => r.id === resourceId ? newResource : r);
+      }
+      return [...prev, newResource];
+    });
     addAuditLog({ action: 'Resource Uploaded', userId: resource.uploaderId, userName: resource.uploaderName, details: `Uploaded: ${resource.title}` });
   };
 

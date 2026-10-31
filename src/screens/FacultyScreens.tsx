@@ -172,7 +172,10 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
 export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses } = useData();
-  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>('courses');
+  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>(() => {
+    const savedTopic = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_topic') : null;
+    return savedTopic ? 'curriculum' : 'courses';
+  });
   const [scopeFilter, setScopeFilter] = useState<'all' | 'assigned' | 'admin'>('all');
   const [enrollingCourse, setEnrollingCourse] = useState<Course | null>(null);
 
@@ -216,7 +219,7 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
 
       {viewMode === 'curriculum' ? (
         <div className="px-4 pb-4">
-          <CurriculumBrowser canManage={true} />
+          <CurriculumBrowser canManage={true} onNavigateToResource={(r) => onNavigate('resource-view', r)} />
         </div>
       ) : (
         <div className="p-4 space-y-3">

@@ -65,50 +65,89 @@ async function runPhase3Tests() {
       { name: 'faculty_subjects', desc: 'Faculty-Subject Mapping' },
     ];
 
+    let anyTableFailed = false;
     for (const t of curriculumTables) {
       const { data, count, error } = await supabase
         .from(t.name)
         .select('*', { count: 'exact', head: true });
 
-      if (error && error.code === '42P01') {
+      if (error && (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('schema cache'))) {
         console.log(`  ${colors.red}❌ Table '${t.name}': Not found!${colors.reset}`);
+        anyTableFailed = true;
       } else {
         console.log(`  ${colors.green}✔ Table '${t.name}': Ready & accessible${colors.reset} (${t.desc})`);
       }
     }
 
-    console.log(`\n${colors.bold}[Step 3] Testing 3-Tier Curriculum Querying (Subject → Chapter → Topic):${colors.reset}`);
-    const { data: subjects, error: subjErr } = await supabase.from('subjects').select('*');
-    if (subjErr) {
-      console.log(`  ${colors.yellow}⚠ Subjects query status: ${subjErr.message}${colors.reset}`);
-    } else {
-      console.log(`  ${colors.green}✔ Subjects query operational:${colors.reset} Found ${subjects?.length || 0} remote records`);
+    if (anyTableFailed) {
+      console.log(`  ${colors.red}❌ Phase 3 failed: one or more curriculum tables missing!${colors.reset}`);
+      process.exit(1);
     }
 
-    const { data: chapters, error: chapErr } = await supabase.from('chapters').select('*');
-    if (chapErr) {
-      console.log(`  ${colors.yellow}⚠ Chapters query status: ${chapErr.message}${colors.reset}`);
-    } else {
-      console.log(`  ${colors.green}✔ Chapters query operational:${colors.reset} Found ${chapters?.length || 0} remote records`);
+    console.log(`\n${colors.bold}[Step 3] Testing 3-Tier Curriculum Querying & Hierarchical Integrity:${colors.reset}`);
+    const { data: subjects, error: subjErr } = await supabase.from('subjects').select('*').order('name');
+    if (subjErr || !subjects || subjects.length === 0) {
+      console.log(`  ${colors.red}❌ Subjects query failed:${colors.reset}`, subjErr?.message || 'No subjects found');
+      process.exit(1);
     }
+    console.log(`  ${colors.green}✔ Subjects query operational:${colors.reset} Found ${subjects.length} subjects (${subjects.map(s => s.name).join(', ')})`);
 
-    const { data: topics, error: topErr } = await supabase.from('topics').select('*');
-    if (topErr) {
-      console.log(`  ${colors.yellow}⚠ Topics query status: ${topErr.message}${colors.reset}`);
-    } else {
-      console.log(`  ${colors.green}✔ Topics query operational:${colors.reset} Found ${topics?.length || 0} remote records`);
+    const { data: chapters, error: chapErr } = await supabase.from('chapters').select('*').order('display_order');
+    if (chapErr || !chapters || chapters.length === 0) {
+      console.log(`  ${colors.red}❌ Chapters query failed:${colors.reset}`, chapErr?.message || 'No chapters found');
+      process.exit(1);
     }
+    console.log(`  ${colors.green}✔ Chapters query operational:${colors.reset} Found ${chapters.length} chapters`);
+
+    const { data: topics, error: topErr } = await supabase.from('topics').select('*').order('display_order');
+    if (topErr || !topics || topics.length === 0) {
+      console.log(`  ${colors.red}❌ Topics query failed:${colors.reset}`, topErr?.message || 'No topics found');
+      process.exit(1);
+    }
+    console.log(`  ${colors.green}✔ Topics query operational:${colors.reset} Found ${topics.length} topics`);
+
+    // Verify foreign key integrity
+    const subjectIds = new Set(subjects.map(s => s.id));
+    const orphanedChapters = chapters.filter(c => !subjectIds.has(c.subject_id));
+    if (orphanedChapters.length > 0) {
+      console.log(`  ${colors.red}❌ Found ${orphanedChapters.length} orphaned chapters without valid subject_id!${colors.reset}`);
+      process.exit(1);
+    }
+    console.log(`  ${colors.green}✔ Hierarchy link Subject → Chapter verified: all ${chapters.length} chapters reference valid subjects`);
+
+    const chapterIds = new Set(chapters.map(c => c.id));
+    const orphanedTopics = topics.filter(t => !chapterIds.has(t.chapter_id));
+    if (orphanedTopics.length > 0) {
+      console.log(`  ${colors.red}❌ Found ${orphanedTopics.length} orphaned topics without valid chapter_id!${colors.reset}`);
+      process.exit(1);
+    }
+    console.log(`  ${colors.green}✔ Hierarchy link Chapter → Topic verified: all ${topics.length} topics reference valid chapters`);
 
     console.log(`\n${colors.bold}[Step 4] Checking UI Integration & Hooks Architecture:${colors.reset}`);
+    const curriculumServicePath = path.resolve(process.cwd(), 'src/features/curriculum/curriculumService.ts');
+    const useCurriculumPath = path.resolve(process.cwd(), 'src/features/curriculum/useCurriculum.ts');
+    const curriculumBrowserPath = path.resolve(process.cwd(), 'src/features/curriculum/CurriculumBrowser.tsx');
+
+    if (!fs.existsSync(curriculumServicePath) || !fs.existsSync(useCurriculumPath) || !fs.existsSync(curriculumBrowserPath)) {
+      console.log(`  ${colors.red}❌ Missing curriculum UI or service files!${colors.reset}`);
+      process.exit(1);
+    }
+
+    const browserSrc = fs.readFileSync(curriculumBrowserPath, 'utf8');
+    const hasStudyHub = browserSrc.includes('handleOpenChapterStudyHub') && browserSrc.includes('activeStudyChapter');
+    const hasDnd = browserSrc.includes('DndContext') && browserSrc.includes('SortableContext');
+
+    if (!hasStudyHub || !hasDnd) {
+      console.log(`  ${colors.red}❌ CurriculumBrowser missing Study Hub or DndKit sorting!${colors.reset}`);
+      process.exit(1);
+    }
     console.log(`  ${colors.green}✔ src/features/curriculum/curriculumService.ts operational`);
     console.log(`  ${colors.green}✔ src/features/curriculum/useCurriculum.ts hook operational`);
-    console.log(`  ${colors.green}✔ Interactive CurriculumBrowser rendered in StudentCourses, FacultyCourses & CourseDetail`);
+    console.log(`  ${colors.green}✔ Interactive CurriculumBrowser rendered with Chapter Study Hub and DndKit sorting`);
 
     console.log(`\n${colors.bold}${colors.green}====================================================${colors.reset}`);
     console.log(`${colors.bold}${colors.green}  ✔ PHASE 3 VERIFICATION PASSED: CURRICULUM READY!   ${colors.reset}`);
     console.log(`${colors.bold}${colors.green}====================================================${colors.reset}\n`);
-    console.log(`${colors.cyan}Tip:${colors.reset} To ensure all PostgreSQL tables, indexes, and triggers are live,`);
-    console.log(`copy the contents of ${colors.bold}src/db/db.sql${colors.reset} into your Supabase Dashboard -> SQL Editor and click 'Run'.\n`);
   } catch (err) {
     console.error(`\n${colors.red}❌ Error during Phase 3 verification:${colors.reset}`, err.message);
     process.exit(1);

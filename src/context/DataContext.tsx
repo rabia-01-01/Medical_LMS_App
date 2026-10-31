@@ -10,6 +10,7 @@ export interface User {
   role: 'admin' | 'faculty' | 'student';
   avatar: string;
   department?: string;
+  batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)'
   status: 'active' | 'suspended';
   createdAt: string;
   targetExam?: string;
@@ -21,6 +22,7 @@ export interface Department {
   icon: string;
   description: string;
   subjects: string[];
+  batches?: string[]; // 'Batch 1 (Dec)', 'Batch 2 (May/June)'
   createdAt: string;
 }
 
@@ -32,6 +34,7 @@ export interface Course {
   subjects: string[];
   facultyIds: string[];
   studentIds: string[];
+  batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)' | 'All'
   duration: string;
   icon: string;
   color: string;
@@ -58,6 +61,7 @@ export interface Resource {
   subjectId?: string;
   chapterId?: string;
   topicId?: string;
+  batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)' | 'All'
 }
 
 export interface Announcement {
@@ -85,17 +89,43 @@ export interface CalendarEvent {
   authorRole?: string;
 }
 
-export interface CommunityMessage {
+export interface CommunityReply {
   id: string;
+  parentId: string;
   authorId: string;
   authorName: string;
   authorRole: string;
+  authorAvatar?: string;
+  message: string;
+  time: string;
+  timestamp?: string;
+  likes: number;
+}
+
+export interface CommunityMessage {
+  id: string;
+  parentId?: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  authorAvatar?: string;
   message: string;
   time: string;
   timestamp?: string;
   likes: number;
   replies: number;
+  repliesList?: CommunityReply[];
   pinned: boolean;
+}
+
+export interface QuizQuestion {
+  id: number;
+  question: string;
+  imageUrl?: string;
+  options: string[];
+  correctAnswer: number;
+  marks: number;
+  negativeMarks: number;
 }
 
 export interface Quiz {
@@ -112,15 +142,7 @@ export interface Quiz {
   createdByName: string;
   startDate: string;
   endDate: string;
-}
-
-export interface QuizQuestion {
-  id: number;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  marks: number;
-  negativeMarks: number;
+  batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)' | 'All'
 }
 
 export interface Notification {
@@ -143,34 +165,49 @@ export interface AuditLog {
   details: string;
 }
 
+export interface StudentDocument {
+  id: string;
+  studentId: string;
+  studentName: string;
+  title: string;
+  category: 'Identity' | 'Academic' | 'Medical' | 'Financial';
+  status: 'Pending' | 'Verified' | 'Rejected';
+  fileUrl?: string;
+  fileName?: string;
+  submittedAt: string;
+  verifiedAt?: string;
+  verifiedBy?: string; // 'Admin' | 'Agent'
+  remarks?: string;
+}
+
 interface DataContextType {
-  // Users
+  // Users (Admin Only Management)
   users: User[];
-  addUser: (user: Omit<User, 'id' | 'createdAt'>) => void;
-  updateUser: (id: string, data: Partial<User>) => void;
-  deleteUser: (id: string) => void;
+  addUser: (user: Omit<User, 'id' | 'createdAt'>, actorRole?: string) => void;
+  updateUser: (id: string, data: Partial<User>, actorRole?: string) => void;
+  deleteUser: (id: string, actorRole?: string) => void;
   getUserById: (id: string) => User | undefined;
   getUsersByRole: (role: string) => User[];
 
-  // Departments
+  // Departments & Batches
   departments: Department[];
-  addDepartment: (dept: Omit<Department, 'id' | 'createdAt'>) => void;
-  deleteDepartment: (id: string) => void;
-  updateDepartment: (id: string, data: Partial<Department>) => void;
+  addDepartment: (dept: Omit<Department, 'id' | 'createdAt'>, actorRole?: string) => void;
+  deleteDepartment: (id: string, actorRole?: string) => void;
+  updateDepartment: (id: string, data: Partial<Department>, actorRole?: string) => void;
 
   // Courses
   courses: Course[];
-  addCourse: (course: Omit<Course, 'id' | 'createdAt'>) => void;
-  deleteCourse: (id: string) => void;
-  updateCourse: (id: string, data: Partial<Course>) => void;
-  enrollStudents: (courseId: string, studentIds: string[], enrolledBy?: { id: string; name: string }) => void;
-  unenrollStudent: (courseId: string, studentId: string, removedBy?: { id: string; name: string }) => void;
+  addCourse: (course: Omit<Course, 'id' | 'createdAt'>, actorRole?: string) => void;
+  deleteCourse: (id: string, actorRole?: string) => void;
+  updateCourse: (id: string, data: Partial<Course>, actorRole?: string) => void;
+  enrollStudents: (courseId: string, studentIds: string[], enrolledBy?: { id: string; name: string; role?: string }) => void;
+  unenrollStudent: (courseId: string, studentId: string, removedBy?: { id: string; name: string; role?: string }) => void;
 
-  // Resources
+  // Resources (Admin Only Management)
   resources: Resource[];
-  addResource: (resource: Omit<Resource, 'id' | 'date'> & { id?: string }) => void;
-  deleteResource: (id: string) => void;
-  updateResource: (id: string, data: Partial<Resource>) => void;
+  addResource: (resource: Omit<Resource, 'id' | 'date'> & { id?: string }, actorRole?: string) => void;
+  deleteResource: (id: string, actorRole?: string) => void;
+  updateResource: (id: string, data: Partial<Resource>, actorRole?: string) => void;
 
   // Announcements
   announcements: Announcement[];
@@ -183,10 +220,11 @@ interface DataContextType {
   addCalendarEvent: (event: Omit<CalendarEvent, 'id'>) => void;
   deleteCalendarEvent: (id: string) => void;
 
-  // Community
+  // Community (Nested Replies & Threads; Admin Only Deletion)
   communityMessages: CommunityMessage[];
   addCommunityMessage: (msg: Omit<CommunityMessage, 'id' | 'time' | 'likes' | 'replies'>) => void;
-  deleteCommunityMessage: (id: string) => void;
+  addCommunityReply: (parentId: string, reply: { authorId: string; authorName: string; authorRole: string; message: string; authorAvatar?: string }) => void;
+  deleteCommunityMessage: (id: string, actorRole?: string) => void;
   togglePinMessage: (id: string) => void;
 
   // Quizzes
@@ -195,15 +233,21 @@ interface DataContextType {
   deleteQuiz: (id: string) => void;
   updateQuiz: (id: string, data: Partial<Quiz>) => void;
 
-  // Notifications
+  // Notifications (Admin Only Creation & Dispatch)
   notifications: Notification[];
-  addNotification: (notif: Omit<Notification, 'id' | 'time' | 'read'>) => void;
+  addNotification: (notif: Omit<Notification, 'id' | 'time' | 'read'>, actorRole?: string) => void;
   markNotificationRead: (id: string) => void;
   markAllRead: (userId: string) => void;
 
-  // Audit
+  // Audit Logs
   auditLogs: AuditLog[];
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
+
+  // Student Documentation (Agent + Admin Only Editing; Student View Only)
+  studentDocuments: StudentDocument[];
+  addStudentDocument: (doc: Omit<StudentDocument, 'id' | 'submittedAt'>, editorRole: 'admin' | 'agent') => boolean;
+  updateStudentDocument: (id: string, updates: Partial<StudentDocument>, editorRole: 'admin' | 'agent') => boolean;
+  deleteStudentDocument: (id: string, editorRole: 'admin' | 'agent') => boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -230,11 +274,247 @@ function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
+export const DEFAULT_STUDENT_DOCS: StudentDocument[] = [
+  {
+    id: 'sdoc-1',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    title: 'NEET-UG Admit Card & Verification Slip',
+    category: 'Academic',
+    status: 'Verified',
+    submittedAt: '2026-10-10T10:00:00.000Z',
+    verifiedAt: '2026-10-15',
+    verifiedBy: 'Admin',
+    remarks: 'Roll number and photograph authenticated with NTA records.',
+  },
+  {
+    id: 'sdoc-2',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    title: '12th Standard Science Board Marksheet',
+    category: 'Academic',
+    status: 'Verified',
+    submittedAt: '2026-10-11T12:00:00.000Z',
+    verifiedAt: '2026-10-16',
+    verifiedBy: 'Agent',
+    remarks: 'Physics (92), Chemistry (95), Biology (98) verified via automated board API.',
+  },
+  {
+    id: 'sdoc-3',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    title: 'National Identity Proof (Aadhaar / Passport)',
+    category: 'Identity',
+    status: 'Verified',
+    submittedAt: '2026-10-12T14:30:00.000Z',
+    verifiedAt: '2026-10-17',
+    verifiedBy: 'Admin',
+    remarks: 'Biometric identity match confirmed.',
+  },
+  {
+    id: 'sdoc-4',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    title: 'Institutional Medical Fitness Certificate',
+    category: 'Medical',
+    status: 'Verified',
+    submittedAt: '2026-10-14T09:15:00.000Z',
+    verifiedAt: '2026-10-18',
+    verifiedBy: 'Agent',
+    remarks: 'Certified by Registered Medical Practitioner.',
+  },
+  {
+    id: 'sdoc-5',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    title: 'Batch 1 (Dec) Registration & Tuition Fee Receipt',
+    category: 'Financial',
+    status: 'Verified',
+    submittedAt: '2026-10-15T16:00:00.000Z',
+    verifiedAt: '2026-10-20',
+    verifiedBy: 'Admin',
+    remarks: 'Tuition and laboratory deposit received in full for Batch 1 (Dec).',
+  },
+  {
+    id: 'sdoc-6',
+    studentId: 'u-student-2',
+    studentName: 'Alex Rivera',
+    title: 'IMAT Exam Registration Slip',
+    category: 'Academic',
+    status: 'Pending',
+    submittedAt: '2026-10-25T11:00:00.000Z',
+    remarks: 'Pending Universitaly portal validation.',
+  },
+];
+
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<User[]>(() => loadFromStorage('sim_users', []));
-  const [departments, setDepartments] = useState<Department[]>(() => loadFromStorage('sim_departments', []));
-  const [courses, setCourses] = useState<Course[]>(() => loadFromStorage('sim_courses', []));
-  const [resources, setResources] = useState<Resource[]>(() => loadFromStorage('sim_resources', []));
+  const [users, setUsers] = useState<User[]>(() => {
+    const stored = loadFromStorage<User[]>('sim_users', []);
+    if (!stored || stored.length === 0) {
+      return [
+        {
+          id: 'u-admin-1',
+          name: 'Alice Kernel',
+          email: 'admin@medical.lms',
+          phone: '+1 555-0100',
+          password: 'password',
+          role: 'admin',
+          avatar: '👩‍💼',
+          department: 'Academic Directorate',
+          batch: 'All',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'u-faculty-1',
+          name: 'Dr. Sarah Jenkins',
+          email: 'sarah.jenkins@medical.lms',
+          phone: '+1 555-0101',
+          password: 'password',
+          role: 'faculty',
+          avatar: '👩‍⚕️',
+          department: 'Pre-Clinical Sciences',
+          batch: 'All',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'u-student-1',
+          name: 'Mary',
+          email: 'mary@medical.lms',
+          phone: '+1 555-0102',
+          password: 'password',
+          role: 'student',
+          avatar: '👩‍🎓',
+          department: 'Pre-Clinical Sciences',
+          batch: 'Batch 1 (Dec)',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          targetExam: 'NEET-UG',
+        },
+        {
+          id: 'u-student-2',
+          name: 'Alex Rivera',
+          email: 'alex@medical.lms',
+          phone: '+1 555-0103',
+          password: 'password',
+          role: 'student',
+          avatar: '👨‍🎓',
+          department: 'Pre-Clinical Sciences',
+          batch: 'Batch 2 (May/June)',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          targetExam: 'IMAT (Italy)',
+        },
+      ];
+    }
+    return stored.map((u, i) => ({
+      ...u,
+      batch: u.batch || (u.role === 'student' ? (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)') : 'All'),
+    }));
+  });
+
+  const [departments, setDepartments] = useState<Department[]>(() => {
+    const stored = loadFromStorage<Department[]>('sim_departments', []);
+    if (!stored || stored.length === 0) {
+      return [
+        {
+          id: 'dept-1',
+          name: 'Pre-Clinical Sciences',
+          icon: 'fa-dna',
+          description: 'Foundations of Human Anatomy, Physiology, Cell Biology & Medical Biochemistry',
+          subjects: ['Biology', 'Chemistry'],
+          batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'dept-2',
+          name: 'Paraclinical & Quantitative Sciences',
+          icon: 'fa-calculator',
+          description: 'Pathology, Medical Physics, Biostatistics, Maths & Clinical Reasoning',
+          subjects: ['Physics', 'Maths', 'Logical Reasoning'],
+          batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'dept-3',
+          name: 'Clinical Medicine & Humanities',
+          icon: 'fa-globe-americas',
+          description: 'Internal Medicine, Healthcare GK, Bioethics & Scientific English',
+          subjects: ['English', 'GK'],
+          batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+    return stored.map((d) => ({
+      ...d,
+      batches: d.batches && d.batches.length > 0 ? d.batches : ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
+    }));
+  });
+
+  const [courses, setCourses] = useState<Course[]>(() => {
+    const stored = loadFromStorage<Course[]>('sim_courses', []);
+    if (!stored || stored.length === 0) {
+      return [
+        {
+          id: 'crs-1',
+          name: 'NEET-UG Comprehensive Masterclass (Dec)',
+          category: 'NEET-UG',
+          description: 'Full syllabus intensive coverage with DPPs and mock drills for December cohort',
+          subjects: ['Biology', 'Physics', 'Chemistry'],
+          facultyIds: ['u-faculty-1'],
+          studentIds: ['u-student-1'],
+          batch: 'Batch 1 (Dec)',
+          duration: '12 Months',
+          icon: 'fa-heartbeat',
+          color: 'bg-emerald-600',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'crs-2',
+          name: 'Target NEET Super-Sprint (May/June)',
+          category: 'NEET-UG',
+          description: 'Accelerated revision and high-yield question series for May/June batch',
+          subjects: ['Biology', 'Chemistry', 'Maths'],
+          facultyIds: ['u-faculty-1'],
+          studentIds: ['u-student-2'],
+          batch: 'Batch 2 (May/June)',
+          duration: '6 Months',
+          icon: 'fa-stethoscope',
+          color: 'bg-blue-600',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'crs-3',
+          name: 'Clinical Aptitude & Reasoning Foundation',
+          category: 'General',
+          description: 'Logic, quantitative reasoning, and scientific English for medical entrance exams',
+          subjects: ['Logical Reasoning', 'Maths', 'English', 'GK'],
+          facultyIds: ['u-faculty-1'],
+          studentIds: ['u-student-1'],
+          batch: 'Batch 1 (Dec)',
+          duration: '8 Months',
+          icon: 'fa-brain',
+          color: 'bg-purple-600',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+    return stored.map((c, i) => ({
+      ...c,
+      batch: c.batch || (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)'),
+    }));
+  });
+
+  const [resources, setResources] = useState<Resource[]>(() => {
+    const stored = loadFromStorage<Resource[]>('sim_resources', []);
+    return stored.map((r, i) => ({
+      ...r,
+      batch: r.batch || (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)'),
+    }));
+  });
+
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => loadFromStorage('sim_announcements', []));
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => {
     return loadFromStorage('sim_calendar_events', [
@@ -247,7 +527,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         timestamp: new Date().toISOString(),
         type: 'exam',
         authorName: 'Academic Directorate',
-        authorRole: 'Admin'
+        authorRole: 'Admin',
       },
       {
         id: 'cal-default-2',
@@ -258,10 +538,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         timestamp: new Date(Date.now() + 86400000).toISOString(),
         type: 'lecture',
         authorName: 'Dr. Sarah Jenkins',
-        authorRole: 'Faculty'
-      }
+        authorRole: 'Faculty',
+      },
     ]);
   });
+
   const [communityMessages, setCommunityMessages] = useState<CommunityMessage[]>(() => {
     const stored = loadFromStorage<CommunityMessage[]>('sim_community', []);
     if (!stored || stored.length === 0) {
@@ -271,54 +552,107 @@ export function DataProvider({ children }: { children: ReactNode }) {
           authorId: 'u-faculty-1',
           authorName: 'Dr. Sarah Jenkins',
           authorRole: 'Faculty',
-          message: 'Welcome everyone! For this week’s Human Physiology module, please pay special attention to the Frank-Starling cardiac relationship and renal clearance mechanisms. Feel free to ask questions here!',
+          message:
+            'Welcome everyone! For this week’s Human Physiology module, please pay special attention to the Frank-Starling cardiac relationship and renal clearance mechanisms. Feel free to ask questions here!',
           time: format(new Date(Date.now() - 7200000), 'dd MMM yyyy, hh:mm a'),
           timestamp: new Date(Date.now() - 7200000).toISOString(),
           likes: 12,
-          replies: 4,
+          replies: 2,
           pinned: true,
+          repliesList: [
+            {
+              id: 'rep-1-1',
+              parentId: 'comm-msg-1',
+              authorId: 'u-student-1',
+              authorName: 'Mary',
+              authorRole: 'Student',
+              message:
+                'Thank you Dr. Jenkins! Does the length-tension curve in cardiac muscle peak at the same sarcomere length as skeletal muscle?',
+              time: format(new Date(Date.now() - 5400000), 'dd MMM yyyy, hh:mm a'),
+              timestamp: new Date(Date.now() - 5400000).toISOString(),
+              likes: 4,
+            },
+            {
+              id: 'rep-1-2',
+              parentId: 'comm-msg-1',
+              authorId: 'u-faculty-1',
+              authorName: 'Dr. Sarah Jenkins',
+              authorRole: 'Faculty',
+              message:
+                'Great question Mary! Cardiac muscle operates predominantly on the ascending limb of the Frank-Starling curve (~1.8 to 2.2 µm), giving it higher sensitivity to stretch.',
+              time: format(new Date(Date.now() - 3600000), 'dd MMM yyyy, hh:mm a'),
+              timestamp: new Date(Date.now() - 3600000).toISOString(),
+              likes: 7,
+            },
+          ],
         },
         {
           id: 'comm-msg-2',
           authorId: 'u-student-1',
           authorName: 'Mary',
           authorRole: 'Student',
-          message: 'Could someone clarify whether secondary active transport in renal tubules uses ATP directly or relies on the sodium-potassium ATPase electrochemical gradient?',
+          message:
+            'Could someone clarify whether secondary active transport in renal tubules uses ATP directly or relies on the sodium-potassium ATPase electrochemical gradient?',
           time: format(new Date(Date.now() - 3600000), 'dd MMM yyyy, hh:mm a'),
           timestamp: new Date(Date.now() - 3600000).toISOString(),
           likes: 5,
-          replies: 2,
+          replies: 1,
           pinned: false,
+          repliesList: [
+            {
+              id: 'rep-2-1',
+              parentId: 'comm-msg-2',
+              authorId: 'u-faculty-1',
+              authorName: 'Dr. Sarah Jenkins',
+              authorRole: 'Faculty',
+              message:
+                'Secondary active transport (e.g. SGLT-2) relies on the Na+ gradient established by primary active Na+/K+ ATPase, consuming indirect metabolic energy.',
+              time: format(new Date(Date.now() - 1800000), 'dd MMM yyyy, hh:mm a'),
+              timestamp: new Date(Date.now() - 1800000).toISOString(),
+              likes: 6,
+            },
+          ],
         },
         {
           id: 'comm-msg-3',
           authorId: 'u-admin-1',
           authorName: 'Alice Kernel',
           authorRole: 'Admin',
-          message: 'All students: The upcoming NEET Diagnostic Drill 1 has been scheduled on the Academic Calendar. Please ensure you review your allocated topics in the Curriculum Browser.',
+          message:
+            'All students: The upcoming NEET Diagnostic Drill 1 has been scheduled on the Academic Calendar. Please ensure you review your allocated topics in the Curriculum Browser.',
           time: format(new Date(Date.now() - 1800000), 'dd MMM yyyy, hh:mm a'),
           timestamp: new Date(Date.now() - 1800000).toISOString(),
           likes: 8,
-          replies: 1,
+          replies: 0,
           pinned: false,
-        }
+          repliesList: [],
+        },
       ];
     }
     return stored.map((msg, idx) => {
-      if (!msg.time || msg.time === 'Just now') {
-        const msgDate = msg.timestamp ? new Date(msg.timestamp) : new Date(Date.now() - (idx + 1) * 3600000);
-        return {
-          ...msg,
-          time: format(msgDate, 'dd MMM yyyy, hh:mm a'),
-          timestamp: msg.timestamp || msgDate.toISOString(),
-        };
-      }
-      return msg;
+      const msgDate = msg.timestamp ? new Date(msg.timestamp) : new Date(Date.now() - (idx + 1) * 3600000);
+      return {
+        ...msg,
+        time: msg.time && msg.time !== 'Just now' ? msg.time : format(msgDate, 'dd MMM yyyy, hh:mm a'),
+        timestamp: msg.timestamp || msgDate.toISOString(),
+        repliesList: msg.repliesList || [],
+      };
     });
   });
-  const [quizzes, setQuizzes] = useState<Quiz[]>(() => loadFromStorage('sim_quizzes', []));
+
+  const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
+    const stored = loadFromStorage<Quiz[]>('sim_quizzes', []);
+    return stored.map((q, i) => ({
+      ...q,
+      batch: q.batch || (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)'),
+    }));
+  });
+
   const [notifications, setNotifications] = useState<Notification[]>(() => loadFromStorage('sim_notifications', []));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => loadFromStorage('sim_audit', []));
+  const [studentDocuments, setStudentDocuments] = useState<StudentDocument[]>(() =>
+    loadFromStorage('sim_student_documents', DEFAULT_STUDENT_DOCS)
+  );
 
   // Persist to localStorage
   useEffect(() => { saveToStorage('sim_users', users); }, [users]);
@@ -331,105 +665,133 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveToStorage('sim_quizzes', quizzes); }, [quizzes]);
   useEffect(() => { saveToStorage('sim_notifications', notifications); }, [notifications]);
   useEffect(() => { saveToStorage('sim_audit', auditLogs); }, [auditLogs]);
+  useEffect(() => { saveToStorage('sim_student_documents', studentDocuments); }, [studentDocuments]);
 
-  // Users
-  const addUser = (user: Omit<User, 'id' | 'createdAt'>) => {
+  // Users (Admin Only)
+  const addUser = (user: Omit<User, 'id' | 'createdAt'>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can add users.');
+      return;
+    }
     const newUser: User = { ...user, id: generateId(), createdAt: new Date().toISOString() };
     setUsers(prev => [...prev, newUser]);
-    addAuditLog({ action: 'User Created', userId: 'system', userName: 'System', details: `Created user: ${user.name} (${user.role})` });
+    addAuditLog({ action: 'User Created', userId: 'system', userName: 'Administrator', details: `Created user: ${user.name} (${user.role})` });
   };
 
-  const updateUser = (id: string, data: Partial<User>) => {
+  const updateUser = (id: string, data: Partial<User>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can update users.');
+      return;
+    }
     setUsers(prev => prev.map(u => u.id === id ? { ...u, ...data } : u));
   };
 
-  const deleteUser = (id: string) => {
+  const deleteUser = (id: string, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can delete users.');
+      return;
+    }
     const user = users.find(u => u.id === id);
     setUsers(prev => prev.filter(u => u.id !== id));
-    addAuditLog({ action: 'User Deleted', userId: 'system', userName: 'System', details: `Deleted user: ${user?.name}` });
+    addAuditLog({ action: 'User Deleted', userId: 'system', userName: 'Administrator', details: `Deleted user: ${user?.name}` });
   };
 
   const getUserById = (id: string) => users.find(u => u.id === id);
   const getUsersByRole = (role: string) => users.filter(u => u.role === role);
 
   // Departments
-  const addDepartment = (dept: Omit<Department, 'id' | 'createdAt'>) => {
-    const newDept: Department = { ...dept, id: generateId(), createdAt: new Date().toISOString() };
+  const addDepartment = (dept: Omit<Department, 'id' | 'createdAt'>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') return;
+    const newDept: Department = {
+      ...dept,
+      id: generateId(),
+      batches: dept.batches || ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
+      createdAt: new Date().toISOString(),
+    };
     setDepartments(prev => [...prev, newDept]);
-    addAuditLog({ action: 'Department Created', userId: 'system', userName: 'System', details: `Created department: ${dept.name}` });
   };
 
-  const deleteDepartment = (id: string) => {
-    const dept = departments.find(d => d.id === id);
+  const deleteDepartment = (id: string, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') return;
     setDepartments(prev => prev.filter(d => d.id !== id));
-    addAuditLog({ action: 'Department Deleted', userId: 'system', userName: 'System', details: `Deleted department: ${dept?.name}` });
   };
 
-  const updateDepartment = (id: string, data: Partial<Department>) => {
+  const updateDepartment = (id: string, data: Partial<Department>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') return;
     setDepartments(prev => prev.map(d => d.id === id ? { ...d, ...data } : d));
   };
 
   // Courses
-  const addCourse = (course: Omit<Course, 'id' | 'createdAt'>) => {
+  const addCourse = (course: Omit<Course, 'id' | 'createdAt'>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can add courses.');
+      return;
+    }
     const newCourse: Course = { ...course, id: generateId(), createdAt: new Date().toISOString() };
     setCourses(prev => [...prev, newCourse]);
-    addAuditLog({ action: 'Course Created', userId: 'system', userName: 'System', details: `Created course: ${course.name}` });
+    addAuditLog({ action: 'Course Created', userId: 'admin', userName: 'Administrator', details: `Created course: ${course.name}` });
   };
 
-  const deleteCourse = (id: string) => {
-    const course = courses.find(c => c.id === id);
+  const deleteCourse = (id: string, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can delete courses.');
+      return;
+    }
     setCourses(prev => prev.filter(c => c.id !== id));
-    addAuditLog({ action: 'Course Deleted', userId: 'system', userName: 'System', details: `Deleted course: ${course?.name}` });
   };
 
-  const updateCourse = (id: string, data: Partial<Course>) => {
+  const updateCourse = (id: string, data: Partial<Course>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can update courses.');
+      return;
+    }
     setCourses(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
   };
 
-  const enrollStudents = (courseId: string, studentIdsToAdd: string[], enrolledBy?: { id: string; name: string }) => {
+  const enrollStudents = (courseId: string, studentIdsToAdd: string[], enrolledBy?: { id: string; name: string; role?: string }) => {
+    if (enrolledBy?.role && enrolledBy.role !== 'admin') {
+      console.warn('[DataContext] Permission Denied: Faculty cannot enroll students. ONLY Admin has student enrollment rights.');
+      return;
+    }
     setCourses(prev => prev.map(c => {
       if (c.id !== courseId) return c;
-      const current = new Set(c.studentIds || []);
-      studentIdsToAdd.forEach(id => current.add(id));
-      return { ...c, studentIds: Array.from(current) };
+      const existing = c.studentIds || [];
+      const merged = Array.from(new Set([...existing, ...studentIdsToAdd]));
+      return { ...c, studentIds: merged };
     }));
     const targetCourse = courses.find(c => c.id === courseId);
     addAuditLog({
       action: 'Students Enrolled',
-      userId: enrolledBy?.id || 'faculty',
-      userName: enrolledBy?.name || 'Faculty',
+      userId: enrolledBy?.id || 'admin',
+      userName: enrolledBy?.name || 'Administrator',
       details: `Enrolled ${studentIdsToAdd.length} student(s) into course "${targetCourse?.name || courseId}"`
-    });
-    studentIdsToAdd.forEach(sId => {
-      addNotification({
-        title: 'New Course Enrollment',
-        message: `You have been enrolled in "${targetCourse?.name || 'course'}". Check your courses to view resources!`,
-        type: 'enrollment',
-        targetRole: 'student',
-        targetCourseId: courseId,
-      });
     });
   };
 
-  const unenrollStudent = (courseId: string, studentIdToRemove: string, removedBy?: { id: string; name: string }) => {
+  const unenrollStudent = (courseId: string, studentIdToRemove: string, removedBy?: { id: string; name: string; role?: string }) => {
+    if (removedBy?.role && removedBy.role !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can unenroll students.');
+      return;
+    }
     setCourses(prev => prev.map(c => {
       if (c.id !== courseId) return c;
       return { ...c, studentIds: (c.studentIds || []).filter(id => id !== studentIdToRemove) };
     }));
-    const targetCourse = courses.find(c => c.id === courseId);
-    const targetStudent = users.find(u => u.id === studentIdToRemove);
-    addAuditLog({
-      action: 'Student Unenrolled',
-      userId: removedBy?.id || 'faculty',
-      userName: removedBy?.name || 'Faculty',
-      details: `Removed ${targetStudent?.name || studentIdToRemove} from course "${targetCourse?.name || courseId}"`
-    });
   };
 
-  // Resources
-  const addResource = (resource: Omit<Resource, 'id' | 'date'> & { id?: string }) => {
+  // Resources (ONLY Admin Can Add / Delete)
+  const addResource = (resource: Omit<Resource, 'id' | 'date'> & { id?: string }, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Security: ONLY Admin can add resources.');
+      return;
+    }
     const resourceId = resource.id || generateId();
-    const newResource: Resource = { ...resource, id: resourceId, date: new Date().toISOString().split('T')[0] };
+    const newResource: Resource = {
+      ...resource,
+      id: resourceId,
+      date: new Date().toISOString().split('T')[0],
+      batch: resource.batch || 'Batch 1 (Dec)',
+    };
     setResources(prev => {
       if (prev.some(r => r.id === resourceId)) {
         return prev.map(r => r.id === resourceId ? newResource : r);
@@ -439,13 +801,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     addAuditLog({ action: 'Resource Uploaded', userId: resource.uploaderId, userName: resource.uploaderName, details: `Uploaded: ${resource.title}` });
   };
 
-  const deleteResource = (id: string) => {
+  const deleteResource = (id: string, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Security: ONLY Admin can delete resources.');
+      return;
+    }
     const resource = resources.find(r => r.id === id);
     setResources(prev => prev.filter(r => r.id !== id));
-    addAuditLog({ action: 'Resource Deleted', userId: 'system', userName: 'System', details: `Deleted resource: ${resource?.title}` });
+    addAuditLog({ action: 'Resource Deleted', userId: 'admin', userName: 'Administrator', details: `Deleted resource: ${resource?.title}` });
   };
 
-  const updateResource = (id: string, data: Partial<Resource>) => {
+  const updateResource = (id: string, data: Partial<Resource>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Security: ONLY Admin can update resources.');
+      return;
+    }
     setResources(prev => prev.map(r => r.id === id ? { ...r, ...data } : r));
   };
 
@@ -512,7 +882,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setCalendarEvents(prev => prev.filter(e => e.id !== id));
   };
 
-  // Community
+  // Community (Nested Replies & Threads; Admin Only Deletion)
   const addCommunityMessage = (msg: Omit<CommunityMessage, 'id' | 'time' | 'likes' | 'replies'>) => {
     const now = new Date();
     const formattedDate = format(now, 'dd MMM yyyy, hh:mm a');
@@ -523,11 +893,55 @@ export function DataProvider({ children }: { children: ReactNode }) {
       timestamp: now.toISOString(),
       likes: 0,
       replies: 0,
+      repliesList: [],
     };
     setCommunityMessages(prev => [newMsg, ...prev]);
   };
 
-  const deleteCommunityMessage = (id: string) => {
+  const addCommunityReply = (
+    parentId: string,
+    reply: { authorId: string; authorName: string; authorRole: string; message: string; authorAvatar?: string }
+  ) => {
+    const now = new Date();
+    const formattedDate = format(now, 'dd MMM yyyy, hh:mm a');
+    const newReply: CommunityReply = {
+      id: generateId(),
+      parentId,
+      authorId: reply.authorId,
+      authorName: reply.authorName,
+      authorRole: reply.authorRole,
+      authorAvatar: reply.authorAvatar,
+      message: reply.message,
+      time: formattedDate,
+      timestamp: now.toISOString(),
+      likes: 0,
+    };
+
+    setCommunityMessages(prev =>
+      prev.map(msg => {
+        if (msg.id !== parentId) return msg;
+        const currentReplies = msg.repliesList || [];
+        return {
+          ...msg,
+          replies: (msg.replies || 0) + 1,
+          repliesList: [...currentReplies, newReply],
+        };
+      })
+    );
+
+    addAuditLog({
+      action: 'Community Reply Added',
+      userId: reply.authorId,
+      userName: reply.authorName,
+      details: `Replied to thread ${parentId}`
+    });
+  };
+
+  const deleteCommunityMessage = (id: string, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] ONLY Admin can delete community messages.');
+      return;
+    }
     setCommunityMessages(prev => prev.filter(m => m.id !== id));
   };
 
@@ -552,8 +966,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setQuizzes(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
   };
 
-  // Notifications
-  const addNotification = (notif: Omit<Notification, 'id' | 'time' | 'read'>) => {
+  // Notifications (Admin Only Dispatch)
+  const addNotification = (notif: Omit<Notification, 'id' | 'time' | 'read'>, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] ONLY Admin can dispatch notifications.');
+      return;
+    }
     const now = new Date();
     const newNotif: Notification = {
       ...notif,
@@ -578,6 +996,66 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setAuditLogs(prev => [newLog, ...prev]);
   };
 
+  // Student Documentation (Agent + Admin Only)
+  const addStudentDocument = (doc: Omit<StudentDocument, 'id' | 'submittedAt'>, editorRole: 'admin' | 'agent'): boolean => {
+    if (editorRole !== 'admin' && editorRole !== 'agent') {
+      console.warn('[DataContext] Security: ONLY Admin and Agent can modify documentation lists.');
+      return false;
+    }
+    const newDoc: StudentDocument = {
+      ...doc,
+      id: generateId(),
+      submittedAt: new Date().toISOString(),
+    };
+    setStudentDocuments(prev => [newDoc, ...prev]);
+    addAuditLog({
+      action: 'Student Document Added',
+      userId: editorRole,
+      userName: editorRole === 'admin' ? 'Administrator' : 'AI Agent',
+      details: `Added document: "${doc.title}" for ${doc.studentName}`
+    });
+    return true;
+  };
+
+  const updateStudentDocument = (id: string, updates: Partial<StudentDocument>, editorRole: 'admin' | 'agent'): boolean => {
+    if (editorRole !== 'admin' && editorRole !== 'agent') {
+      console.warn('[DataContext] Security: ONLY Admin and Agent can modify documentation lists.');
+      return false;
+    }
+    setStudentDocuments(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      const isNowVerified = updates.status === 'Verified';
+      return {
+        ...d,
+        ...updates,
+        verifiedAt: isNowVerified ? (updates.verifiedAt || new Date().toISOString().split('T')[0]) : d.verifiedAt,
+        verifiedBy: isNowVerified ? (editorRole === 'admin' ? 'Admin' : 'Agent') : d.verifiedBy,
+      };
+    }));
+    addAuditLog({
+      action: 'Student Document Status Updated',
+      userId: editorRole,
+      userName: editorRole === 'admin' ? 'Administrator' : 'AI Agent',
+      details: `Updated document ${id} to ${updates.status || 'updated'}`
+    });
+    return true;
+  };
+
+  const deleteStudentDocument = (id: string, editorRole: 'admin' | 'agent'): boolean => {
+    if (editorRole !== 'admin' && editorRole !== 'agent') {
+      console.warn('[DataContext] Security: ONLY Admin and Agent can modify documentation lists.');
+      return false;
+    }
+    setStudentDocuments(prev => prev.filter(d => d.id !== id));
+    addAuditLog({
+      action: 'Student Document Removed',
+      userId: editorRole,
+      userName: editorRole === 'admin' ? 'Administrator' : 'AI Agent',
+      details: `Removed document ${id}`
+    });
+    return true;
+  };
+
   return (
     <DataContext.Provider value={{
       users, addUser, updateUser, deleteUser, getUserById, getUsersByRole,
@@ -586,10 +1064,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       resources, addResource, deleteResource, updateResource,
       announcements, addAnnouncement, deleteAnnouncement, updateAnnouncement,
       calendarEvents, addCalendarEvent, deleteCalendarEvent,
-      communityMessages, addCommunityMessage, deleteCommunityMessage, togglePinMessage,
+      communityMessages, addCommunityMessage, addCommunityReply, deleteCommunityMessage, togglePinMessage,
       quizzes, addQuiz, deleteQuiz, updateQuiz,
       notifications, addNotification, markNotificationRead, markAllRead,
       auditLogs, addAuditLog,
+      studentDocuments, addStudentDocument, updateStudentDocument, deleteStudentDocument,
     }}>
       {children}
     </DataContext.Provider>

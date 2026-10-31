@@ -14,7 +14,8 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
   const { user } = useAuth();
   const { courses, announcements, communityMessages, quizzes, departments, notifications } = useData();
   const { assessments } = useAssessments();
-  const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
+  const studentBatch = user?.batch || 'Batch 1 (Dec)';
+  const myCourses = courses.filter(c => (!c.batch || c.batch === 'All' || c.batch === studentBatch) && c.studentIds.includes(user?.id || ''));
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   const totalAssessmentsCount = useMemo(() => {
@@ -30,6 +31,10 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
           <div>
             <p className="text-gray-300 text-xs">Welcome back,</p>
             <h1 className="text-white text-lg font-bold">{user?.name || 'Student'}</h1>
+            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-400/20 text-teal-200 border border-teal-300/30">
+              <i className="fas fa-layer-group text-[9px]" />
+              {user?.batch || 'Batch 1 (Dec)'}
+            </span>
           </div>
           <div className="flex items-center gap-3 relative z-10">
             <button onClick={() => onNavigate('notifications')} className="relative w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
@@ -306,11 +311,19 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
 
             {displayedCourses.map((course) => {
               const isEnrolled = course.studentIds.includes(user?.id || '');
+              const studentBatch = user?.batch || 'Batch 1 (Dec)';
+              const isOtherBatch = course.batch && course.batch !== 'All' && course.batch !== studentBatch;
               return (
                 <div 
                   key={course.id} 
-                  onClick={() => onNavigate('course-detail', course)} 
-                  className="card cursor-pointer hover:border-teal-200 active:bg-gray-50 transition"
+                  onClick={() => {
+                    if (isOtherBatch) {
+                      alert(`Batch Restricted: This course belongs to ${course.batch}. You are enrolled in ${studentBatch}. Students of one batch cannot access another.`);
+                      return;
+                    }
+                    onNavigate('course-detail', course);
+                  }} 
+                  className={`card cursor-pointer transition ${isOtherBatch ? 'opacity-65 border-dashed border-gray-300' : 'hover:border-teal-200 active:bg-gray-50'}`}
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
@@ -319,7 +332,11 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-1">
                         <p className="text-sm font-bold text-gray-800 truncate">{course.name}</p>
-                        {isEnrolled ? (
+                        {isOtherBatch ? (
+                          <span className="badge bg-gray-100 text-gray-600 text-[9px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1 border border-gray-200">
+                            <i className="fas fa-lock text-[8px]" /> {course.batch}
+                          </span>
+                        ) : isEnrolled ? (
                           <span className="badge bg-emerald-100 text-emerald-800 text-[10px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1">
                             <i className="fas fa-check text-[9px]" /> Enrolled
                           </span>
@@ -434,7 +451,8 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
   }, [cloudResources, localResources]);
 
   // Show published resources to students
-  let filtered = allResources.filter((r: any) => r.status === 'published' || !r.status);
+  const studentBatch = user?.batch || 'Batch 1 (Dec)';
+  let filtered = allResources.filter((r: any) => (r.status === 'published' || !r.status) && (!r.batch || r.batch === 'All' || r.batch === studentBatch));
   if (filter !== 'All') {
     const fLower = filter.toLowerCase();
     filtered = filtered.filter((r: any) => {
@@ -534,8 +552,22 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
 // ==================== COMMUNITY SCREEN ====================
 export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
-  const { communityMessages, addCommunityMessage } = useData();
+  const { communityMessages, addCommunityMessage, addCommunityReply } = useData();
   const [newMessage, setNewMessage] = useState('');
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+
+  const handleSendReply = (parentId: string) => {
+    if (!replyText.trim() || !user) return;
+    addCommunityReply(parentId, {
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: user.role === 'admin' ? 'Admin' : user.role === 'faculty' ? 'Faculty' : 'Student',
+      message: replyText.trim(),
+    });
+    setReplyText('');
+    setReplyingToId(null);
+  };
 
   const handlePost = () => {
     if (!newMessage.trim() || !user) return;
@@ -577,8 +609,55 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
               <p className="text-sm text-gray-700">{msg.message}</p>
               <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
                 <button className="flex items-center gap-1 text-gray-400 text-xs"><i className="fas fa-heart" /> {msg.likes}</button>
-                <button className="flex items-center gap-1 text-gray-400 text-xs"><i className="fas fa-comment" /> {msg.replies}</button>
+                <button onClick={() => setReplyingToId(replyingToId === msg.id ? null : msg.id)} className="flex items-center gap-1 text-teal-600 font-semibold text-xs hover:underline">
+                  <i className="fas fa-reply" />
+                  <span>Reply ({(msg.repliesList?.length || msg.replies || 0)})</span>
+                </button>
               </div>
+              {/* Inline Reply Form */}
+              {replyingToId === msg.id && (
+                <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-2 animate-fade-in">
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={`Reply to ${msg.authorName}...`}
+                    className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendReply(msg.id)}
+                  />
+                  <button
+                    onClick={() => handleSendReply(msg.id)}
+                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition"
+                  >
+                    Reply
+                  </button>
+                </div>
+              )}
+
+              {/* Nested Threaded Replies */}
+              {msg.repliesList && msg.repliesList.length > 0 && (
+                <div className="ml-3 pl-3 border-l-2 border-teal-200 space-y-2 mt-3 pt-1">
+                  {msg.repliesList.map((rep) => (
+                    <div key={rep.id} className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-gray-800">{rep.authorName}</span>
+                          <span className={`badge text-[8px] py-0 px-1 ${
+                            rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
+                          }`}>
+                            {rep.authorRole}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-gray-400 flex items-center gap-1">
+                          <i className="far fa-clock text-[8px] text-teal-600" />
+                          {rep.time}
+                        </span>
+                      </div>
+                      <p className="text-gray-700 leading-snug">{rep.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))
         )}
@@ -596,7 +675,7 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
 // ==================== PROFILE SCREEN ====================
 export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
-  const { courses, quizzes } = useData();
+  const { courses, quizzes, studentDocuments } = useData();
   const { assessments } = useAssessments();
   const { analytics, loading: analyticsLoading } = useStudentAnalytics(user?.id);
   const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
@@ -614,6 +693,12 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
         <h2 className="text-white text-lg font-bold">{user?.name}</h2>
         <p className="text-gray-300 text-xs">{user?.email}</p>
         <p className="text-teal-300 text-xs mt-1">ID: {user?.id}</p>
+        <div className="mt-1 flex items-center justify-center gap-1.5">
+          <span className="badge bg-teal-400/20 text-teal-200 border border-teal-300/30 text-[10px] py-0.5 px-2 font-bold">
+            <i className="fas fa-layer-group mr-1" />
+            {user?.batch || 'Batch 1 (Dec)'}
+          </span>
+        </div>
       </div>
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
       <div className="p-4 space-y-3">
@@ -646,6 +731,54 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
           </div>
           <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-white hover:bg-white/25 transition">
             <i className="fas fa-arrow-right text-xs" />
+          </div>
+        </div>
+
+        
+        {/* Student Verified Documentation List (View-Only) */}
+        <div className="card p-3.5 space-y-2 border border-slate-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <i className="fas fa-file-shield text-teal-600 text-sm" />
+              <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
+                My Verification Documents
+              </h3>
+            </div>
+            <span className="badge badge-teal text-[9px] py-0.5 px-2">
+              {studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} Verified
+            </span>
+          </div>
+          <p className="text-[10px] text-gray-400">
+            Read-only verification status managed strictly by Academy Admin and AI Agent.
+          </p>
+          <div className="space-y-2 pt-1">
+            {studentDocuments
+              .filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1')
+              .map((doc) => (
+                <div key={doc.id} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="text-xs font-bold text-gray-800 truncate">{doc.title}</p>
+                      <span className={`badge text-[8px] py-0 px-1.5 ${
+                        doc.status === 'Verified' ? 'badge-green' : doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'badge-red'
+                      }`}>
+                        {doc.status}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-400">
+                      Category: {doc.category} • {doc.verifiedBy ? `Verified by ${doc.verifiedBy} on ${doc.verifiedAt || '2026-10-15'}` : 'Under Review'}
+                    </p>
+                    {doc.remarks && (
+                      <p className="text-[10px] text-teal-800 bg-teal-50/70 p-1 rounded mt-1">
+                        {doc.remarks}
+                      </p>
+                    )}
+                  </div>
+                  <div className="w-6 h-6 rounded-full bg-white shadow-2xs flex items-center justify-center shrink-0 text-xs">
+                    <i className={`fas ${doc.status === 'Verified' ? 'fa-check-circle text-emerald-600' : 'fa-clock text-amber-500'}`} />
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
 
@@ -939,6 +1072,14 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
                   <p className="text-xs text-gray-500 mt-0.5">{dept.description}</p>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {dept.subjects.slice(0, 3).map((s) => (<span key={s} className="badge badge-teal text-[9px]">{s}</span>))}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+                    <span className="text-[10px] text-gray-400 font-semibold">Batches:</span>
+                    {(dept.batches || ['Batch 1 (Dec)', 'Batch 2 (May/June)']).map((b) => (
+                      <span key={b} className="badge bg-purple-50 text-purple-700 text-[9px] py-0.5 px-1.5 border border-purple-200">
+                        {b}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>

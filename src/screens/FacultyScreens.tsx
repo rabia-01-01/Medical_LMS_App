@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, Course, Resource } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
-import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 import { CurriculumBrowser, useSubjects, useChapters } from '../features/curriculum';
 import { resourceService, normalizeResourceType, useResources } from '../features/resources';
 import { AssessmentCreator } from '../features/assessments';
@@ -69,9 +68,9 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
       <div className="p-4 space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onNavigate('upload')} className="card flex flex-col items-center py-4 active:bg-gray-50">
-            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center mb-2"><i className="fas fa-cloud-upload-alt text-teal-600" /></div>
-            <span className="text-xs font-medium text-gray-700">Upload Resource</span>
+          <button onClick={() => onNavigate('faculty-resources')} className="card flex flex-col items-center py-4 active:bg-gray-50">
+            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center mb-2"><i className="fas fa-folder text-teal-600" /></div>
+            <span className="text-xs font-medium text-gray-700">View Resources</span>
           </button>
           <button onClick={() => onNavigate('create-quiz')} className="card flex flex-col items-center py-4 active:bg-gray-50">
             <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center mb-2"><i className="fas fa-clipboard-list text-purple-600" /></div>
@@ -295,17 +294,8 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
-                    <button 
-                      onClick={() => setEnrollingCourse(course)} 
-                      className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5"
-                    >
-                      <i className="fas fa-user-plus text-[10px]" />
-                      <span>Enroll Students</span>
-                    </button>
-                    <button onClick={() => onNavigate('upload')} className="text-xs bg-teal-50 hover:bg-teal-100 text-teal-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5">
-                      <i className="fas fa-upload text-[10px]" />
-                      <span>Upload</span>
-                    </button>
+                    
+                    
                     <button onClick={() => onNavigate('create-quiz')} className="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5">
                       <i className="fas fa-clipboard-list text-[10px]" />
                       <span>Quiz</span>
@@ -323,14 +313,6 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
         )}
       </div>
       )}
-
-      {/* Enrollment Modal */}
-      {enrollingCourse && (
-        <EnrollStudentsModal
-          course={enrollingCourse}
-          onClose={() => setEnrollingCourse(null)}
-        />
-      )}
     </div>
   );
 }
@@ -338,6 +320,23 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
 // ==================== UPLOAD RESOURCE ====================
 export function UploadResource({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  if (user?.role !== 'admin') {
+    return (
+      <div className="p-4">
+        <Header title="Upload Resource" showBack onBack={onBack} gradient={false} />
+        <div className="card text-center py-10 shadow-sm mt-4">
+          <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
+            <i className="fas fa-shield-alt text-xl" />
+          </div>
+          <h3 className="text-base font-bold text-gray-900">Administrator Privileges Required</h3>
+          <p className="text-xs text-gray-500 mt-2 max-w-sm mx-auto leading-relaxed">
+            ONLY Administrators can add or manage learning resources. Faculty add and delete permissions have been revoked.
+          </p>
+          <button onClick={onBack} className="btn-primary max-w-xs mx-auto mt-5">Return to Dashboard</button>
+        </div>
+      </div>
+    );
+  }
   const { courses, addResource } = useData();
   const { subjects } = useSubjects();
 
@@ -844,19 +843,33 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
 // ==================== FACULTY COMMUNITY ====================
 export function FacultyCommunity({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  const { communityMessages, addCommunityMessage } = useData();
+  const { communityMessages, addCommunityMessage, addCommunityReply } = useData();
   const [newMessage, setNewMessage] = useState('');
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
 
   const handlePost = () => {
     if (!newMessage.trim() || !user) return;
-    addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: user.role, message: newMessage, pinned: false });
+    addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: 'Faculty', message: newMessage, pinned: false });
     setNewMessage('');
+  };
+
+  const handleSendReply = (parentId: string) => {
+    if (!replyText.trim() || !user) return;
+    addCommunityReply(parentId, {
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: 'Faculty',
+      message: replyText.trim(),
+    });
+    setReplyText('');
+    setReplyingToId(null);
   };
 
   return (
     <div>
       <Header title="Community" showBack onBack={onBack} />
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3 pb-10">
         <div className="card">
           <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Post a message..." rows={2} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none mb-2" />
           <button onClick={handlePost} className="btn-primary">Post</button>
@@ -873,7 +886,63 @@ export function FacultyCommunity({ onBack }: { onBack: () => void }) {
                 </p>
               </div>
             </div>
-            <p className="text-sm text-gray-700">{msg.message}</p>
+            <p className="text-sm text-gray-700 whitespace-pre-line">{msg.message}</p>
+
+            <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
+              <button className="flex items-center gap-1 text-gray-400 text-xs"><i className="fas fa-heart" /> {msg.likes}</button>
+              <button
+                onClick={() => setReplyingToId(replyingToId === msg.id ? null : msg.id)}
+                className="flex items-center gap-1 text-teal-600 font-semibold text-xs hover:underline"
+              >
+                <i className="fas fa-reply" />
+                <span>Reply ({(msg.repliesList?.length || msg.replies || 0)})</span>
+              </button>
+            </div>
+
+            {/* Inline Reply Form */}
+            {replyingToId === msg.id && (
+              <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-2 animate-fade-in">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder={`Reply to ${msg.authorName}...`}
+                  className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendReply(msg.id)}
+                />
+                <button
+                  onClick={() => handleSendReply(msg.id)}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition"
+                >
+                  Reply
+                </button>
+              </div>
+            )}
+
+            {/* Nested Threaded Replies */}
+            {msg.repliesList && msg.repliesList.length > 0 && (
+              <div className="ml-3 pl-3 border-l-2 border-teal-200 space-y-2 mt-3 pt-1">
+                {msg.repliesList.map((rep) => (
+                  <div key={rep.id} className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-gray-800">{rep.authorName}</span>
+                        <span className={`badge text-[8px] py-0 px-1 ${
+                          rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
+                        }`}>
+                          {rep.authorRole}
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-gray-400 flex items-center gap-1">
+                        <i className="far fa-clock text-[8px] text-teal-600" />
+                        {rep.time}
+                      </span>
+                    </div>
+                    <p className="text-gray-700 leading-snug">{rep.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -1066,13 +1135,7 @@ export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; o
                       <span>View</span>
                       <i className="fas fa-eye text-[10px]" />
                     </button>
-                    <button
-                      onClick={() => setConfirmDelete(r.id)}
-                      className="w-7 h-7 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center text-xs transition"
-                      title="Delete resource"
-                    >
-                      <i className="fas fa-trash" />
-                    </button>
+                    
                   </div>
                 </div>
               );
@@ -1081,24 +1144,7 @@ export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; o
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-sm animate-slide-up">
-            <h3 className="text-base font-bold text-gray-800 mb-1">Delete Resource?</h3>
-            <p className="text-xs text-gray-500 mb-4">Are you sure you want to delete this resource? Students will no longer be able to access it.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1 py-2 text-xs">Cancel</button>
-              <button 
-                onClick={() => { if (confirmDelete) handleDelete(confirmDelete); }} 
-                className="flex-1 py-2 bg-red-600 text-white rounded-xl font-semibold text-xs hover:bg-red-700 transition"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 }

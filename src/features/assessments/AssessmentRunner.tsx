@@ -388,6 +388,17 @@ export function AssessmentRunner({
           <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-line">
             {currentQ.question_text}
           </p>
+
+          {/* Question Diagram / Image */}
+          {((currentQ as any).imageUrl || (currentQ as any).image_url) && (
+            <div className="mt-3 text-center">
+              <img
+                src={(currentQ as any).imageUrl || (currentQ as any).image_url}
+                alt="Question Diagram"
+                className="max-h-48 rounded-xl object-contain mx-auto border border-slate-200 shadow-2xs"
+              />
+            </div>
+          )}
         </div>
 
         {/* Question Options */}

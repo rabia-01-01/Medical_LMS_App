@@ -353,6 +353,79 @@ export function AssessmentCreator({ onBack, onSuccess }: AssessmentCreatorProps)
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
               />
 
+              {/* Question Diagram / Image Upload */}
+              <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1.5">
+                    <i className="fas fa-image text-teal-600" />
+                    Question Diagram / Image (Optional)
+                  </span>
+                  {q.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const copy = [...questions];
+                        copy[qIdx].imageUrl = null;
+                        setQuestions(copy);
+                      }}
+                      className="text-[10px] text-rose-500 hover:underline"
+                    >
+                      Remove Image
+                    </button>
+                  )}
+                </div>
+
+                {q.imageUrl ? (
+                  <div className="mt-2 text-center">
+                    <img
+                      src={q.imageUrl}
+                      alt="Question diagram"
+                      className="max-h-36 rounded-lg mx-auto border border-slate-200 object-contain"
+                    />
+                    <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold border border-emerald-200">
+                      <i className="fas fa-check-circle" />
+                      Option A set as correct answer for image question
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id={`q-img-${qIdx}`}
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const result = ev.target?.result as string;
+                            setQuestions((prev) => {
+                              const copy = [...prev];
+                              copy[qIdx].imageUrl = result;
+                              // User requirement: if Option A is correct in image, save Option A as correct answer
+                              copy[qIdx].options.forEach((opt, idx) => {
+                                opt.isCorrect = idx === 0;
+                              });
+                              return copy;
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor={`q-img-${qIdx}`}
+                      className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-semibold text-slate-700 transition"
+                    >
+                      <i className="fas fa-upload text-teal-600" />
+                      Upload Diagram Image
+                    </label>
+                    <span className="text-[9px] text-slate-400">PNG, JPG, SVG (Option A saved as correct answer)</span>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1.5 pt-1">
                 <span className="text-[10px] font-semibold text-slate-500 block">
                   Options (Click green bubble to set correct key):

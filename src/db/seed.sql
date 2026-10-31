@@ -35,16 +35,23 @@ BEGIN
 
     IF v_class_id IS NOT NULL AND v_exam_id IS NOT NULL THEN
         INSERT INTO batches (name, class_id, exam_id, start_date, end_date, status)
-        VALUES ('Target NEET 2027 Super-30', v_class_id, v_exam_id, '2026-06-01', '2027-05-01', 'ACTIVE')
+        VALUES 
+        ('Batch 1 (Dec)', v_class_id, v_exam_id, '2026-12-01', '2027-04-30', 'ACTIVE'),
+        ('Batch 2 (May/June)', v_class_id, v_exam_id, '2026-05-01', '2027-09-30', 'ACTIVE'),
+        ('Target NEET 2027 Super-30', v_class_id, v_exam_id, '2026-06-01', '2027-05-01', 'ACTIVE')
         ON CONFLICT DO NOTHING;
     END IF;
 END $$;
 
--- 5. Subjects & 3-Tier Curriculum
+-- 5. Subjects & 3-Tier Curriculum (7 Core Subjects)
 INSERT INTO subjects (name, code, description) VALUES
 ('Biology', 'BIO', 'Human Anatomy, Cell Biology, Genetics, and Physiological Systems'),
 ('Physics', 'PHY', 'Classical Mechanics, Electrodynamics, Thermodynamics, and Medical Optics'),
-('Chemistry', 'CHEM', 'Physical Chemistry, Organic Mechanisms, and Inorganic Coordination')
+('Chemistry', 'CHEM', 'Physical Chemistry, Organic Mechanisms, and Inorganic Coordination'),
+('Maths', 'MATH', 'Calculus, Algebra, Coordinate Geometry, and Biostatistics'),
+('Logical Reasoning', 'LR', 'Analytical ability, syllogisms, pattern recognition, and data interpretation'),
+('English', 'ENG', 'Medical comprehension, clinical communication, grammar, and scientific vocabulary'),
+('GK', 'GK', 'Healthcare developments, Nobel laureates in Medicine, global health policies, and general awareness')
 ON CONFLICT (code) DO NOTHING;
 
 -- Biology Chapters & Topics

@@ -263,7 +263,7 @@ export function CurriculumBrowser({
   const isFaculty = userRole === 'faculty';
   const isStudent = userRole === 'student' || (!isAdmin && !isFaculty);
   const isFacultyOrAdmin = (canManage || isAdmin || isFaculty) && !isStudent;
-  const canUploadMaterials = (isAdmin || isFaculty) && !isStudent;
+  const canUploadMaterials = isAdmin;
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const { resources: contextResources, addResource, deleteResource: deleteContextResource } = useData();
   const { resources: cloudResources, uploadResource, deleteResource: deleteCloudResource } = useResources();

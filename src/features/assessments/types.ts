@@ -20,6 +20,7 @@ export interface QuestionOptionItem {
 
 export interface QuestionWithOptions extends Question {
   options: QuestionOptionItem[];
+  imageUrl?: string | null;
   subjectName?: string;
   chapterName?: string;
 }
@@ -56,6 +57,7 @@ export interface CreateQuestionInput {
   marks?: number;
   negativeMarks?: number;
   explanation?: string | null;
+  imageUrl?: string | null;
   options: CreateOptionPayload[];
 }
 

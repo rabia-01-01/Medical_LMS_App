@@ -13,6 +13,7 @@ export interface AuthUser {
   status: 'active' | 'suspended';
   createdAt: string;
   targetExam?: string;
+  batch?: string;
   dbRole?: DbUserRole;
   studentId?: string;
   facultyId?: string;
@@ -26,6 +27,7 @@ export interface SignUpPayload {
   role: AppUserRole;
   department?: string;
   targetExam?: string;
+  batch?: string;
 }
 
 export interface SignInPayload {

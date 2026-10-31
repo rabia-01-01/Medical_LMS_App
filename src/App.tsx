@@ -9,6 +9,8 @@ import { FacultyDashboard, FacultyCourses, UploadResource, CreateQuiz, FacultySu
 import { AdminDashboard, AdminUsers, AdminDepartments, AdminCourses, AdminResources, AdminNotifications, AuditLogs, AdminSettings, AdminCommunity, AdminAnnouncements, AddUser, SendAnnouncement, SendNotification } from './screens/AdminScreens';
 import { ResourceViewer, CourseDetail } from './screens/ResourceScreens';
 import { FullscreenControl, DisplayMode } from './components/FullscreenControl';
+import { SecurityShield } from './components/SecurityShield';
+import { StudentAIChatbot } from './components/StudentAIChatbot';
 
 const studentNavItems = [
   { id: 'home', icon: 'fa-home', label: 'Home' },
@@ -202,9 +204,12 @@ function AppContent() {
     <>
       <FullscreenControl mode={displayMode} onModeChange={handleDisplayModeChange} />
       <div className={containerClass}>
-        {ViewingAsBanner}
-        <div className="screen-content">{renderScreen()}</div>
-        {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
+        <SecurityShield>
+          {ViewingAsBanner}
+          <div className="screen-content">{renderScreen()}</div>
+          {user?.role === 'student' && <StudentAIChatbot />}
+          {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
+        </SecurityShield>
       </div>
     </>
   );

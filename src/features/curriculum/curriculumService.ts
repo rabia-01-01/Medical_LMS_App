@@ -212,6 +212,150 @@ export const DEFAULT_CURRICULUM: SubjectWithChapters[] = [
       },
     ],
   },
+  {
+    id: 'subj-maths',
+    name: 'Maths',
+    code: 'MATH',
+    description: 'Calculus, Algebra, Coordinate Geometry, and Biostatistics',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    chapters: [
+      {
+        id: 'chap-math-1',
+        subject_id: 'subj-maths',
+        name: 'Calculus & Functions',
+        description: 'Limits, differential calculus, and integrals in medical modeling',
+        display_order: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-math-101', chapter_id: 'chap-math-1', name: 'Limits, Continuity & Differentiation', description: 'Rates of change and pharmacokinetics modeling', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-math-102', chapter_id: 'chap-math-1', name: 'Definite Integrals & Exponential Growth', description: 'Area calculations, bacterial growth, and drug half-life', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+      {
+        id: 'chap-math-2',
+        subject_id: 'subj-maths',
+        name: 'Vectors, Matrices & Probability',
+        description: 'Linear algebra, dimensional vectors, and clinical biostatistics',
+        display_order: 2,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-math-201', chapter_id: 'chap-math-2', name: 'Matrix Algebra & Linear Systems', description: 'System of equations and transformation matrices', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-math-202', chapter_id: 'chap-math-2', name: 'Biostatistics & Normal Distributions', description: 'Standard deviation, p-values, and clinical trials probability', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'subj-lr',
+    name: 'Logical Reasoning',
+    code: 'LR',
+    description: 'Analytical ability, syllogisms, pattern recognition, and data interpretation',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    chapters: [
+      {
+        id: 'chap-lr-1',
+        subject_id: 'subj-lr',
+        name: 'Critical Thinking & Deduction',
+        description: 'Syllogisms, propositional logic, and statement analysis',
+        display_order: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-lr-101', chapter_id: 'chap-lr-1', name: 'Syllogisms & Logical Venn Diagrams', description: 'Valid deductions and set-based relationship mapping', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-lr-102', chapter_id: 'chap-lr-1', name: 'Cause & Effect and Arguments', description: 'Evaluating strength of evidence and clinical premises', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+      {
+        id: 'chap-lr-2',
+        subject_id: 'subj-lr',
+        name: 'Pattern & Spatial Reasoning',
+        description: 'Series sequences, direction sense, and diagnostic case puzzles',
+        display_order: 2,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-lr-201', chapter_id: 'chap-lr-2', name: 'Series Sequences & Pattern Matrices', description: 'Number, letter, and symbolic relationship deduction', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-lr-202', chapter_id: 'chap-lr-2', name: 'Data Interpretation & Chart Sufficiency', description: 'Evaluating tabular data and medical chart sufficiency', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'subj-english',
+    name: 'English',
+    code: 'ENG',
+    description: 'Medical comprehension, clinical communication, grammar, and scientific vocabulary',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    chapters: [
+      {
+        id: 'chap-eng-1',
+        subject_id: 'subj-english',
+        name: 'Scientific Reading & Comprehension',
+        description: 'Analysis of clinical passages, inferences, and scientific tone',
+        display_order: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-eng-101', chapter_id: 'chap-eng-1', name: 'Clinical Passage Inference & Thesis Extraction', description: 'Identifying main ideas, counter-arguments, and conclusions', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-eng-102', chapter_id: 'chap-eng-1', name: 'Medical Terminology, Prefixes & Etymology', description: 'Greco-Latin roots and clinical jargon comprehension', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+      {
+        id: 'chap-eng-2',
+        subject_id: 'subj-english',
+        name: 'Grammar & Clinical Documentation',
+        description: 'Syntax precision, sentence correction, and clinical clarity',
+        display_order: 2,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-eng-201', chapter_id: 'chap-eng-2', name: 'Advanced Syntax & Error Identification', description: 'Parallelism, modifier placement, and concordance', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-eng-202', chapter_id: 'chap-eng-2', name: 'Clinical Report Coherence & Para Jumbles', description: 'Structuring logical flow in medical case presentations', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'subj-gk',
+    name: 'GK',
+    code: 'GK',
+    description: 'Healthcare developments, Nobel laureates in Medicine, global health policies, and general awareness',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    chapters: [
+      {
+        id: 'chap-gk-1',
+        subject_id: 'subj-gk',
+        name: 'Medical History & Nobel Laureates',
+        description: 'Key discoveries, vaccination milestones, and Nobel Prize research',
+        display_order: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-gk-101', chapter_id: 'chap-gk-1', name: 'Vaccine History & Nobel Pioneers in Medicine', description: 'Jenner, Pasteur, Fleming, and contemporary Nobel laureates', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-gk-102', chapter_id: 'chap-gk-1', name: 'Global Health Governance (WHO, CDC, ICMR)', description: 'International health regulations, pandemics, and protocols', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+      {
+        id: 'chap-gk-2',
+        subject_id: 'subj-gk',
+        name: 'Current Healthcare Innovations & Bioethics',
+        description: 'Genomic editing, AI in diagnostics, and clinical ethics',
+        display_order: 2,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        topics: [
+          { id: 'top-gk-201', chapter_id: 'chap-gk-2', name: 'CRISPR, mRNA Tech & Genomic Horizons', description: 'Modern biotech breakthroughs in precision healthcare', display_order: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: 'top-gk-202', chapter_id: 'chap-gk-2', name: 'Medical Jurisprudence & Clinical Ethics', description: 'Patient autonomy, consent laws, and medical legal tenets', display_order: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ],
+      },
+    ],
+  },
 ];
 
 // ============================================================================
@@ -261,7 +405,12 @@ export async function getSubjects(): Promise<Subject[]> {
       return DEFAULT_CURRICULUM.map(({ chapters, ...s }) => s);
     }
 
-    return data;
+    const dbCodes = new Set(data.map((s) => s.code.toUpperCase()));
+    const missingDefaults = DEFAULT_CURRICULUM
+      .filter((s) => !dbCodes.has(s.code.toUpperCase()))
+      .map(({ chapters, ...s }) => s);
+
+    return [...data, ...missingDefaults];
   } catch (err) {
     console.warn('[curriculumService] Error fetching subjects:', err);
     return DEFAULT_CURRICULUM.map(({ chapters, ...s }) => s);
@@ -398,6 +547,14 @@ export async function getFullCurriculum(): Promise<SubjectWithChapters[]> {
     if (nested.every((s) => s.chapters.length === 0)) {
       return mergeWithCustomCurriculum(DEFAULT_CURRICULUM);
     }
+
+    // Ensure all 7 subjects from DEFAULT_CURRICULUM are included in hierarchy
+    const existingCodes = new Set(nested.map((s) => s.code.toUpperCase()));
+    DEFAULT_CURRICULUM.forEach((defSubj) => {
+      if (!existingCodes.has(defSubj.code.toUpperCase())) {
+        nested.push(defSubj);
+      }
+    });
 
     return mergeWithCustomCurriculum(nested);
   } catch (err) {

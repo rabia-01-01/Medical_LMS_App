@@ -36,6 +36,8 @@ function mapLegacyQuizToAssessment(q: any): AssessmentWithQuestions {
       created_by: q.createdById || 'faculty',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      imageUrl: item.imageUrl || item.image_url || null,
+      image_url: item.imageUrl || item.image_url || null,
       options: opts,
     };
   });

@@ -9,10 +9,12 @@ import { CurriculumBrowser } from '../features/curriculum';
 import { useResources, resourceService } from '../features/resources';
 import { useAdmin, adminService } from '../features/admin';
 import { useAssessments } from '../features/assessments';
+import { AdminAIMCQGenerator } from '../components/AdminAIMCQGenerator';
 
 // ==================== OPERATIONAL ADMIN DASHBOARD ====================
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
+  const [showAIMCQModal, setShowAIMCQModal] = useState(false);
   const { users, departments, courses, resources, quizzes, announcements, auditLogs } = useData();
   const { metrics, loading: metricsLoading, refreshMetrics, exportAuditLogs } = useAdmin();
   const { assessments } = useAssessments();
@@ -140,6 +142,42 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           </button>
         </div>
 
+        
+        {/* AI Chapter MCQ Generator CTA */}
+        <div
+          onClick={() => setShowAIMCQModal(true)}
+          className="rounded-2xl p-3.5 bg-gradient-to-r from-teal-700 via-teal-800 to-indigo-900 text-white cursor-pointer shadow-md flex items-center justify-between hover:shadow-lg transition active:scale-[0.99] border border-teal-500/30"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-teal-200 text-lg shadow-2xs">
+              <i className="fas fa-magic" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="badge bg-teal-400/20 text-teal-200 text-[9px] py-0 px-1 border border-teal-400/30">AI ENGINE</span>
+                <p className="text-xs font-bold text-white">Auto-Generate Chapter MCQs</p>
+              </div>
+              <p className="text-[10px] text-teal-100 mt-0.5">7 core subjects, Option A diagram keying, 1-click test sync</p>
+            </div>
+          </div>
+          <i className="fas fa-chevron-right text-xs text-teal-200" />
+        </div>
+
+        {/* AI Generator Modal */}
+        {showAIMCQModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm max-h-[90vh] overflow-y-auto p-4 shadow-2xl animate-slide-up">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-bold text-gray-800">AI MCQ Generator</h3>
+                <button onClick={() => setShowAIMCQModal(false)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-xs hover:bg-gray-200">
+                  <i className="fas fa-times" />
+                </button>
+              </div>
+              <AdminAIMCQGenerator onBack={() => setShowAIMCQModal(false)} />
+            </div>
+          </div>
+        )}
+
         {/* Operational Modules Navigation */}
         <div className="card p-0 overflow-hidden shadow-xs">
           {[
@@ -172,7 +210,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
 // ==================== ADD USER ====================
 export function AddUser({ onBack }: { onBack: () => void }) {
   const { addUser } = useData();
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', role: 'student' as 'admin' | 'faculty' | 'student', department: '', targetExam: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', role: 'student' as 'admin' | 'faculty' | 'student', department: '', targetExam: '', batch: 'Batch 1 (Dec)' });
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async () => {
@@ -188,6 +226,7 @@ export function AddUser({ onBack }: { onBack: () => void }) {
           role: formData.role,
           department: formData.department.trim(),
           targetExam: formData.targetExam,
+      batch: formData.batch,
         });
       } catch (err) {
         console.warn('[AddUser] Supabase register error:', err);
@@ -238,9 +277,15 @@ export function AddUser({ onBack }: { onBack: () => void }) {
         <input value={formData.password} onChange={(e) => setFormData(p => ({ ...p, password: e.target.value }))} placeholder="Password *" type="password" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         {formData.role === 'faculty' && <input value={formData.department} onChange={(e) => setFormData(p => ({ ...p, department: e.target.value }))} placeholder="Department" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />}
         {formData.role === 'student' && (
-          <select value={formData.targetExam} onChange={(e) => setFormData(p => ({ ...p, targetExam: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-            <option value="">Target Exam</option><option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
-          </select>
+          <>
+            <select value={formData.targetExam} onChange={(e) => setFormData(p => ({ ...p, targetExam: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="">Target Exam</option><option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
+            </select>
+            <select value={formData.batch} onChange={(e) => setFormData(p => ({ ...p, batch: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="Batch 1 (Dec)">Batch 1 (Dec)</option>
+              <option value="Batch 2 (May/June)">Batch 2 (May/June)</option>
+            </select>
+          </>
         )}
         <button onClick={handleSubmit} disabled={!formData.name || !formData.email || !formData.password} className="btn-primary disabled:opacity-50"><i className="fas fa-user-plus mr-2" />Add User</button>
       </div>
@@ -251,17 +296,21 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 // ==================== MANAGE USERS ====================
 export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
   const { user: currentUser, startViewingAs } = useAuth();
-  const { users, deleteUser, updateUser } = useData();
+  const { users, deleteUser, updateUser, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
+  const [showDocsModal, setShowDocsModal] = useState(false);
+  const [docFilter, setDocFilter] = useState<string>('All');
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const roles = ['All', 'Students', 'Faculty', 'Admins', 'Suspended'];
+  const roles = ['All', 'Batch 1 (Dec)', 'Batch 2 (May/June)', 'Students', 'Faculty', 'Admins', 'Suspended'];
 
   let filtered = users;
   if (filter === 'Students') filtered = users.filter(u => u.role === 'student');
   if (filter === 'Faculty') filtered = users.filter(u => u.role === 'faculty');
   if (filter === 'Admins') filtered = users.filter(u => u.role === 'admin');
   if (filter === 'Suspended') filtered = users.filter(u => u.status !== 'active');
+  if (filter === 'Batch 1 (Dec)') filtered = users.filter(u => u.batch === 'Batch 1 (Dec)');
+  if (filter === 'Batch 2 (May/June)') filtered = users.filter(u => u.batch === 'Batch 2 (May/June)');
 
   if (search.trim()) {
     const q = search.toLowerCase();
@@ -310,9 +359,15 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   return (
     <div>
       <Header title="User Management" subtitle={`${filtered.length} users`} showBack onBack={onBack} rightAction={
-        <button onClick={() => onNavigate('add-user')} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm" title="Add New User">
-          <i className="fas fa-plus" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => setShowDocsModal(true)} className="px-2.5 py-1 rounded-lg bg-teal-500/40 hover:bg-teal-500/60 text-white text-xs font-semibold flex items-center gap-1" title="Manage Student Documentation">
+            <i className="fas fa-file-shield text-[10px]" />
+            <span>Docs</span>
+          </button>
+          <button onClick={() => onNavigate('add-user')} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm" title="Add New User">
+            <i className="fas fa-plus" />
+          </button>
+        </div>
       } />
 
       <div className="p-4 space-y-3">
@@ -363,6 +418,11 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
                   {u.targetExam && <span className="badge badge-teal text-[8px] py-0 px-1">{u.targetExam}</span>}
+                  {u.batch && u.batch !== 'All' && (
+                    <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[8px] py-0 px-1">
+                      {u.batch}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[10px] text-gray-400 truncate">{u.email}</p>
                 <div className="flex items-center gap-2 mt-1">
@@ -415,6 +475,87 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
           ))
         )}
       </div>
+
+      {/* Student Documentation Verification Management Modal (Agent + Admin Editing) */}
+      {showDocsModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm max-h-[85vh] overflow-y-auto p-4 shadow-2xl animate-slide-up space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Student Documentation Verification</h3>
+                <p className="text-[10px] text-gray-500">Agent + Admin editing privileges enforced</p>
+              </div>
+              <button onClick={() => setShowDocsModal(false)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-xs">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {['All', 'Pending', 'Verified', 'Rejected'].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setDocFilter(st)}
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition ${
+                    docFilter === st ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              {studentDocuments
+                .filter((d) => docFilter === 'All' || d.status === docFilter)
+                .map((doc) => (
+                  <div key={doc.id} className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-800 truncate">{doc.title}</span>
+                      <span className={`badge text-[8px] py-0 px-1.5 ${
+                        doc.status === 'Verified' ? 'badge-green' : doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'badge-red'
+                      }`}>
+                        {doc.status}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-500">
+                      Student: <span className="font-semibold text-gray-700">{doc.studentName}</span> • Category: {doc.category}
+                    </p>
+                    {doc.remarks && (
+                      <p className="text-[10px] text-teal-800 bg-teal-50/70 p-1 rounded">
+                        {doc.remarks}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100">
+                      {doc.status !== 'Verified' && (
+                        <button
+                          onClick={() => updateStudentDocument(doc.id, { status: 'Verified', remarks: 'Verified by Administrator' }, 'admin')}
+                          className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-semibold transition flex items-center justify-center gap-1"
+                        >
+                          <i className="fas fa-check" /> Verify
+                        </button>
+                      )}
+                      {doc.status !== 'Rejected' && (
+                        <button
+                          onClick={() => updateStudentDocument(doc.id, { status: 'Rejected', remarks: 'Scan unclear, re-upload needed' }, 'admin')}
+                          className="flex-1 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-semibold transition flex items-center justify-center gap-1"
+                        >
+                          <i className="fas fa-times" /> Reject
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteStudentDocument(doc.id, 'admin')}
+                        className="w-6 h-6 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center text-[10px]"
+                        title="Delete Document"
+                      >
+                        <i className="fas fa-trash" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation */}
       {confirmDelete && (
@@ -1074,19 +1215,33 @@ export function AdminNotifications({ onBack, onNavigate }: { onBack: () => void;
 // ==================== ADMIN COMMUNITY ====================
 export function AdminCommunity({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  const { communityMessages, addCommunityMessage, deleteCommunityMessage, togglePinMessage } = useData();
+  const { communityMessages, addCommunityMessage, addCommunityReply, deleteCommunityMessage, togglePinMessage } = useData();
   const [newMessage, setNewMessage] = useState('');
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
 
   const handlePost = () => {
     if (!newMessage.trim() || !user) return;
-    addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: user.role, message: newMessage, pinned: false });
+    addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: 'Admin', message: newMessage, pinned: false });
     setNewMessage('');
+  };
+
+  const handleSendReply = (parentId: string) => {
+    if (!replyText.trim() || !user) return;
+    addCommunityReply(parentId, {
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: 'Admin',
+      message: replyText.trim(),
+    });
+    setReplyText('');
+    setReplyingToId(null);
   };
 
   return (
     <div>
       <Header title="Community" showBack onBack={onBack} />
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3 pb-12">
         <div className="card">
           <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Post as admin..." rows={2} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none mb-2" />
           <button onClick={handlePost} className="btn-primary">Post</button>
@@ -1106,11 +1261,67 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => togglePinMessage(msg.id)} className="text-teal-500 text-xs"><i className="fas fa-thumbtack" /></button>
-                <button onClick={() => deleteCommunityMessage(msg.id)} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>
+                <button onClick={() => togglePinMessage(msg.id)} className="text-teal-500 text-xs" title="Pin message"><i className="fas fa-thumbtack" /></button>
+                <button onClick={() => deleteCommunityMessage(msg.id, 'admin')} className="text-red-400 hover:text-red-600 text-xs" title="Delete message"><i className="fas fa-trash" /></button>
               </div>
             </div>
-            <p className="text-sm text-gray-700">{msg.message}</p>
+            <p className="text-sm text-gray-700 whitespace-pre-line">{msg.message}</p>
+
+            <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
+              <button className="flex items-center gap-1 text-gray-400 text-xs"><i className="fas fa-heart" /> {msg.likes}</button>
+              <button
+                onClick={() => setReplyingToId(replyingToId === msg.id ? null : msg.id)}
+                className="flex items-center gap-1 text-teal-600 font-semibold text-xs hover:underline"
+              >
+                <i className="fas fa-reply" />
+                <span>Reply ({(msg.repliesList?.length || msg.replies || 0)})</span>
+              </button>
+            </div>
+
+            {/* Inline Reply Form */}
+            {replyingToId === msg.id && (
+              <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-2 animate-fade-in">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder={`Reply to ${msg.authorName}...`}
+                  className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendReply(msg.id)}
+                />
+                <button
+                  onClick={() => handleSendReply(msg.id)}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition"
+                >
+                  Reply
+                </button>
+              </div>
+            )}
+
+            {/* Nested Threaded Replies */}
+            {msg.repliesList && msg.repliesList.length > 0 && (
+              <div className="ml-3 pl-3 border-l-2 border-teal-200 space-y-2 mt-3 pt-1">
+                {msg.repliesList.map((rep) => (
+                  <div key={rep.id} className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-gray-800">{rep.authorName}</span>
+                        <span className={`badge text-[8px] py-0 px-1 ${
+                          rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
+                        }`}>
+                          {rep.authorRole}
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-gray-400 flex items-center gap-1">
+                        <i className="far fa-clock text-[8px] text-teal-600" />
+                        {rep.time}
+                      </span>
+                    </div>
+                    <p className="text-gray-700 leading-snug">{rep.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

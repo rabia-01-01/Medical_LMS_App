@@ -5,9 +5,11 @@ import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { CurriculumBrowser, useSubjects, useChapters } from '../features/curriculum';
 import { resourceService, normalizeResourceType, useResources } from '../features/resources';
 import { AssessmentCreator } from '../features/assessments';
+import { AIMCQGenerator } from '../components/AdminAIMCQGenerator';
 
 // ==================== FACULTY DASHBOARD ====================
 export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
+  const [showAIMCQModal, setShowAIMCQModal] = useState(false);
   const { user } = useAuth();
   const { courses, resources, quizzes, notifications } = useData();
   const { resources: cloudResources } = useResources();
@@ -72,6 +74,10 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
             <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center mb-2"><i className="fas fa-folder text-teal-600" /></div>
             <span className="text-xs font-medium text-gray-700">View Resources</span>
           </button>
+          <button onClick={() => onNavigate('upload')} className="card flex flex-col items-center py-4 active:bg-gray-50 border border-teal-200">
+            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2"><i className="fas fa-cloud-upload-alt text-emerald-600" /></div>
+            <span className="text-xs font-medium text-gray-700">Upload Resource</span>
+          </button>
           <button onClick={() => onNavigate('create-quiz')} className="card flex flex-col items-center py-4 active:bg-gray-50">
             <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center mb-2"><i className="fas fa-clipboard-list text-purple-600" /></div>
             <span className="text-xs font-medium text-gray-700">Create Quiz</span>
@@ -85,6 +91,34 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
             <span className="text-xs font-medium text-gray-700">Community</span>
           </button>
         </div>
+
+        {/* Faculty AI Chapter-Wise MCQ Generator (5 Options A-E) */}
+        <div className="p-3.5 bg-gradient-to-r from-teal-500/10 via-cyan-500/10 to-blue-500/10 border border-teal-200/80 rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <i className="fas fa-robot text-lg" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-800">AI Chapter-Wise MCQ Generator</p>
+              <p className="text-[10px] text-gray-500">Auto-generate 5-choice MCQs (A, B, C, D, E) chapter-wise</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAIMCQModal(true)}
+            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shrink-0 shadow-xs flex items-center gap-1.5"
+          >
+            <i className="fas fa-magic text-[11px]" />
+            <span>Open Chatbot</span>
+          </button>
+        </div>
+
+        {showAIMCQModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col shadow-2xl">
+              <AIMCQGenerator onBack={() => setShowAIMCQModal(false)} />
+            </div>
+          </div>
+        )}
 
         {/* Assigned and Admin Uploaded Courses */}
         <div>
@@ -320,23 +354,6 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
 // ==================== UPLOAD RESOURCE ====================
 export function UploadResource({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  if (user?.role !== 'admin') {
-    return (
-      <div className="p-4">
-        <Header title="Upload Resource" showBack onBack={onBack} gradient={false} />
-        <div className="card text-center py-10 shadow-sm mt-4">
-          <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
-            <i className="fas fa-shield-alt text-xl" />
-          </div>
-          <h3 className="text-base font-bold text-gray-900">Administrator Privileges Required</h3>
-          <p className="text-xs text-gray-500 mt-2 max-w-sm mx-auto leading-relaxed">
-            ONLY Administrators can add or manage learning resources. Faculty add and delete permissions have been revoked.
-          </p>
-          <button onClick={onBack} className="btn-primary max-w-xs mx-auto mt-5">Return to Dashboard</button>
-        </div>
-      </div>
-    );
-  }
   const { courses, addResource } = useData();
   const { subjects } = useSubjects();
 
@@ -351,7 +368,8 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
     size: '',
     fileName: '',
     fileData: '',
-    mimeType: ''
+    mimeType: '',
+    readingContent: ''
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -434,6 +452,7 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
         mimeType: formData.mimeType,
         fileSize: selectedFile?.size || 0,
         base64Data: formData.fileData,
+        readingContent: formData.readingContent.trim() || undefined,
       }, user.id, user.name);
 
       // 2. DataContext state update
@@ -454,6 +473,7 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
         signedUrl: created.signedUrl || undefined,
         subjectId: formData.subjectId,
         chapterId: formData.chapterId,
+        readingContent: formData.readingContent.trim() || undefined,
       });
 
       setSuccess(true);
@@ -571,6 +591,19 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
               <option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-700 mb-2 block">
+            Document Reading Section Contents (Specific for this document)
+          </label>
+          <textarea
+            rows={3}
+            value={formData.readingContent}
+            onChange={(e) => setFormData(p => ({ ...p, readingContent: e.target.value }))}
+            placeholder="Provide specific notes, chapter excerpts, formula derivations, key concepts or clinical summaries for this document..."
+            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+          />
         </div>
 
         <div>

@@ -385,6 +385,7 @@ export async function createResource(
         creatorName,
         sizeFormatted: formatFileSize(fileSize),
         fileData: input.base64Data,
+        readingContent: input.readingContent,
       };
 
       // Also persist to local cache so offline view works seamlessly
@@ -413,6 +414,7 @@ export async function createResource(
     creatorName,
     sizeFormatted: formatFileSize(fileSize),
     fileData: input.base64Data,
+    readingContent: input.readingContent,
     file: {
       id: fileId,
       resource_id: resourceId,
@@ -518,6 +520,7 @@ export async function fetchResources(filter?: ResourceFilter): Promise<ResourceW
               signedUrl: signedUrl || localCached?.signedUrl || null,
               sizeFormatted: file?.file_size ? formatFileSize(file.file_size) : localCached?.sizeFormatted,
               fileData: localCached?.fileData,
+              readingContent: localCached?.readingContent,
             };
           })
         );

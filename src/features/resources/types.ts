@@ -30,6 +30,7 @@ export interface ResourceWithFile extends LearningResource {
   // UI and backward compatibility helpers:
   sizeFormatted?: string;
   fileData?: string;
+  readingContent?: string;
 }
 
 export interface ResourceFilter {
@@ -57,6 +58,8 @@ export interface CreateResourceInput {
   fileSize?: number;
   // Fallback Base64 for offline mode if file cannot be stored in cloud
   base64Data?: string;
+  // Specific content for the Document Reading Section
+  readingContent?: string;
 }
 
 export interface StorageUploadResult {

@@ -288,7 +288,7 @@ export function CurriculumBrowser({
   const isFaculty = userRole === 'faculty';
   const isStudent = userRole === 'student' || (!isAdmin && !isFaculty);
   const isFacultyOrAdmin = (canManage || isAdmin || isFaculty) && !isStudent;
-  const canUploadMaterials = isAdmin;
+  const canUploadMaterials = isAdmin || isFacultyOrAdmin;
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const { resources: contextResources, addResource, deleteResource: deleteContextResource } = useData();
   const { resources: cloudResources, uploadResource, deleteResource: deleteCloudResource } = useResources();
@@ -338,6 +338,7 @@ export function CurriculumBrowser({
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadResourceType, setUploadResourceType] = useState<'NOTE' | 'VIDEO' | 'DOCX' | 'BOOK' | 'DPP' | 'PYQ'>('NOTE');
   const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadReadingContent, setUploadReadingContent] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -387,6 +388,7 @@ export function CurriculumBrowser({
         fileName: fn,
         mimeType: cleanMime,
         fileData: fileData,
+        readingContent: cr.readingContent || matchedCtx?.readingContent,
         storagePath: cr.storagePath || cr.file?.storage_path || matchedCtx?.storagePath,
         signedUrl: cr.signedUrl || matchedCtx?.signedUrl,
         sizeFormatted: cr.sizeFormatted || cr.size || (cr.file?.file_size ? formatFileSize(cr.file.file_size) : matchedCtx?.size || 'File'),
@@ -421,6 +423,7 @@ export function CurriculumBrowser({
           fileName: fn,
           mimeType: cleanMime,
           fileData: ctxR.fileData,
+          readingContent: ctxR.readingContent,
           storagePath: ctxR.storagePath,
           signedUrl: ctxR.signedUrl,
           sizeFormatted: ctxR.size || 'File',
@@ -457,6 +460,7 @@ export function CurriculumBrowser({
     setUploadFile(null);
     setUploadTitle('');
     setUploadDescription('');
+    setUploadReadingContent('');
     setUploadError(null);
     setUploadSuccessMessage(null);
     try {
@@ -498,6 +502,7 @@ export function CurriculumBrowser({
       mimeType: cleanMime,
       type: (material.type || material.resource_type || (fn.toLowerCase().endsWith('.pdf') ? 'pdf' : fn.toLowerCase().endsWith('.docx') ? 'docx' : 'note')).toLowerCase(),
       fileData: material.fileData,
+      readingContent: material.readingContent,
       storagePath: material.storagePath || material.storage_path || material.file?.storage_path,
       signedUrl: material.signedUrl,
       sizeFormatted: material.sizeFormatted || material.size,
@@ -644,6 +649,7 @@ export function CurriculumBrowser({
         mimeType,
         fileSize,
         base64Data,
+        readingContent: uploadReadingContent.trim() || undefined,
       });
 
       // 2. Sync to DataContext using the EXACT SAME ID to avoid creating a second/corrupt duplicate
@@ -666,6 +672,7 @@ export function CurriculumBrowser({
         subjectId,
         chapterId,
         topicId,
+        readingContent: uploadReadingContent.trim() || undefined,
       });
 
       // Clear the file input and state completely
@@ -675,6 +682,7 @@ export function CurriculumBrowser({
       setUploadFile(null);
       setUploadTitle('');
       setUploadDescription('');
+      setUploadReadingContent('');
       setShowUploadForm(false);
       setUploadSuccessMessage(`Successfully uploaded "${uploadTitle.trim()}"`);
       setTimeout(() => setUploadSuccessMessage(null), 4000);
@@ -1572,6 +1580,20 @@ export function CurriculumBrowser({
                             className="w-full px-2 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded-lg text-gray-500 truncate"
                           />
                         </div>
+                      </div>
+
+                      {/* Document Reading Section Contents */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                          Document Reading Section Contents (Specific to this document)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={uploadReadingContent}
+                          onChange={(e) => setUploadReadingContent(e.target.value)}
+                          placeholder="Provide specific notes, chapter excerpts, formula derivations, key concepts or clinical summaries for this document..."
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:border-teal-500 text-gray-800 resize-none"
+                        />
                       </div>
 
                       {/* Optional Description */}

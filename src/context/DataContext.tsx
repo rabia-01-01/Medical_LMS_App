@@ -62,6 +62,7 @@ export interface Resource {
   chapterId?: string;
   topicId?: string;
   batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)' | 'All'
+  readingContent?: string; // Specific content for Document Reading Section
 }
 
 export interface Announcement {
@@ -143,6 +144,7 @@ export interface Quiz {
   startDate: string;
   endDate: string;
   batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)' | 'All'
+  readingContent?: string; // Specific content for Document Reading Section
 }
 
 export interface Notification {
@@ -812,8 +814,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const updateResource = (id: string, data: Partial<Resource>, actorRole?: string) => {
-    if (actorRole && actorRole !== 'admin') {
-      console.warn('[DataContext] Security: ONLY Admin can update resources.');
+    if (actorRole && actorRole !== 'admin' && actorRole !== 'faculty') {
+      console.warn('[DataContext] Security: ONLY Admin and Faculty can update resources.');
       return;
     }
     setResources(prev => prev.map(r => r.id === id ? { ...r, ...data } : r));

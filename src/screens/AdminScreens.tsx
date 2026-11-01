@@ -558,6 +558,8 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
       )}
 
       {/* Delete Confirmation */}
+      
+
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
@@ -579,7 +581,9 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
 
 // ==================== ADMIN DEPARTMENTS WITH RESPECTIVE BATCHES ====================
 export function AdminDepartments({ onBack }: { onBack: () => void }) {
-  const { departments, users, addDepartment, deleteDepartment } = useData();
+  const { departments, users, courses, addDepartment, deleteDepartment } = useData();
+  const [selectedBatchModal, setSelectedBatchModal] = useState<{ batch: string; deptName: string; subjects: string[] } | null>(null);
+  const [batchTab, setBatchTab] = useState<'students' | 'courses'>('students');
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -679,22 +683,40 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="p-2.5 rounded-xl bg-teal-50/50 border border-teal-200">
+                    <div 
+                      onClick={() => setSelectedBatchModal({ batch: 'Batch 1 (Dec)', deptName: dept.name, subjects: dept.subjects })}
+                      className="p-2.5 rounded-xl bg-teal-50/70 border border-teal-200 cursor-pointer hover:bg-teal-100/70 transition shadow-2xs group"
+                    >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-teal-900">Batch 1 (Dec)</span>
-                        <span className="badge bg-teal-600 text-white text-[9px] py-0.5 px-1.5">Winter</span>
+                        <span className="text-xs font-bold text-teal-900 group-hover:underline">Batch 1 (Dec)</span>
+                        <span className="badge bg-teal-600 text-white text-[9px] py-0.5 px-1.5 flex items-center gap-1">
+                          <span>Winter</span>
+                          <i className="fas fa-chevron-right text-[8px]" />
+                        </span>
                       </div>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Session: Dec – April</p>
-                      <p className="text-[11px] font-bold text-teal-700 mt-1">{batch1Students} Enrolled Students</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Session: Dec – April • Click to Inspect</p>
+                      <p className="text-[11px] font-bold text-teal-700 mt-1 flex items-center justify-between">
+                        <span>{batch1Students} Enrolled Students</span>
+                        <span className="text-[10px] font-semibold text-teal-600 underline">View Batch Details</span>
+                      </p>
                     </div>
 
-                    <div className="p-2.5 rounded-xl bg-purple-50/50 border border-purple-200">
+                    <div 
+                      onClick={() => setSelectedBatchModal({ batch: 'Batch 2 (May/June)', deptName: dept.name, subjects: dept.subjects })}
+                      className="p-2.5 rounded-xl bg-purple-50/70 border border-purple-200 cursor-pointer hover:bg-purple-100/70 transition shadow-2xs group"
+                    >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-purple-900">Batch 2 (May/June)</span>
-                        <span className="badge bg-purple-600 text-white text-[9px] py-0.5 px-1.5">Summer</span>
+                        <span className="text-xs font-bold text-purple-900 group-hover:underline">Batch 2 (May/June)</span>
+                        <span className="badge bg-purple-600 text-white text-[9px] py-0.5 px-1.5 flex items-center gap-1">
+                          <span>Summer</span>
+                          <i className="fas fa-chevron-right text-[8px]" />
+                        </span>
                       </div>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Session: May – October</p>
-                      <p className="text-[11px] font-bold text-purple-700 mt-1">{batch2Students} Enrolled Students</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Session: May – October • Click to Inspect</p>
+                      <p className="text-[11px] font-bold text-purple-700 mt-1 flex items-center justify-between">
+                        <span>{batch2Students} Enrolled Students</span>
+                        <span className="text-[10px] font-semibold text-purple-600 underline">View Batch Details</span>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -703,6 +725,151 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
           })
         )}
       </div>
+
+      {/* Batch Joined Students & Courses to Study Modal */}
+      {selectedBatchModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            {/* Modal Header */}
+            <div className="p-4 bg-gradient-to-r from-teal-700 to-teal-800 text-white">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="badge bg-white/20 text-white text-[10px] uppercase font-bold tracking-wider">
+                      {selectedBatchModal.batch}
+                    </span>
+                    <span className="text-teal-200 text-xs font-semibold">{selectedBatchModal.deptName}</span>
+                  </div>
+                  <h3 className="text-base font-bold mt-1 text-white">Batch Cohort Overview</h3>
+                  <p className="text-xs text-teal-100 mt-0.5">Joined students & curriculum courses to study</p>
+                </div>
+                <button 
+                  onClick={() => setSelectedBatchModal(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition"
+                >
+                  <i className="fas fa-times" />
+                </button>
+              </div>
+
+              {/* Tabs Switcher: Students vs Courses */}
+              <div className="flex bg-black/20 p-1 rounded-xl mt-3 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setBatchTab('students')}
+                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                    batchTab === 'students' ? 'bg-white text-teal-800 shadow-xs font-bold' : 'text-teal-100 hover:text-white'
+                  }`}
+                >
+                  <i className="fas fa-user-graduate text-[11px]" />
+                  <span>Joined Students ({users.filter(u => u.role === 'student' && (u.batch === selectedBatchModal.batch || (selectedBatchModal.batch.includes('1') ? (u.batch?.includes('1') || !u.batch) : u.batch?.includes('2')))).length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchTab('courses')}
+                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                    batchTab === 'courses' ? 'bg-white text-teal-800 shadow-xs font-bold' : 'text-teal-100 hover:text-white'
+                  }`}
+                >
+                  <i className="fas fa-book text-[11px]" />
+                  <span>Courses to Study</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {batchTab === 'students' ? (
+                <div>
+                  {(() => {
+                    const joined = users.filter(u => u.role === 'student' && (u.batch === selectedBatchModal.batch || (selectedBatchModal.batch.includes('1') ? (u.batch?.includes('1') || !u.batch) : u.batch?.includes('2'))));
+                    if (joined.length === 0) {
+                      return (
+                        <div className="text-center py-8 px-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                          <i className="fas fa-users-slash text-gray-300 text-3xl mb-2" />
+                          <p className="text-xs font-bold text-gray-700">No Students Joined Yet</p>
+                          <p className="text-[11px] text-gray-500 mt-1">Students assigned to {selectedBatchModal.batch} will be listed here.</p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {joined.map((stu) => (
+                          <div key={stu.id} className="p-3 bg-gray-50 hover:bg-gray-100/80 rounded-xl border border-gray-200/80 flex items-center justify-between gap-3 transition">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-xs shrink-0">
+                                {stu.avatar || stu.name.charAt(0)}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-gray-800 truncate">{stu.name}</p>
+                                <p className="text-[10px] text-gray-500 truncate">{stu.email}</p>
+                                <span className="text-[9px] font-semibold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 inline-block mt-0.5">
+                                  {stu.targetExam || stu.department || 'NEET Medical Track'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="badge bg-green-50 text-green-700 border border-green-200 text-[9px] font-bold">
+                                {stu.status || 'Active'}
+                              </span>
+                              <p className="text-[9px] text-gray-400 mt-1">{selectedBatchModal.batch}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl text-xs text-teal-900">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <i className="fas fa-graduation-cap text-teal-700" />
+                      <span>Cohort Academic Curriculum ({selectedBatchModal.batch})</span>
+                    </p>
+                    <p className="text-[11px] text-teal-800 mt-0.5">
+                      Courses & 7 Core Subjects prescribed for this cohort's examination syllabus.
+                    </p>
+                  </div>
+
+                  {[
+                    { name: 'Biology', code: 'BIO', duration: '6 Months', chapters: 3, topics: 10, icon: 'fa-dna', color: '#0d9488' },
+                    { name: 'Chemistry', code: 'CHEM', duration: '6 Months', chapters: 2, topics: 8, icon: 'fa-flask', color: '#3b82f6' },
+                    { name: 'Physics', code: 'PHY', duration: '6 Months', chapters: 2, topics: 8, icon: 'fa-atom', color: '#8b5cf6' },
+                    { name: 'Mathematics', code: 'MATH', duration: '5 Months', chapters: 2, topics: 6, icon: 'fa-calculator', color: '#16a34a' },
+                    { name: 'Logical Reasoning', code: 'REAS', duration: '4 Months', chapters: 2, topics: 6, icon: 'fa-brain', color: '#f59e0b' },
+                    { name: 'English', code: 'ENG', duration: '4 Months', chapters: 2, topics: 6, icon: 'fa-book-open', color: '#ef4444' },
+                    { name: 'GK', code: 'GK', duration: '4 Months', chapters: 2, topics: 6, icon: 'fa-globe', color: '#06b6d4' },
+                  ].map((c) => (
+                    <div key={c.name} className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs shrink-0" style={{ backgroundColor: c.color }}>
+                          <i className={`fas ${c.icon}`} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-800">{c.name} ({c.code})</p>
+                          <p className="text-[10px] text-gray-500">{c.chapters} Chapters • {c.topics} Topics • Duration: {c.duration}</p>
+                        </div>
+                      </div>
+                      <span className="badge badge-teal text-[9px] font-bold shrink-0">Included</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-gray-50 border-t border-gray-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedBatchModal(null)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -721,135 +888,78 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
 }
 
 // ==================== ADMIN COURSES ====================
+const CORE_CURRICULUM_SUBJECTS = [
+  { name: 'Biology', id: 'subj-biology', code: 'BIO', icon: 'fa-dna' },
+  { name: 'Chemistry', id: 'subj-chemistry', code: 'CHEM', icon: 'fa-flask' },
+  { name: 'Physics', id: 'subj-physics', code: 'PHY', icon: 'fa-atom' },
+  { name: 'Mathematics', id: 'subj-maths', code: 'MATH', icon: 'fa-calculator' },
+  { name: 'Logical Reasoning', id: 'subj-reasoning', code: 'REAS', icon: 'fa-brain' },
+  { name: 'English', id: 'subj-english', code: 'ENG', icon: 'fa-book-open' },
+  { name: 'GK', id: 'subj-gk', code: 'GK', icon: 'fa-globe' },
+];
+
 export function AdminCourses({ onBack, onNavigate }: { onBack: () => void; onNavigate?: (screen: string, data?: any) => void }) {
-  const { courses, addCourse, deleteCourse, users } = useData();
-  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>(() => {
-    const savedTopic = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_topic') : null;
-    return savedTopic ? 'curriculum' : 'courses';
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('lms_curriculum_active_subject');
+      if (saved) return saved;
+    }
+    return 'subj-biology';
   });
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', category: 'NEET', description: '', subjects: '', duration: '6 months', icon: 'fa-book', color: '#0d9488' });
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const facultyUsers = users.filter(u => u.role === 'faculty');
 
-  const colors = ['#0d9488', '#3b82f6', '#8b5cf6', '#16a34a', '#f59e0b', '#ef4444', '#06b6d4', '#7c3aed'];
-  const icons = ['fa-book', 'fa-book-medical', 'fa-atom', 'fa-flask', 'fa-dna', 'fa-brain', 'fa-calculator', 'fa-globe-europe', 'fa-stethoscope', 'fa-user-md', 'fa-hospital', 'fa-microscope'];
-
-  const handleAdd = () => {
-    if (!formData.name) return;
-    addCourse({
-      name: formData.name, category: formData.category, description: formData.description,
-      subjects: formData.subjects.split(',').map(s => s.trim()).filter(Boolean),
-      facultyIds: [], studentIds: [], duration: formData.duration, icon: formData.icon, color: formData.color,
-    });
-    setFormData({ name: '', category: 'NEET', description: '', subjects: '', duration: '6 months', icon: 'fa-book', color: '#0d9488' });
-    setShowForm(false);
+  const handleSelectSubject = (id: string) => {
+    setSelectedSubjectId(id);
+    try {
+      sessionStorage.setItem('lms_curriculum_active_subject', id);
+    } catch {}
   };
 
   return (
     <div>
       <Header 
-        title={viewMode === 'courses' ? 'Courses & Batches' : 'Academic Curriculum'} 
-        subtitle={viewMode === 'courses' ? `${courses.length} courses configured` : '3-Tier Academic Hierarchy'} 
+        title="Academic Curriculum" 
+        subtitle="7 Core Subjects • Academic Hierarchy" 
         showBack 
         onBack={onBack} 
-        rightAction={
-          viewMode === 'courses' ? (
-            <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
-          ) : undefined
-        } 
       />
 
-      {/* Tab Switcher */}
-      <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mt-3 mb-1">
-        <button
-          onClick={() => setViewMode('courses')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-            viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <i className="fas fa-book-medical text-[11px]" />
-          <span>Course Batches</span>
-        </button>
-        <button
-          onClick={() => setViewMode('curriculum')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-            viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <i className="fas fa-layer-group text-[11px]" />
-          <span>Curriculum Hierarchy</span>
-        </button>
+      {/* 7 Bold Subjects Selector */}
+      <div className="px-4 pt-3 pb-2.5 bg-gray-50 border-b border-gray-200">
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <i className="fas fa-layer-group text-teal-600 text-[11px]" />
+          <span>Curriculum Hierarchy Subjects:</span>
+        </p>
+        <div className="flex gap-1.5 overflow-x-auto pb-1.5 no-scrollbar">
+          {CORE_CURRICULUM_SUBJECTS.map((sub) => {
+            const isActive = selectedSubjectId === sub.id;
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => handleSelectSubject(sub.id)}
+                className={`px-3 py-2 rounded-xl text-xs transition flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-2xs ${
+                  isActive
+                    ? 'bg-teal-600 text-white shadow-xs ring-2 ring-teal-300 font-bold'
+                    : 'bg-white border border-gray-200 text-gray-800 hover:bg-teal-50 hover:text-teal-700 font-bold'
+                }`}
+              >
+                <i className={`fas ${sub.icon} text-xs`} />
+                <span className="font-bold">{sub.name}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {viewMode === 'curriculum' ? (
-        <div className="p-4">
-          <CurriculumBrowser canManage={true} onNavigateToResource={(r) => onNavigate ? onNavigate('resource-view', r) : undefined} />
-        </div>
-      ) : (
-      <div className="p-4 space-y-3">
-        {showForm && (
-          <div className="card border-2 border-teal-200">
-            <h3 className="text-sm font-bold text-gray-800 mb-3">Add Course</h3>
-            <input value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="Course Name *" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <select value={formData.category} onChange={(e) => setFormData(p => ({ ...p, category: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2">
-              <option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option><option>Other</option>
-            </select>
-            <input value={formData.description} onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))} placeholder="Description" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <input value={formData.subjects} onChange={(e) => setFormData(p => ({ ...p, subjects: e.target.value }))} placeholder="Subjects (comma separated)" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <input value={formData.duration} onChange={(e) => setFormData(p => ({ ...p, duration: e.target.value }))} placeholder="Duration" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <div className="mb-2">
-              <label className="text-[10px] text-gray-500">Color</label>
-              <div className="flex flex-wrap gap-2 mt-1">{colors.map((c) => (<button key={c} onClick={() => setFormData(p => ({ ...p, color: c }))} className={`w-7 h-7 rounded-full ${formData.color === c ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`} style={{ backgroundColor: c }} />))}</div>
-            </div>
-            <div className="mb-3">
-              <label className="text-[10px] text-gray-500">Icon</label>
-              <div className="flex flex-wrap gap-2 mt-1">{icons.map((ic) => (<button key={ic} onClick={() => setFormData(p => ({ ...p, icon: ic }))} className={`w-8 h-8 rounded-lg flex items-center justify-center ${formData.icon === ic ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-500'}`}><i className={`fas ${ic} text-xs`} /></button>))}</div>
-            </div>
-            <button onClick={handleAdd} className="btn-primary">Add Course</button>
-          </div>
-        )}
-
-        {courses.length === 0 ? (
-          <EmptyState icon="fa-book" title="No Courses" message="Add your first course" />
-        ) : (
-          courses.map((course) => (
-            <div key={course.id} className="card">
-              <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: course.color + '20' }}>
-                  <i className={`fas ${course.icon}`} style={{ color: course.color }} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold text-gray-800">{course.name}</p>
-                    <span className="badge badge-teal">{course.category}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{course.description}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length} students</span>
-                    <span className="text-[10px] text-gray-400"><i className="fas fa-clock mr-1" />{course.duration}</span>
-                  </div>
-                </div>
-                <button onClick={() => setConfirmDelete(course.id)} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>
-              </div>
-            </div>
-          ))
-        )}
+      {/* Academic Curriculum Hierarchy for the selected subject */}
+      <div className="p-4">
+        <CurriculumBrowser 
+          key={selectedSubjectId}
+          initialSubjectId={selectedSubjectId}
+          canManage={true} 
+          onNavigateToResource={(r) => onNavigate ? onNavigate('resource-view', r) : undefined} 
+        />
       </div>
-      )}
-
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
-            <h3 className="text-lg font-bold text-gray-800 text-center mb-2">Delete Course?</h3>
-            <p className="text-sm text-gray-500 text-center mb-4">This cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => { deleteCourse(confirmDelete); setConfirmDelete(null); }} className="flex-1 py-3 bg-red-500 text-white rounded-xl font-semibold text-sm">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

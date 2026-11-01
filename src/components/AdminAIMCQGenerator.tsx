@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCurriculum } from '../features/curriculum';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 
 interface GeneratedMCQ {
   id: number;
@@ -16,6 +17,8 @@ interface GeneratedMCQ {
 export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
   const { curriculum, subjects } = useCurriculum();
   const { addQuiz } = useData();
+  const { user } = useAuth();
+  const isFaculty = user?.role === 'faculty';
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0]?.id || 'subj-biology');
   const activeSubj = curriculum.find((s) => s.id === selectedSubjectId || s.code === selectedSubjectId) || curriculum[0];
@@ -52,6 +55,7 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
             `Option B: Decreased ventricular end-diastolic compliance causing secondary pulmonary congestion`,
             `Option C: Passive diffusion across non-fenestrated glomerular capillaries`,
             `Option D: Downregulation of adrenergic receptors in acute compensatory shock`,
+            `Option E: Retrograde trans-synaptic transport through unmyelinated post-ganglionic fibers`,
           ],
           correctAnswer: 0, // Option A correct
           marks: 4,
@@ -66,6 +70,7 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
             `Option B: Henderson-Hasselbalch ratio with fixed standard bicarbonate of 18 mEq/L`,
             `Option C: Absolute neutrophil clearance exceeding glomerular filtration rate`,
             `Option D: Serum osmolar gap calculation omitting blood urea nitrogen`,
+            `Option E: Fractional excretion of sodium exceeding 3.5% with pre-renal azotemia`,
           ],
           correctAnswer: 0, // Option A correct
           marks: 4,
@@ -80,6 +85,7 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
             `Option B: Pyruvate kinase under glucagon non-allosteric activation`,
             `Option C: Hexokinase IV functioning at saturated Vmax at physiological glucose levels`,
             `Option D: Lactate dehydrogenase operating under standard anaerobic conditions exclusively`,
+            `Option E: Fructose-1,6-bisphosphatase stimulated by fructose-2,6-bisphosphate in hepatocytes`,
           ],
           correctAnswer: 0,
           marks: 4,
@@ -106,8 +112,8 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
       marks: generatedQuestions.length * 4,
       negativeMarking: 1,
       status: 'active',
-      createdById: 'admin',
-      createdByName: 'Administrator (AI Generator)',
+      createdById: user?.id || (isFaculty ? 'faculty' : 'admin'),
+      createdByName: user?.name ? `${user.name} (AI MCQ Generator)` : (isFaculty ? 'Faculty (AI Generator)' : 'Administrator (AI Generator)'),
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       batch: targetBatch,
@@ -326,4 +332,6 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
     </div>
   );
 }
+
+export const AIMCQGenerator = AdminAIMCQGenerator;
 

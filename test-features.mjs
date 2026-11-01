@@ -122,9 +122,10 @@ assert(
 );
 
 assert(
-  facultyScreensSrc.includes('Administrator Privileges Required') &&
-  facultyScreensSrc.includes('Faculty add and delete permissions have been revoked'),
-  'UploadResource screen blocks non-Admin faculty from adding resources'
+  facultyScreensSrc.includes('UploadResource') &&
+  facultyScreensSrc.includes('Document Reading Section Contents') &&
+  facultyScreensSrc.includes('readingContent'),
+  'Faculty can add learning resources with dedicated document-specific reading section contents'
 );
 
 assert(
@@ -177,6 +178,19 @@ assert(
 assert(
   adminScreensSrc.includes('AdminAIMCQGenerator') && adminScreensSrc.includes('showAIMCQModal'),
   'Admin Dashboard provides 1-click access to the AI MCQ Generator'
+);
+
+assert(
+  mcqGenSrc.includes('Option E:') &&
+  facultyScreensSrc.includes('AIMCQGenerator') &&
+  facultyScreensSrc.includes('showAIMCQModal'),
+  'AI Chapter-Wise MCQ Generator provides 5 options (A, B, C, D, E) and is accessible from Faculty Dashboard'
+);
+
+assert(
+  adminScreensSrc.includes('selectedBatchModal') &&
+  adminScreensSrc.includes('CORE_CURRICULUM_SUBJECTS'),
+  'Batches in Department tab show joined students and study courses, and Courses screen is dedicated to Academic Hierarchy'
 );
 
 // 7. Verify Screenshot & Screen Recording Prevention App-Wide

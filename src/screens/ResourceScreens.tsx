@@ -239,8 +239,13 @@ export function ResourceViewer({ onBack, resource }: { onBack: () => void; resou
 // ==================== PDF VIEWER ====================
 function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user, isViewingAs, viewingAsUser } = useAuth();
+  const { updateResource } = useData();
   const displayUser = isViewingAs ? viewingAsUser : user;
   const isStudent = displayUser?.role === 'student';
+  const isAdminOrFaculty = displayUser?.role === 'admin' || displayUser?.role === 'faculty';
+  const [readingContentState, setReadingContentState] = useState<string>(resource.readingContent || '');
+  const [isEditingReadingContent, setIsEditingReadingContent] = useState(false);
+  const [editContentText, setEditContentText] = useState<string>(resource.readingContent || '');
   const watermarkText = `${displayUser?.name || 'User'} • ${new Date().toLocaleDateString()}`;
   const { resolvedUrl, loading } = useResourceUrl(resource);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -291,8 +296,11 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
   };
 
   const extractedLines = useMemo(() => {
+    if (readingContentState && readingContentState.trim().length > 0) {
+      return readingContentState.split('\n').filter((l: string) => l.trim().length > 0);
+    }
     return extractDocumentLines(resource.fileData, resource.title);
-  }, [resource.fileData, resource.title]);
+  }, [readingContentState, resource.fileData, resource.title]);
 
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
@@ -427,10 +435,30 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
 
               {/* Extracted Content / Section Reader */}
               <div className="space-y-2 pt-1">
-                <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
-                  <i className="fas fa-book-open text-teal-600" />
-                  <span>Document Reading Sections:</span>
-                </p>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <i className="fas fa-book-open text-teal-600" />
+                    <span>Document Reading Section:</span>
+                    {readingContentState && (
+                      <span className="badge bg-teal-100 text-teal-800 text-[9px] font-bold py-0.5 px-1.5">
+                        Document-Specific Content
+                      </span>
+                    )}
+                  </p>
+                  {isAdminOrFaculty && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditContentText(readingContentState);
+                        setIsEditingReadingContent(true);
+                      }}
+                      className="px-2 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-md text-[10px] font-bold transition flex items-center gap-1 shadow-2xs"
+                    >
+                      <i className="fas fa-edit text-[9px]" />
+                      <span>{readingContentState ? 'Edit Reading Content' : 'Add Reading Content'}</span>
+                    </button>
+                  )}
+                </div>
 
                 {extractedLines.length > 0 ? (
                   <div className="space-y-2 max-h-[360px] overflow-y-auto p-3 bg-gray-50 rounded-xl border border-gray-200/80 text-xs text-gray-800 leading-relaxed font-sans">
@@ -475,6 +503,55 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                     View Original
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Document Reading Content Edit Modal */}
+        {isEditingReadingContent && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
+            <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3 shadow-2xl">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                  <i className="fas fa-file-alt text-teal-600" />
+                  <span>Document Reading Section Contents</span>
+                </h3>
+                <button onClick={() => setIsEditingReadingContent(false)} className="text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times" />
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug">
+                Provide specific study notes, formulas, or summaries tailored directly for &ldquo;{resource.title}&rdquo;.
+              </p>
+              <textarea
+                rows={5}
+                value={editContentText}
+                onChange={(e) => setEditContentText(e.target.value)}
+                placeholder="Enter specific document reading content..."
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 font-sans"
+              />
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingReadingContent(false)}
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = editContentText.trim();
+                    updateResource(resource.id, { readingContent: trimmed }, displayUser?.role);
+                    resource.readingContent = trimmed;
+                    setReadingContentState(trimmed);
+                    setIsEditingReadingContent(false);
+                  }}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                >
+                  Save Reading Content
+                </button>
               </div>
             </div>
           </div>
@@ -1195,7 +1272,12 @@ function VideoPlayer({ onBack, resource }: { onBack: () => void; resource: any }
 // ==================== FILE VIEWER (for Word, Excel, PPT, etc.) ====================
 function FileViewer({ onBack, resource }: { onBack: () => void; resource: any }) {
   const { user } = useAuth();
+  const { updateResource } = useData();
   const isStudent = user?.role === 'student';
+  const isAdminOrFaculty = user?.role === 'admin' || user?.role === 'faculty';
+  const [readingContentState, setReadingContentState] = useState<string>(resource.readingContent || '');
+  const [isEditingReadingContent, setIsEditingReadingContent] = useState(false);
+  const [editContentText, setEditContentText] = useState<string>(resource.readingContent || '');
   const watermarkText = `${user?.name || 'User'} • ${new Date().toLocaleDateString()}`;
   const { resolvedUrl } = useResourceUrl(resource);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1258,8 +1340,11 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
   };
 
   const extractedLines = useMemo(() => {
+    if (readingContentState && readingContentState.trim().length > 0) {
+      return readingContentState.split('\n').filter((l: string) => l.trim().length > 0);
+    }
     return extractDocumentLines(resource.fileData, resource.title);
-  }, [resource.fileData, resource.title]);
+  }, [readingContentState, resource.fileData, resource.title]);
 
   return (
     <DocumentProtectionWrapper resourceTitle={resource.title}>
@@ -1363,6 +1448,24 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
                 <p className="font-bold text-teal-900 text-xs flex items-center gap-1.5">
                   <i className="fas fa-graduation-cap text-teal-600" />
                   <span>Topic Synopsis & Examination Directives:</span>
+                  {readingContentState && (
+                    <span className="badge bg-teal-100 text-teal-800 text-[9px] font-bold py-0.5 px-1.5 ml-2">
+                      Document-Specific Content
+                    </span>
+                  )}
+                  {isAdminOrFaculty && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditContentText(readingContentState);
+                        setIsEditingReadingContent(true);
+                      }}
+                      className="ml-auto px-2 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-md text-[10px] font-bold transition flex items-center gap-1 shadow-2xs"
+                    >
+                      <i className="fas fa-edit text-[9px]" />
+                      <span>{readingContentState ? 'Edit Content' : 'Add Content'}</span>
+                    </button>
+                  )}
                 </p>
                 <p className="text-teal-800 text-[11px] leading-relaxed">
                   {resource.description || `Comprehensive study notes, diagrams, and examination review points for ${resource.title}.`}
@@ -1425,6 +1528,55 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
             </div>
           </div>
         </div>
+
+        {/* Document Reading Content Edit Modal (FileViewer) */}
+        {isEditingReadingContent && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
+            <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3 shadow-2xl">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                  <i className="fas fa-file-alt text-teal-600" />
+                  <span>Document Reading Section Contents</span>
+                </h3>
+                <button onClick={() => setIsEditingReadingContent(false)} className="text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times" />
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug">
+                Provide specific study notes, formulas, or summaries tailored directly for &ldquo;{resource.title}&rdquo;.
+              </p>
+              <textarea
+                rows={5}
+                value={editContentText}
+                onChange={(e) => setEditContentText(e.target.value)}
+                placeholder="Enter specific document reading content..."
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 font-sans"
+              />
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingReadingContent(false)}
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = editContentText.trim();
+                    updateResource(resource.id, { readingContent: trimmed }, user?.role);
+                    resource.readingContent = trimmed;
+                    setReadingContentState(trimmed);
+                    setIsEditingReadingContent(false);
+                  }}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                >
+                  Save Reading Content
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Fullscreen Document Overlay Facility (Preserving Phase 9 inspection modal) */}
         {isFullscreen && (

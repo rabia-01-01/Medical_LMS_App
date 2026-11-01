@@ -53,6 +53,12 @@ export function useExams() {
 export function useCurriculum(initialSubjectId?: string) {
   const [curriculum, setCurriculum] = useState<SubjectWithChapters[]>([]);
   const [activeSubjectId, setActiveSubjectId] = useState<string>(initialSubjectId || '');
+
+  useEffect(() => {
+    if (initialSubjectId) {
+      setActiveSubjectId(initialSubjectId);
+    }
+  }, [initialSubjectId]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,9 +85,27 @@ export function useCurriculum(initialSubjectId?: string) {
     loadCurriculum();
   }, [loadCurriculum]);
 
-  const activeSubject = curriculum.find(
-    (s) => s.id === activeSubjectId || s.code.toLowerCase() === activeSubjectId.toLowerCase()
-  ) || curriculum[0] || null;
+  const activeSubject = curriculum.find((s) => {
+    if (!activeSubjectId) return false;
+    const target = activeSubjectId.toLowerCase().trim();
+    const sId = (s.id || '').toLowerCase().trim();
+    const sCode = (s.code || '').toLowerCase().trim();
+    const sName = (s.name || '').toLowerCase().trim();
+
+    if (sId === target || sCode === target || sName === target) return true;
+    if (target.includes(sCode) || target.includes(sName) || sName.includes(target)) return true;
+
+    // Canonical core 7 subjects mapping
+    if (target.includes('bio') && (sCode === 'bio' || sName.includes('bio'))) return true;
+    if (target.includes('chem') && (sCode === 'chem' || sName.includes('chem'))) return true;
+    if (target.includes('phy') && (sCode === 'phy' || sName.includes('phys'))) return true;
+    if ((target.includes('math') || target.includes('mat')) && (sCode === 'math' || sName.includes('math'))) return true;
+    if ((target.includes('reason') || target.includes('log') || target.includes('reas') || target.includes('lr')) && (sCode === 'lr' || sCode === 'reas' || sName.includes('reason'))) return true;
+    if (target.includes('eng') && (sCode === 'eng' || sName.includes('eng'))) return true;
+    if ((target.includes('gk') || target.includes('knowledge')) && (sCode === 'gk' || sName.includes('gk') || sName.includes('knowledge'))) return true;
+
+    return false;
+  }) || curriculum[0] || null;
 
   const chapters: ChapterWithTopics[] = activeSubject ? activeSubject.chapters : [];
 

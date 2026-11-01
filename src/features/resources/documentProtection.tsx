@@ -8,14 +8,14 @@ interface DocumentProtectionProps {
 
 /**
  * High-Security DRM Document Protection Component
- * Prevents students from:
- * 1. Downloading documents
- * 2. Taking screenshots (PrintScreen, Snipping tool, window blur shield)
- * 3. Right-clicking (context menu)
- * 4. Printing (Ctrl+P / Cmd+P)
- * 5. Saving (Ctrl+S / Cmd+S)
- * 6. Copying text (Ctrl+C / copy event)
- * Embeds dynamic student watermark with ID and timestamp across viewport
+ * Prevents:
+ * 1. Right-clicking (context menu) inside any document (unconditionally blocked)
+ * 2. Taking screenshots (PrintScreen, Snipping tool Win+Shift+S, Mac Cmd+Shift+3/4/5, window blur shield)
+ * 3. Downloading / dragging document files and images
+ * 4. Screen recording / tab sharing via getDisplayMedia
+ * 5. Printing (Ctrl+P / Cmd+P) and saving webpage (Ctrl+S / Cmd+S)
+ * 6. Inspecting source (F12, Ctrl+Shift+I/J/C, Ctrl+U)
+ * Embeds dynamic watermark with ID and timestamp
  */
 export function DocumentProtectionWrapper({ children, resourceTitle }: DocumentProtectionProps) {
   const { user, isViewingAs, viewingAsUser } = useAuth();
@@ -25,37 +25,65 @@ export function DocumentProtectionWrapper({ children, resourceTitle }: DocumentP
   const [shieldActive, setShieldActive] = useState(false);
   const [screenshotWarning, setScreenshotWarning] = useState<string | null>(null);
 
-  const studentName = displayUser?.name || 'Student';
-  const studentId = displayUser?.id || 'std_anonymous';
+  const studentName = displayUser?.name || 'User';
+  const studentId = displayUser?.id || 'doc_viewer';
   const timestamp = new Date().toLocaleString();
 
-  const triggerScreenshotAlert = useCallback(() => {
+  const triggerScreenshotAlert = useCallback((customMsg?: string) => {
     // Clear clipboard to foil screenshot
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText('Screenshots and content copying are prohibited.');
+        navigator.clipboard.writeText('');
       }
     } catch {
       // Ignore
     }
 
-    setScreenshotWarning(`Screenshot or screen capture detected. Medical curriculum documents are protected by copyright. (Student ID: ${studentId})`);
+    setScreenshotWarning(
+      customMsg || `Screen capture / download attempt detected. Medical curriculum documents are protected by copyright. (Viewer ID: ${studentId})`
+    );
     setTimeout(() => {
       setScreenshotWarning(null);
     }, 4500);
   }, [studentId]);
 
   useEffect(() => {
-    if (!isStudent) return;
+    // 1. Unconditionally block right-click context menu everywhere inside documents
+    const handleContextMenuGlobal = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerScreenshotAlert('Right-click context menu is strictly disabled inside documents.');
+      return false;
+    };
 
-    // 1. Intercept keyboard shortcuts
+    // 2. Intercept keyboard shortcuts (Snipping tool, PrintScreen, DevTools, Print, Save, View Source)
     const handleKeyDown = (e: KeyboardEvent) => {
       // PrintScreen key
-      if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.keyCode === 44) {
         e.preventDefault();
-        triggerScreenshotAlert();
+        triggerScreenshotAlert('PrintScreen is disabled on this document.');
         setShieldActive(true);
         setTimeout(() => setShieldActive(false), 2000);
+        return;
+      }
+
+      // Windows Snipping Tool (Win + Shift + S or Ctrl + Shift + S)
+      if ((e.key === 's' || e.key === 'S' || e.code === 'KeyS') && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerScreenshotAlert('Snipping Tool shortcut is strictly blocked.');
+        setShieldActive(true);
+        setTimeout(() => setShieldActive(false), 2500);
+        return;
+      }
+
+      // Mac screenshot shortcuts (Cmd + Shift + 3, Cmd + Shift + 4, Cmd + Shift + 5)
+      if (e.metaKey && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerScreenshotAlert('Mac screenshot shortcuts are strictly disabled.');
+        setShieldActive(true);
+        setTimeout(() => setShieldActive(false), 2500);
         return;
       }
 
@@ -63,7 +91,7 @@ export function DocumentProtectionWrapper({ children, resourceTitle }: DocumentP
       if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
         e.stopPropagation();
-        triggerScreenshotAlert();
+        triggerScreenshotAlert('Printing is strictly restricted for protected documents.');
         return;
       }
 
@@ -71,76 +99,118 @@ export function DocumentProtectionWrapper({ children, resourceTitle }: DocumentP
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         e.stopPropagation();
-        triggerScreenshotAlert();
+        triggerScreenshotAlert('Saving document locally is prohibited.');
+        return;
+      }
+
+      // Ctrl+U / Cmd+U (View Source)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerScreenshotAlert('Viewing document source is disabled.');
         return;
       }
 
       // Ctrl+C / Cmd+C (Copy)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+      if (isStudent && (e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
         e.preventDefault();
         e.stopPropagation();
-        triggerScreenshotAlert();
+        triggerScreenshotAlert('Text selection and copying are disabled on this document.');
         return;
       }
 
-      // F12 or Ctrl+Shift+I (DevTools)
-      if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'C' || e.key === 'c'))) {
+      // F12 or Ctrl+Shift+I/J/C (DevTools)
+      if (
+        e.key === 'F12' ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'i', 'C', 'c', 'J', 'j'].includes(e.key))
+      ) {
         e.preventDefault();
+        triggerScreenshotAlert('Developer inspection tools are disabled.');
         return;
       }
     };
 
-    // 2. Window blur shield (triggers when Windows Snipping Tool / external screenshot software opens)
+    // 3. Window blur shield (triggers immediately when Windows Snipping Tool, OBS, or screenshot tool takes focus)
     const handleBlur = () => {
       setShieldActive(true);
     };
 
     const handleFocus = () => {
-      setShieldActive(false);
+      // Brief delay before restoring to prevent screen-grabber freeze
+      setTimeout(() => setShieldActive(false), 300);
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
         setShieldActive(true);
       } else {
-        setShieldActive(false);
+        setTimeout(() => setShieldActive(false), 300);
       }
     };
 
-    // 3. Prevent Copy
+    // 4. Prevent Copy & Drag
     const handleCopy = (e: ClipboardEvent) => {
-      e.preventDefault();
-      triggerScreenshotAlert();
+      if (isStudent) {
+        e.preventDefault();
+        triggerScreenshotAlert('Copying content is disabled.');
+      }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    // 5. Intercept getDisplayMedia (browser screen recorder / tab share)
+    let originalGetDisplayMedia: any = null;
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+      originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        triggerScreenshotAlert('Screen sharing / tab recording is blocked on protected documents.');
+        throw new Error('Screen capture strictly blocked by DocumentProtection.');
+      };
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('contextmenu', handleContextMenuGlobal, true);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('copy', handleCopy);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('contextmenu', handleContextMenuGlobal, true);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('copy', handleCopy);
+      if (originalGetDisplayMedia && navigator.mediaDevices) {
+        navigator.mediaDevices.getDisplayMedia = originalGetDisplayMedia;
+      }
     };
   }, [isStudent, triggerScreenshotAlert]);
 
-  // Context menu handler
+  // Context menu handler on container
   const handleContextMenu = (e: React.MouseEvent) => {
-    if (isStudent) {
-      e.preventDefault();
-      triggerScreenshotAlert();
-    }
+    e.preventDefault();
+    e.stopPropagation();
+    triggerScreenshotAlert('Right-click mouse feature is disabled inside documents.');
+    return false;
+  };
+
+  // Prevent drag and drop downloading of images and assets
+  const handleDragStart = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
   };
 
   return (
     <div 
-      className={`relative w-full h-full ${isStudent ? 'select-none' : ''}`}
+      className="relative w-full h-full select-none"
       onContextMenu={handleContextMenu}
-      style={isStudent ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined}
+      onDragStart={handleDragStart}
+      style={{
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
+      }}
     >
       {/* Dynamic diagonal repeating security watermark grid for students */}
       {isStudent && (
@@ -159,8 +229,8 @@ export function DocumentProtectionWrapper({ children, resourceTitle }: DocumentP
       )}
 
       {/* Screen blur shield overlay when window loses focus (anti-snipping tool) */}
-      {isStudent && shieldActive && (
-        <div className="absolute inset-0 z-40 bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center text-white p-6 text-center select-none animate-fade-in">
+      {shieldActive && (
+        <div className="absolute inset-0 z-40 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center text-white p-6 text-center select-none animate-fade-in">
           <div className="w-16 h-16 rounded-2xl bg-teal-500/20 flex items-center justify-center mb-3 border border-teal-500/40">
             <i className="fas fa-shield-alt text-3xl text-teal-400" />
           </div>
@@ -189,7 +259,13 @@ export function DocumentProtectionWrapper({ children, resourceTitle }: DocumentP
       )}
 
       {/* Actual viewer content */}
-      {children}
+      <div 
+        className="w-full h-full"
+        onContextMenu={handleContextMenu}
+        onDragStart={handleDragStart}
+      >
+        {children}
+      </div>
     </div>
   );
 }

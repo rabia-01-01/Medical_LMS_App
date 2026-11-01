@@ -114,7 +114,22 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
 
         {showAIMCQModal && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
-            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto p-4 flex flex-col shadow-2xl">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center text-xs">
+                    <i className="fas fa-robot" />
+                  </span>
+                  <h3 className="text-sm font-bold text-gray-800">Faculty AI MCQ Generator</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAIMCQModal(false)}
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-xs transition"
+                >
+                  <i className="fas fa-times" />
+                </button>
+              </div>
               <AIMCQGenerator onBack={() => setShowAIMCQModal(false)} />
             </div>
           </div>

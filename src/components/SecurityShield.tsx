@@ -8,6 +8,18 @@ export function SecurityShield({ children }: { children?: React.ReactNode }) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 0. Intercept Windows Snipping Tool (Win+Shift+S or Ctrl+Shift+S)
+      if ((e.key === 's' || e.key === 'S' || e.code === 'KeyS') && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText('');
+          }
+        } catch {}
+        triggerWarning('Snipping Tool and screen capture shortcuts are strictly disabled app-wide.');
+        return false;
+      }
+
       // 1. Intercept PrintScreen
       if (e.key === 'PrintScreen' || e.keyCode === 44 || e.code === 'PrintScreen') {
         e.preventDefault();
@@ -73,6 +85,16 @@ export function SecurityShield({ children }: { children?: React.ReactNode }) {
     const handleWindowFocus = () => {
       setIsShieldActive(false);
     };
+
+    // Intercept Web Screen Recorder API (getDisplayMedia)
+    let origGetDisplayMedia: any = null;
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+      origGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        triggerWarning('Screen recording is strictly disabled.');
+        throw new Error('Screen capture blocked by SecurityShield.');
+      };
+    }
 
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('contextmenu', handleContextMenu, true);

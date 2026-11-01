@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import {
@@ -310,6 +310,13 @@ export function CurriculumBrowser({
   } = useCurriculum(effectiveInitialSubjectId);
 
   const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
+
+  // Auto-expand first chapter when active subject changes to ensure its topics are immediately shown
+  useEffect(() => {
+    if (activeSubject && activeSubject.chapters.length > 0) {
+      setExpandedChapterId(activeSubject.chapters[0].id);
+    }
+  }, [activeSubject?.id, activeSubject?.code]);
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [newChapterName, setNewChapterName] = useState('');
   const [newChapterDesc, setNewChapterDesc] = useState('');

@@ -113,7 +113,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
         {departments.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-gray-800 font-bold text-sm">Department with Batches</h2>
+              <h2 className="text-gray-800 font-bold text-sm">Batches</h2>
               <button onClick={() => onNavigate('departments')} className="text-teal-600 text-xs font-medium">View All</button>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
@@ -787,7 +787,7 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
             { icon: 'fa-chart-pie', label: 'Performance Analytics', screen: 'analytics', badge: 'Phase 6' },
             { icon: 'fa-book', label: 'My Courses', screen: 'courses' },
             { icon: 'fa-clipboard-check', label: 'Quizzes & Drills', screen: 'quizzes', badge: `${totalAssessmentsCount} Drills` },
-            { icon: 'fa-building', label: 'Department with Batches', screen: 'departments' },
+            { icon: 'fa-building', label: 'Batches', screen: 'departments' },
             { icon: 'fa-bullhorn', label: 'Announcements', screen: 'announcements' },
             { icon: 'fa-calendar', label: 'Academic Calendar', screen: 'calendar' },
             { icon: 'fa-question-circle', label: 'Help & Support', screen: 'help' },
@@ -1060,7 +1060,7 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <Header
-        title="Department with Batches"
+        title="Batches"
         subtitle={`${departments.length} departments • Respective cohort batches`}
         showBack
         onBack={onBack}

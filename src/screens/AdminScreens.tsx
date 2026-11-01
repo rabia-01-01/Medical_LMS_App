@@ -183,7 +183,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           {[
             { icon: 'fa-users', label: 'User Management', desc: `${users.length} registered profiles (${metrics?.activeUsers || users.length} active)`, screen: 'users' },
             { icon: 'fa-book-medical', label: 'Academic & Course Management', desc: `${courses.length} courses, curriculum & cohorts`, screen: 'courses' },
-            { icon: 'fa-building', label: 'Department with Batches', desc: `${departments.length} departments & cohort batches`, screen: 'departments' },
+            { icon: 'fa-building', label: 'Batches', desc: `${departments.length} departments & cohort batches`, screen: 'departments' },
             { icon: 'fa-shield-alt', label: 'Resource Governance & Moderation', desc: `${resources.length} resources (${resources.filter(r => r.status === 'published').length} published)`, screen: 'resources' },
             { icon: 'fa-clipboard-check', label: 'Assessment & Quiz Engine', desc: `${totalAssessmentsCount} exams & mock drills`, screen: 'quizzes' },
             { icon: 'fa-history', label: 'Security & Audit Logs', desc: `${auditLogs.length} events logged`, screen: 'audit-logs' },
@@ -608,7 +608,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <Header
-        title="Department with Batches"
+        title="Batches"
         subtitle={`${departments.length} departments • Respective cohort batches`}
         showBack
         onBack={onBack}
@@ -621,7 +621,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
       <div className="p-4 space-y-3.5">
         {showForm && (
           <div className="card border-2 border-teal-200 space-y-2">
-            <h3 className="text-sm font-bold text-gray-800 mb-2">Add Department with Batches</h3>
+            <h3 className="text-sm font-bold text-gray-800 mb-2">Add Department & Batches</h3>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Department Name *" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
             <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
             <input value={subjects} onChange={(e) => setSubjects(e.target.value)} placeholder="Subjects (comma separated)" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
@@ -644,7 +644,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
             </div>
-            <button onClick={handleAdd} className="btn-primary w-full">Add Department with Batches</button>
+            <button onClick={handleAdd} className="btn-primary w-full">Add Department & Batches</button>
           </div>
         )}
 

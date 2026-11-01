@@ -183,7 +183,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           {[
             { icon: 'fa-users', label: 'User Management', desc: `${users.length} registered profiles (${metrics?.activeUsers || users.length} active)`, screen: 'users' },
             { icon: 'fa-book-medical', label: 'Academic & Course Management', desc: `${courses.length} courses, curriculum & cohorts`, screen: 'courses' },
-            { icon: 'fa-building', label: 'Departments', desc: `${departments.length} departments`, screen: 'departments' },
+            { icon: 'fa-building', label: 'Department with Batches', desc: `${departments.length} departments & cohort batches`, screen: 'departments' },
             { icon: 'fa-shield-alt', label: 'Resource Governance & Moderation', desc: `${resources.length} resources (${resources.filter(r => r.status === 'published').length} published)`, screen: 'resources' },
             { icon: 'fa-clipboard-check', label: 'Assessment & Quiz Engine', desc: `${totalAssessmentsCount} exams & mock drills`, screen: 'quizzes' },
             { icon: 'fa-history', label: 'Security & Audit Logs', desc: `${auditLogs.length} events logged`, screen: 'audit-logs' },
@@ -577,9 +577,9 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   );
 }
 
-// ==================== ADMIN DEPARTMENTS ====================
+// ==================== ADMIN DEPARTMENTS WITH RESPECTIVE BATCHES ====================
 export function AdminDepartments({ onBack }: { onBack: () => void }) {
-  const { departments, addDepartment, deleteDepartment } = useData();
+  const { departments, users, addDepartment, deleteDepartment } = useData();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -591,23 +591,46 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
 
   const handleAdd = () => {
     if (!name) return;
-    addDepartment({ name, icon, description, subjects: subjects.split(',').map(s => s.trim()).filter(Boolean) });
+    addDepartment({
+      name,
+      icon,
+      description,
+      subjects: subjects.split(',').map(s => s.trim()).filter(Boolean),
+      batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)']
+    });
     setName(''); setDescription(''); setSubjects(''); setShowForm(false);
   };
 
   return (
     <div>
-      <Header title="Departments" subtitle={`${departments.length} departments`} showBack onBack={onBack} rightAction={
-        <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
-      } />
-      <div className="p-4 space-y-3">
+      <Header
+        title="Department with Batches"
+        subtitle={`${departments.length} departments • Respective cohort batches`}
+        showBack
+        onBack={onBack}
+        rightAction={
+          <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm" title="Add Department">
+            <i className="fas fa-plus" />
+          </button>
+        }
+      />
+      <div className="p-4 space-y-3.5">
         {showForm && (
-          <div className="card border-2 border-teal-200">
-            <h3 className="text-sm font-bold text-gray-800 mb-3">Add Department</h3>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Department Name *" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <input value={subjects} onChange={(e) => setSubjects(e.target.value)} placeholder="Subjects (comma separated)" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <div className="mb-3">
+          <div className="card border-2 border-teal-200 space-y-2">
+            <h3 className="text-sm font-bold text-gray-800 mb-2">Add Department with Batches</h3>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Department Name *" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
+            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
+            <input value={subjects} onChange={(e) => setSubjects(e.target.value)} placeholder="Subjects (comma separated)" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
+            
+            <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Respective Cohort Batches:</span>
+              <div className="flex gap-2">
+                <span className="badge bg-teal-50 text-teal-700 border border-teal-200 font-semibold py-0.5 px-2">Batch 1 (Dec)</span>
+                <span className="badge bg-purple-50 text-purple-700 border border-purple-200 font-semibold py-0.5 px-2">Batch 2 (May/June)</span>
+              </div>
+            </div>
+
+            <div className="mb-2">
               <label className="text-[10px] text-gray-500">Icon</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {icons.map((ic) => (
@@ -617,26 +640,67 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
             </div>
-            <button onClick={handleAdd} className="btn-primary">Add Department</button>
+            <button onClick={handleAdd} className="btn-primary w-full">Add Department with Batches</button>
           </div>
         )}
 
         {departments.length === 0 ? (
           <EmptyState icon="fa-building" title="No Departments" message="Add your first department" />
         ) : (
-          departments.map((dept) => (
-            <div key={dept.id} className="card">
-              <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0"><i className={`fas ${dept.icon} text-teal-600`} /></div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-gray-800">{dept.name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{dept.description}</p>
-                  <div className="flex flex-wrap gap-1 mt-2">{dept.subjects.map((s) => (<span key={s} className="badge badge-teal text-[9px]">{s}</span>))}</div>
+          departments.map((dept) => {
+            const batch1Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 1 (Dec)').length;
+            const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
+
+            return (
+              <div key={dept.id} className="card space-y-3 border border-gray-100 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
+                    <i className={`fas ${dept.icon} text-teal-600`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-800">{dept.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">{dept.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {dept.subjects.map((s) => (
+                        <span key={s} className="badge badge-teal text-[9px]">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={() => setConfirmDelete(dept.id)} className="text-red-400 hover:text-red-600 text-xs p-1" title="Delete Department">
+                    <i className="fas fa-trash" />
+                  </button>
                 </div>
-                <button onClick={() => setConfirmDelete(dept.id)} className="text-red-400 text-xs"><i className="fas fa-trash" /></button>
+
+                {/* Respective Batches Grouping */}
+                <div className="pt-2 border-t border-gray-100 space-y-2">
+                  <p className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+                    <i className="fas fa-layer-group text-teal-600 text-xs" />
+                    <span>Respective Batches & Enrolled Students:</span>
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="p-2.5 rounded-xl bg-teal-50/50 border border-teal-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-teal-900">Batch 1 (Dec)</span>
+                        <span className="badge bg-teal-600 text-white text-[9px] py-0.5 px-1.5">Winter</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Session: Dec – April</p>
+                      <p className="text-[11px] font-bold text-teal-700 mt-1">{batch1Students} Enrolled Students</p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-purple-50/50 border border-purple-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-purple-900">Batch 2 (May/June)</span>
+                        <span className="badge bg-purple-600 text-white text-[9px] py-0.5 px-1.5">Summer</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Session: May – October</p>
+                      <p className="text-[11px] font-bold text-purple-700 mt-1">{batch2Students} Enrolled Students</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

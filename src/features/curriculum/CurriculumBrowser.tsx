@@ -32,6 +32,31 @@ interface CurriculumBrowserProps {
 }
 
 
+// Helper to guarantee clean, non-downloading MIME types
+function getCleanMimeType(fileName = '', rawMime = '', resType = ''): string {
+  const fn = (fileName || '').toLowerCase();
+  const m = (rawMime || '').toLowerCase();
+  const t = (resType || '').toLowerCase();
+  if (m && m !== 'application/octet-stream' && !m.includes('unknown')) return m;
+  if (fn.endsWith('.pdf') || t === 'pdf') return 'application/pdf';
+  if (fn.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (fn.endsWith('.doc')) return 'application/msword';
+  if (fn.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  if (fn.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+  if (fn.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (fn.endsWith('.xls')) return 'application/vnd.ms-excel';
+  if (fn.endsWith('.mp4') || t === 'video') return 'video/mp4';
+  if (fn.endsWith('.webm')) return 'video/webm';
+  if (fn.endsWith('.mov')) return 'video/quicktime';
+  if (fn.endsWith('.jpg') || fn.endsWith('.jpeg')) return 'image/jpeg';
+  if (fn.endsWith('.png')) return 'image/png';
+  if (fn.endsWith('.gif')) return 'image/gif';
+  if (fn.endsWith('.webp')) return 'image/webp';
+  if (fn.endsWith('.svg')) return 'image/svg+xml';
+  if (fn.endsWith('.txt') || fn.endsWith('.md') || fn.endsWith('.json') || t === 'note' || t === 'notes') return 'text/plain';
+  return 'application/pdf';
+}
+
 // Format details and icon helper for uploaded study materials
 function getFormatInfo(mat: any) {
   const fileName = (mat?.fileName || mat?.file?.file_name || mat?.title || '').toLowerCase();
@@ -323,13 +348,53 @@ export function CurriculumBrowser({
     const list: any[] = [];
     const seen = new Set<string>();
 
+    const contextMap = new Map<string, any>();
+    (contextResources || []).forEach((ctxR: any) => {
+      if (ctxR.id) contextMap.set(ctxR.id, ctxR);
+      const topicId = ctxR.topicId || (ctxR as any).topic_id;
+      if (ctxR.title && topicId) {
+        contextMap.set(`${ctxR.title.trim().toLowerCase()}_${topicId}`, ctxR);
+      }
+    });
+
     (cloudResources || []).forEach((cr: any) => {
       seen.add(cr.id);
       const topicId = cr.topic_id || cr.topicId;
+      const key = `${cr.title?.trim().toLowerCase()}_${topicId}`;
       if (cr.title && topicId) {
-        seen.add(`${cr.title.trim().toLowerCase()}_${topicId}`);
+        seen.add(key);
       }
-      list.push(cr);
+      const matchedCtx = contextMap.get(cr.id) || (topicId ? contextMap.get(key) : null);
+      const fn = cr.fileName || cr.file?.file_name || matchedCtx?.fileName || cr.title || 'study_material.pdf';
+      const rawMime = cr.mimeType || cr.file?.mime_type || matchedCtx?.mimeType || '';
+      const cleanMime = getCleanMimeType(fn, rawMime, cr.resource_type || cr.type);
+      const resType = (cr.type || cr.resource_type || matchedCtx?.type || (fn.toLowerCase().endsWith('.pdf') ? 'pdf' : fn.toLowerCase().endsWith('.docx') ? 'docx' : 'note')).toLowerCase();
+      const fileData = cr.fileData || matchedCtx?.fileData;
+
+      list.push({
+        ...cr,
+        id: cr.id,
+        title: cr.title,
+        description: cr.description || matchedCtx?.description || 'Study material for this topic',
+        type: resType,
+        resource_type: cr.resource_type || cr.type || 'NOTE',
+        subject: cr.subject || matchedCtx?.subject || activeSubject?.name || 'Medical',
+        subjectName: cr.subjectName || matchedCtx?.subjectName || cr.subject || activeSubject?.name || 'Medical',
+        subject_id: cr.subject_id || cr.subjectId || matchedCtx?.courseId || activeSubject?.id,
+        chapter_id: cr.chapter_id || cr.chapterId || matchedCtx?.chapterId,
+        topic_id: topicId || matchedCtx?.topicId,
+        topicId: topicId || matchedCtx?.topicId,
+        fileName: fn,
+        mimeType: cleanMime,
+        fileData: fileData,
+        storagePath: cr.storagePath || cr.file?.storage_path || matchedCtx?.storagePath,
+        signedUrl: cr.signedUrl || matchedCtx?.signedUrl,
+        sizeFormatted: cr.sizeFormatted || cr.size || (cr.file?.file_size ? formatFileSize(cr.file.file_size) : matchedCtx?.size || 'File'),
+        size: cr.size || cr.sizeFormatted || matchedCtx?.size || 'File',
+        creatorName: cr.creatorName || cr.uploaderName || matchedCtx?.uploaderName || 'Faculty',
+        uploaderName: cr.uploaderName || cr.creatorName || matchedCtx?.uploaderName || 'Faculty',
+        date: cr.date || cr.created_at?.split('T')[0] || matchedCtx?.date || new Date().toISOString().split('T')[0],
+      });
     });
 
     (contextResources || []).forEach((ctxR: any) => {
@@ -338,27 +403,37 @@ export function CurriculumBrowser({
       if (!seen.has(ctxR.id) && (!titleKey || !seen.has(titleKey))) {
         seen.add(ctxR.id);
         if (titleKey) seen.add(titleKey);
+        const fn = ctxR.fileName || ctxR.title || 'study_material.pdf';
+        const cleanMime = getCleanMimeType(fn, ctxR.mimeType, ctxR.type);
         list.push({
           ...ctxR,
           id: ctxR.id,
           title: ctxR.title,
           description: ctxR.description || `${ctxR.subject} study material`,
+          type: (ctxR.type || 'NOTE').toLowerCase(),
           resource_type: ctxR.type?.toUpperCase() || 'NOTE',
-          subjectName: ctxR.subject,
-          subject_id: ctxR.courseId || ctxR.subjectId,
+          subject: ctxR.subject || activeSubject?.name || 'Medical',
+          subjectName: ctxR.subject || activeSubject?.name || 'Medical',
+          subject_id: ctxR.courseId || ctxR.subjectId || activeSubject?.id,
           chapter_id: ctxR.chapterId || null,
           topic_id: topicId || null,
-          fileName: ctxR.fileName,
-          mimeType: ctxR.mimeType,
+          topicId: topicId || null,
+          fileName: fn,
+          mimeType: cleanMime,
           fileData: ctxR.fileData,
-          sizeFormatted: ctxR.size,
-          creatorName: ctxR.uploaderName,
+          storagePath: ctxR.storagePath,
+          signedUrl: ctxR.signedUrl,
+          sizeFormatted: ctxR.size || 'File',
+          size: ctxR.size || 'File',
+          creatorName: ctxR.uploaderName || 'Faculty',
+          uploaderName: ctxR.uploaderName || 'Faculty',
+          date: ctxR.date || new Date().toISOString().split('T')[0],
         });
       }
     });
 
     return list;
-  }, [cloudResources, contextResources]);
+  }, [cloudResources, contextResources, activeSubject]);
 
   // Materials matched to currently opened topic
   const topicMaterials = useMemo<any[]>(() => {
@@ -413,6 +488,25 @@ export function CurriculumBrowser({
   };
 
   const handleOpenMaterial = (material: any) => {
+    const fn = material.fileName || material.file?.file_name || material.title || 'study_material.pdf';
+    const cleanMime = getCleanMimeType(fn, material.mimeType || material.file?.mime_type, material.resource_type || material.type);
+    const normalized = {
+      ...material,
+      id: material.id,
+      title: material.title,
+      fileName: fn,
+      mimeType: cleanMime,
+      type: (material.type || material.resource_type || (fn.toLowerCase().endsWith('.pdf') ? 'pdf' : fn.toLowerCase().endsWith('.docx') ? 'docx' : 'note')).toLowerCase(),
+      fileData: material.fileData,
+      storagePath: material.storagePath || material.storage_path || material.file?.storage_path,
+      signedUrl: material.signedUrl,
+      sizeFormatted: material.sizeFormatted || material.size,
+      uploaderName: material.uploaderName || material.creatorName || 'Faculty',
+      creatorName: material.creatorName || material.uploaderName || 'Faculty',
+      subject: material.subject || material.subjectName || activeSubject?.name || 'Medical',
+      subjectName: material.subjectName || material.subject || activeSubject?.name || 'Medical',
+    };
+
     if (activeStudyTopic) {
       try {
         sessionStorage.setItem('lms_curriculum_active_topic', JSON.stringify(activeStudyTopic));
@@ -422,9 +516,9 @@ export function CurriculumBrowser({
       }
     }
     if (onNavigateToResource) {
-      onNavigateToResource(material);
+      onNavigateToResource(normalized);
     } else {
-      setSelectedPreviewResource(material);
+      setSelectedPreviewResource(normalized);
     }
   };
 
@@ -532,10 +626,9 @@ export function CurriculumBrowser({
       const subjectId = activeSubject?.id || 'sub-bio';
       const subjectName = activeSubject?.name || 'Medical';
       const cleanFileName = uploadFile.name;
-      const mimeType = uploadFile.type || 'application/octet-stream';
-      const fileSize = uploadFile.size;
-
       const resType = uploadResourceType === 'DOCX' ? 'NOTE' : uploadResourceType;
+      const mimeType = getCleanMimeType(cleanFileName, uploadFile.type, resType);
+      const fileSize = uploadFile.size;
 
       // 1. Upload via useResources (cloud storage + local cache)
       const created = await uploadResource({

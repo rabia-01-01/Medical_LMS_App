@@ -53,9 +53,9 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             <p className="text-teal-300 text-lg font-bold">{totalAssessmentsCount}</p>
             <p className="text-gray-300 text-[10px]">Active Drills</p>
           </div>
-          <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
+          <div onClick={() => onNavigate('departments')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/20 active:scale-95 transition">
             <p className="text-teal-300 text-lg font-bold">{departments.length}</p>
-            <p className="text-gray-300 text-[10px]">Departments</p>
+            <p className="text-gray-300 text-[10px]">Dept & Batches</p>
           </div>
         </div>
       </div>
@@ -109,11 +109,11 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
           )}
         </div>
 
-        {/* Departments */}
+        {/* Department with Batches */}
         {departments.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-gray-800 font-bold text-sm">Departments</h2>
+              <h2 className="text-gray-800 font-bold text-sm">Department with Batches</h2>
               <button onClick={() => onNavigate('departments')} className="text-teal-600 text-xs font-medium">View All</button>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
@@ -787,7 +787,7 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
             { icon: 'fa-chart-pie', label: 'Performance Analytics', screen: 'analytics', badge: 'Phase 6' },
             { icon: 'fa-book', label: 'My Courses', screen: 'courses' },
             { icon: 'fa-clipboard-check', label: 'Quizzes & Drills', screen: 'quizzes', badge: `${totalAssessmentsCount} Drills` },
-            { icon: 'fa-building', label: 'Departments', screen: 'departments' },
+            { icon: 'fa-building', label: 'Department with Batches', screen: 'departments' },
             { icon: 'fa-bullhorn', label: 'Announcements', screen: 'announcements' },
             { icon: 'fa-calendar', label: 'Academic Calendar', screen: 'calendar' },
             { icon: 'fa-question-circle', label: 'Help & Support', screen: 'help' },
@@ -1051,40 +1051,99 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ==================== DEPARTMENTS ====================
+// ==================== DEPARTMENTS WITH RESPECTIVE BATCHES ====================
 export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
-  const { departments } = useData();
+  const { departments, users } = useData();
+  const { user } = useAuth();
+  const studentBatch = user?.batch || 'Batch 1 (Dec)';
+
   return (
     <div>
-      <Header title="Departments" subtitle={`${departments.length} departments`} showBack onBack={onBack} />
-      <div className="p-4 space-y-3">
+      <Header
+        title="Department with Batches"
+        subtitle={`${departments.length} departments • Respective cohort batches`}
+        showBack
+        onBack={onBack}
+      />
+      <div className="p-4 space-y-3.5">
         {departments.length === 0 ? (
           <EmptyState icon="fa-building" title="No Departments" message="No departments have been created yet" />
         ) : (
-          departments.map((dept) => (
-            <div key={dept.id} className="card">
-              <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
-                  <i className={`fas ${dept.icon} text-teal-600`} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-gray-800">{dept.name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{dept.description}</p>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {dept.subjects.slice(0, 3).map((s) => (<span key={s} className="badge badge-teal text-[9px]">{s}</span>))}
+          departments.map((dept) => {
+            const batch1Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 1 (Dec)').length;
+            const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
+
+            return (
+              <div key={dept.id} className="card space-y-3 border border-gray-100 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
+                    <i className={`fas ${dept.icon} text-teal-600 text-base`} />
                   </div>
-                  <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
-                    <span className="text-[10px] text-gray-400 font-semibold">Batches:</span>
-                    {(dept.batches || ['Batch 1 (Dec)', 'Batch 2 (May/June)']).map((b) => (
-                      <span key={b} className="badge bg-purple-50 text-purple-700 text-[9px] py-0.5 px-1.5 border border-purple-200">
-                        {b}
-                      </span>
-                    ))}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-800">{dept.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">{dept.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {dept.subjects.map((s) => (
+                        <span key={s} className="badge badge-teal text-[9px]">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Respective Batches Section */}
+                <div className="pt-2 border-t border-gray-100 space-y-2">
+                  <p className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+                    <i className="fas fa-layer-group text-teal-600 text-xs" />
+                    <span>Respective Batches:</span>
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {/* Batch 1 (Dec) */}
+                    <div className={`p-2.5 rounded-xl border transition ${studentBatch === 'Batch 1 (Dec)' ? 'bg-teal-50/60 border-teal-300' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-teal-500" />
+                          <span className="text-xs font-bold text-gray-800">Batch 1 (Dec)</span>
+                        </div>
+                        {studentBatch === 'Batch 1 (Dec)' ? (
+                          <span className="badge bg-teal-600 text-white text-[9px] font-bold py-0.5 px-2 shadow-2xs">
+                            Your Enrolled Batch
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-gray-400">Cohort Session</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-500 mt-1">
+                        <span>Winter Session (Dec – Apr)</span>
+                        <span className="font-semibold text-teal-700">{batch1Students} Enrolled</span>
+                      </div>
+                    </div>
+
+                    {/* Batch 2 (May/June) */}
+                    <div className={`p-2.5 rounded-xl border transition ${studentBatch === 'Batch 2 (May/June)' ? 'bg-purple-50/60 border-purple-300' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-purple-500" />
+                          <span className="text-xs font-bold text-gray-800">Batch 2 (May/June)</span>
+                        </div>
+                        {studentBatch === 'Batch 2 (May/June)' ? (
+                          <span className="badge bg-purple-600 text-white text-[9px] font-bold py-0.5 px-2 shadow-2xs">
+                            Your Enrolled Batch
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-gray-400">Cohort Session</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-500 mt-1">
+                        <span>Summer Session (May – Oct)</span>
+                        <span className="font-semibold text-purple-700">{batch2Students} Enrolled</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

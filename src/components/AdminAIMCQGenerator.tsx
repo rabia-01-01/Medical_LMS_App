@@ -326,3 +326,4 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
     </div>
   );
 }
+

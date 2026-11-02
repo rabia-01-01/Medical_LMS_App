@@ -10,12 +10,16 @@ import { useResources, resourceService } from '../features/resources';
 import { useAdmin, adminService } from '../features/admin';
 import { useAssessments } from '../features/assessments';
 import { AdminAIMCQGenerator } from '../components/AdminAIMCQGenerator';
+import { StudentStudyProgressModal } from '../components/StudentStudyProgressModal';
 
 // ==================== OPERATIONAL ADMIN DASHBOARD ====================
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
   const [showAIMCQModal, setShowAIMCQModal] = useState(false);
-  const { users, departments, courses, resources, quizzes, announcements, auditLogs } = useData();
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<'All' | 'Batch 1 (Dec)' | 'Batch 2 (May/June)'>('All');
+  const [inspectingStudent, setInspectingStudent] = useState<{ id: string; name: string; email?: string; batch?: string; avatar?: string } | null>(null);
+  const { users, departments, courses, resources, quizzes, announcements, auditLogs, getStudentProgress } = useData();
+  const enrolledStudents = useMemo(() => users.filter(u => u.role === 'student'), [users]);
   const { metrics, loading: metricsLoading, refreshMetrics, exportAuditLogs } = useAdmin();
   const { assessments } = useAssessments();
 
@@ -176,6 +180,98 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
               <AdminAIMCQGenerator onBack={() => setShowAIMCQModal(false)} />
             </div>
           </div>
+        )}
+
+        {/* Student Curriculum Study Progress Tracker */}
+        <div className="card bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold">
+                <i className="fas fa-user-graduate" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-gray-900">Student Curriculum Study Tracker</h3>
+                <p className="text-[10px] text-gray-500">Track student progress for every chapter & topic</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+              {enrolledStudents.length} Students
+            </span>
+          </div>
+
+          {/* Batch Filter */}
+          <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
+            {(['All', 'Batch 1 (Dec)', 'Batch 2 (May/June)'] as const).map(b => (
+              <button
+                key={b}
+                onClick={() => setSelectedBatchFilter(b)}
+                className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition ${
+                  selectedBatchFilter === b
+                    ? 'bg-white text-teal-700 shadow-2xs'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {b === 'All' ? 'All Batches' : b}
+              </button>
+            ))}
+          </div>
+
+          {/* Student Progress Cards */}
+          <div className="space-y-2">
+            {enrolledStudents
+              .filter(st => selectedBatchFilter === 'All' || st.batch === selectedBatchFilter)
+              .map(student => {
+                const prog = getStudentProgress(student.id);
+                const chaps = prog?.completedChapters?.length || 0;
+                const topics = prog?.completedTopics?.length || 0;
+
+                return (
+                  <div
+                    key={student.id}
+                    className="p-3 rounded-xl bg-slate-50 border border-gray-100 hover:border-teal-300 transition flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center text-sm font-bold shrink-0">
+                        {student.avatar || '👩‍🎓'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-gray-900 truncate">{student.name}</p>
+                          <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                            {student.batch || 'Batch 1 (Dec)'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-500">
+                          <span className="font-semibold text-teal-700 flex items-center gap-1">
+                            <i className="fas fa-book text-[9px]" /> {chaps} Chapters Studied
+                          </span>
+                          <span>•</span>
+                          <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                            <i className="fas fa-check text-[9px]" /> {topics} Topics Studied
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setInspectingStudent(student)}
+                      className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold transition shrink-0 flex items-center gap-1 shadow-2xs"
+                      title="Inspect student's chapter and topic study status"
+                    >
+                      <i className="fas fa-search text-[9px]" />
+                      <span>Inspect</span>
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+
+        {inspectingStudent && (
+          <StudentStudyProgressModal
+            student={inspectingStudent}
+            onClose={() => setInspectingStudent(null)}
+          />
         )}
 
         {/* Operational Modules Navigation */}
@@ -1391,7 +1487,20 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const { communityMessages, addCommunityMessage, addCommunityReply, deleteCommunityMessage, togglePinMessage } = useData();
   const [newMessage, setNewMessage] = useState('');
-  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{
+    messageId: string;
+    replyId?: string;
+    replyAuthorName: string;
+  } | null>(null);
+  const replyingToId = replyTarget?.messageId || null;
+  const setReplyingToId = (id: string | null) => {
+    if (!id) {
+      setReplyTarget(null);
+    } else {
+      const msg = communityMessages.find(m => m.id === id);
+      setReplyTarget({ messageId: id, replyAuthorName: msg?.authorName || 'Host' });
+    }
+  };
   const [replyText, setReplyText] = useState('');
 
   const handlePost = () => {
@@ -1400,16 +1509,21 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
     setNewMessage('');
   };
 
-  const handleSendReply = (parentId: string) => {
+  const handleSendReply = (parentId: string, targetReplyId?: string, targetAuthor?: string) => {
     if (!replyText.trim() || !user) return;
+    const parentReplyId = targetReplyId || replyTarget?.replyId;
+    const replyToAuthor = targetAuthor || (replyTarget?.replyId ? replyTarget.replyAuthorName : undefined);
+
     addCommunityReply(parentId, {
       authorId: user.id,
       authorName: user.name,
       authorRole: 'Admin',
       message: replyText.trim(),
+      parentReplyId,
+      replyToAuthor,
     });
     setReplyText('');
-    setReplyingToId(null);
+    setReplyTarget(null);
   };
 
   return (
@@ -1444,7 +1558,13 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
             <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
               <button className="flex items-center gap-1 text-gray-400 text-xs"><i className="fas fa-heart" /> {msg.likes}</button>
               <button
-                onClick={() => setReplyingToId(replyingToId === msg.id ? null : msg.id)}
+                onClick={() => {
+                  if (replyTarget?.messageId === msg.id && !replyTarget.replyId) {
+                    setReplyTarget(null);
+                  } else {
+                    setReplyTarget({ messageId: msg.id, replyAuthorName: msg.authorName });
+                  }
+                }}
                 className="flex items-center gap-1 text-teal-600 font-semibold text-xs hover:underline"
               >
                 <i className="fas fa-reply" />
@@ -1452,48 +1572,95 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
               </button>
             </div>
 
-            {/* Inline Reply Form */}
-            {replyingToId === msg.id && (
-              <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-2 animate-fade-in">
-                <input
-                  type="text"
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Reply to ${msg.authorName}...`}
-                  className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendReply(msg.id)}
-                />
-                <button
-                  onClick={() => handleSendReply(msg.id)}
-                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition"
-                >
-                  Reply
-                </button>
+            {/* Inline Reply Form (Supports Host and Sub-Replies) */}
+            {replyTarget?.messageId === msg.id && (
+              <div className="mt-2.5 pt-2 border-t border-gray-100 space-y-1.5 animate-fade-in">
+                <div className="flex items-center justify-between text-[11px] text-teal-700 bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200">
+                  <span className="flex items-center gap-1.5 font-semibold truncate">
+                    <i className="fas fa-reply text-[9px]" />
+                    <span>Replying to <strong className="text-teal-900">@{replyTarget.replyAuthorName}</strong></span>
+                    {replyTarget.replyId && <span className="text-[9px] text-teal-600 bg-teal-100/60 px-1.5 py-0.2 rounded">(sub-reply)</span>}
+                  </span>
+                  <button
+                    onClick={() => setReplyTarget(null)}
+                    className="text-gray-400 hover:text-gray-600 text-[11px] p-0.5 ml-2"
+                    title="Cancel reply"
+                  >
+                    <i className="fas fa-times" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={`Write a reply to @${replyTarget.replyAuthorName}...`}
+                    className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendReply(msg.id)}
+                  />
+                  <button
+                    onClick={() => handleSendReply(msg.id)}
+                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition shrink-0"
+                  >
+                    Reply
+                  </button>
+                </div>
               </div>
             )}
 
             {/* Nested Threaded Replies */}
             {msg.repliesList && msg.repliesList.length > 0 && (
               <div className="ml-3 pl-3 border-l-2 border-teal-200 space-y-2 mt-3 pt-1">
-                {msg.repliesList.map((rep) => (
-                  <div key={rep.id} className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-gray-800">{rep.authorName}</span>
-                        <span className={`badge text-[8px] py-0 px-1 ${
-                          rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
-                        }`}>
-                          {rep.authorRole}
+                {msg.repliesList.map((rep) => {
+                  const isSubReply = !!rep.parentReplyId;
+                  return (
+                    <div
+                      key={rep.id}
+                      className={`p-2.5 rounded-xl text-xs space-y-1.5 transition ${
+                        isSubReply
+                          ? 'bg-emerald-50/50 border border-emerald-200/60 ml-2.5'
+                          : 'bg-slate-50 border border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-gray-800">{rep.authorName}</span>
+                          <span className={`badge text-[8px] py-0 px-1 ${
+                            rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
+                          }`}>
+                            {rep.authorRole}
+                          </span>
+                          {rep.replyToAuthor && (
+                            <span className="text-[9px] font-semibold text-teal-700 bg-teal-100/80 px-1.5 py-0.2 rounded-full inline-flex items-center gap-1 border border-teal-200/50">
+                              <i className="fas fa-reply text-[7px]" />
+                              @{rep.replyToAuthor}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-gray-400 flex items-center gap-1">
+                          <i className="far fa-clock text-[8px] text-teal-600" />
+                          {rep.time}
                         </span>
                       </div>
-                      <span className="text-[9px] text-gray-400 flex items-center gap-1">
-                        <i className="far fa-clock text-[8px] text-teal-600" />
-                        {rep.time}
-                      </span>
+                      <p className="text-gray-700 leading-snug">{rep.message}</p>
+                      <div className="flex items-center justify-end pt-1">
+                        <button
+                          onClick={() => setReplyTarget({
+                            messageId: msg.id,
+                            replyId: rep.id,
+                            replyAuthorName: rep.authorName,
+                          })}
+                          className="text-[10px] font-semibold text-teal-600 hover:text-teal-800 hover:underline flex items-center gap-1 transition"
+                          title={`Reply directly to ${rep.authorName}`}
+                        >
+                          <i className="fas fa-reply text-[8px]" />
+                          <span>Reply to {rep.authorName.split(' ')[0]}</span>
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-gray-700 leading-snug">{rep.message}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

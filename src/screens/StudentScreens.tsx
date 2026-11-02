@@ -12,11 +12,14 @@ import { useAssessments } from '../features/assessments';
 // ==================== HOME SCREEN ====================
 export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { courses, announcements, communityMessages, quizzes, departments, notifications } = useData();
+  const { courses, announcements, communityMessages, quizzes, departments, notifications, getStudentProgress } = useData();
   const { assessments } = useAssessments();
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
   const myCourses = courses.filter(c => (!c.batch || c.batch === 'All' || c.batch === studentBatch) && c.studentIds.includes(user?.id || ''));
   const unreadNotifs = notifications.filter(n => !n.read).length;
+  const myProgress = getStudentProgress(user?.id);
+  const myCompletedChapters = myProgress?.completedChapters?.length || 0;
+  const myCompletedTopics = myProgress?.completedTopics?.length || 0;
 
   const totalAssessmentsCount = useMemo(() => {
     const seen = new Set(assessments.map(a => a.id));
@@ -79,6 +82,50 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
                 <p className="text-xs text-center text-gray-600 font-medium">{exam.name}</p>
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Curriculum Study Progress */}
+        <div className="card bg-gradient-to-br from-teal-50 via-emerald-50/50 to-white border border-teal-200/80 p-3.5 rounded-2xl shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center text-xs shadow-xs">
+                <i className="fas fa-graduation-cap" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-gray-900">Curriculum Study Progress</h3>
+                <p className="text-[10px] text-teal-700 font-medium">Reflected on Faculty & Admin Dashboards</p>
+              </div>
+            </div>
+            <button
+              onClick={() => onNavigate('courses')}
+              className="text-[10px] font-bold text-teal-700 bg-white hover:bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full transition flex items-center gap-1 shadow-2xs"
+            >
+              <span>Study Hierarchy</span>
+              <i className="fas fa-arrow-right text-[8px]" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="bg-white/90 p-2.5 rounded-xl border border-teal-100/80 flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-extrabold">
+                {myCompletedChapters}
+              </span>
+              <div>
+                <p className="text-[11px] font-bold text-gray-800">Chapters Studied</p>
+                <p className="text-[9px] text-gray-500">Marked as Completed</p>
+              </div>
+            </div>
+
+            <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-100/80 flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-extrabold">
+                {myCompletedTopics}
+              </span>
+              <div>
+                <p className="text-[11px] font-bold text-gray-800">Topics Studied</p>
+                <p className="text-[9px] text-gray-500">Marked as Completed</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -554,19 +601,37 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
   const { user } = useAuth();
   const { communityMessages, addCommunityMessage, addCommunityReply } = useData();
   const [newMessage, setNewMessage] = useState('');
-  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{
+    messageId: string;
+    replyId?: string;
+    replyAuthorName: string;
+  } | null>(null);
+  const replyingToId = replyTarget?.messageId || null;
+  const setReplyingToId = (id: string | null) => {
+    if (!id) {
+      setReplyTarget(null);
+    } else {
+      const msg = communityMessages.find(m => m.id === id);
+      setReplyTarget({ messageId: id, replyAuthorName: msg?.authorName || 'Host' });
+    }
+  };
   const [replyText, setReplyText] = useState('');
 
-  const handleSendReply = (parentId: string) => {
+  const handleSendReply = (parentId: string, targetReplyId?: string, targetAuthor?: string) => {
     if (!replyText.trim() || !user) return;
+    const parentReplyId = targetReplyId || replyTarget?.replyId;
+    const replyToAuthor = targetAuthor || (replyTarget?.replyId ? replyTarget.replyAuthorName : undefined);
+
     addCommunityReply(parentId, {
       authorId: user.id,
       authorName: user.name,
       authorRole: user.role === 'admin' ? 'Admin' : user.role === 'faculty' ? 'Faculty' : 'Student',
       message: replyText.trim(),
+      parentReplyId,
+      replyToAuthor,
     });
     setReplyText('');
-    setReplyingToId(null);
+    setReplyTarget(null);
   };
 
   const handlePost = () => {
@@ -609,53 +674,110 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
               <p className="text-sm text-gray-700">{msg.message}</p>
               <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
                 <button className="flex items-center gap-1 text-gray-400 text-xs"><i className="fas fa-heart" /> {msg.likes}</button>
-                <button onClick={() => setReplyingToId(replyingToId === msg.id ? null : msg.id)} className="flex items-center gap-1 text-teal-600 font-semibold text-xs hover:underline">
+                <button
+                  onClick={() => {
+                    if (replyTarget?.messageId === msg.id && !replyTarget.replyId) {
+                      setReplyTarget(null);
+                    } else {
+                      setReplyTarget({ messageId: msg.id, replyAuthorName: msg.authorName });
+                    }
+                  }}
+                  className="flex items-center gap-1 text-teal-600 font-semibold text-xs hover:underline"
+                >
                   <i className="fas fa-reply" />
                   <span>Reply ({(msg.repliesList?.length || msg.replies || 0)})</span>
                 </button>
               </div>
-              {/* Inline Reply Form */}
-              {replyingToId === msg.id && (
-                <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-2 animate-fade-in">
-                  <input
-                    type="text"
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    placeholder={`Reply to ${msg.authorName}...`}
-                    className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendReply(msg.id)}
-                  />
-                  <button
-                    onClick={() => handleSendReply(msg.id)}
-                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition"
-                  >
-                    Reply
-                  </button>
+
+              {/* Inline Reply Form (Supports Host and Sub-Replies) */}
+              {replyTarget?.messageId === msg.id && (
+                <div className="mt-2.5 pt-2 border-t border-gray-100 space-y-1.5 animate-fade-in">
+                  <div className="flex items-center justify-between text-[11px] text-teal-700 bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200">
+                    <span className="flex items-center gap-1.5 font-semibold truncate">
+                      <i className="fas fa-reply text-[9px]" />
+                      <span>Replying to <strong className="text-teal-900">@{replyTarget.replyAuthorName}</strong></span>
+                      {replyTarget.replyId && <span className="text-[9px] text-teal-600 bg-teal-100/60 px-1.5 py-0.2 rounded">(sub-reply)</span>}
+                    </span>
+                    <button
+                      onClick={() => setReplyTarget(null)}
+                      className="text-gray-400 hover:text-gray-600 text-[11px] p-0.5 ml-2"
+                      title="Cancel reply"
+                    >
+                      <i className="fas fa-times" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder={`Write a reply to @${replyTarget.replyAuthorName}...`}
+                      className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendReply(msg.id)}
+                    />
+                    <button
+                      onClick={() => handleSendReply(msg.id)}
+                      className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition shrink-0"
+                    >
+                      Reply
+                    </button>
+                  </div>
                 </div>
               )}
 
               {/* Nested Threaded Replies */}
               {msg.repliesList && msg.repliesList.length > 0 && (
                 <div className="ml-3 pl-3 border-l-2 border-teal-200 space-y-2 mt-3 pt-1">
-                  {msg.repliesList.map((rep) => (
-                    <div key={rep.id} className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-gray-800">{rep.authorName}</span>
-                          <span className={`badge text-[8px] py-0 px-1 ${
-                            rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
-                          }`}>
-                            {rep.authorRole}
+                  {msg.repliesList.map((rep) => {
+                    const isSubReply = !!rep.parentReplyId;
+                    return (
+                      <div
+                        key={rep.id}
+                        className={`p-2.5 rounded-xl text-xs space-y-1.5 transition ${
+                          isSubReply
+                            ? 'bg-emerald-50/50 border border-emerald-200/60 ml-2.5'
+                            : 'bg-slate-50 border border-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-gray-800">{rep.authorName}</span>
+                            <span className={`badge text-[8px] py-0 px-1 ${
+                              rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
+                            }`}>
+                              {rep.authorRole}
+                            </span>
+                            {rep.replyToAuthor && (
+                              <span className="text-[9px] font-semibold text-teal-700 bg-teal-100/80 px-1.5 py-0.2 rounded-full inline-flex items-center gap-1 border border-teal-200/50">
+                                <i className="fas fa-reply text-[7px]" />
+                                @{rep.replyToAuthor}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[9px] text-gray-400 flex items-center gap-1">
+                            <i className="far fa-clock text-[8px] text-teal-600" />
+                            {rep.time}
                           </span>
                         </div>
-                        <span className="text-[9px] text-gray-400 flex items-center gap-1">
-                          <i className="far fa-clock text-[8px] text-teal-600" />
-                          {rep.time}
-                        </span>
+                        <p className="text-gray-700 leading-snug">{rep.message}</p>
+                        <div className="flex items-center justify-end pt-1">
+                          <button
+                            onClick={() => setReplyTarget({
+                              messageId: msg.id,
+                              replyId: rep.id,
+                              replyAuthorName: rep.authorName,
+                            })}
+                            className="text-[10px] font-semibold text-teal-600 hover:text-teal-800 hover:underline flex items-center gap-1 transition"
+                            title={`Reply directly to ${rep.authorName}`}
+                          >
+                            <i className="fas fa-reply text-[8px]" />
+                            <span>Reply to {rep.authorName.split(' ')[0]}</span>
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-gray-700 leading-snug">{rep.message}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

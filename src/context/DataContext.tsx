@@ -93,6 +93,8 @@ export interface CalendarEvent {
 export interface CommunityReply {
   id: string;
   parentId: string;
+  parentReplyId?: string;
+  replyToAuthor?: string;
   authorId: string;
   authorName: string;
   authorRole: string;
@@ -182,6 +184,16 @@ export interface StudentDocument {
   remarks?: string;
 }
 
+export interface StudentCurriculumProgress {
+  studentId: string;
+  studentName: string;
+  studentBatch: string;
+  avatar?: string;
+  completedChapters: string[]; // chapter IDs
+  completedTopics: string[];   // topic IDs
+  lastUpdated: string;
+}
+
 interface DataContextType {
   // Users (Admin Only Management)
   users: User[];
@@ -225,7 +237,18 @@ interface DataContextType {
   // Community (Nested Replies & Threads; Admin Only Deletion)
   communityMessages: CommunityMessage[];
   addCommunityMessage: (msg: Omit<CommunityMessage, 'id' | 'time' | 'likes' | 'replies'>) => void;
-  addCommunityReply: (parentId: string, reply: { authorId: string; authorName: string; authorRole: string; message: string; authorAvatar?: string }) => void;
+  addCommunityReply: (
+    parentId: string,
+    reply: {
+      authorId: string;
+      authorName: string;
+      authorRole: string;
+      message: string;
+      authorAvatar?: string;
+      parentReplyId?: string;
+      replyToAuthor?: string;
+    }
+  ) => void;
   deleteCommunityMessage: (id: string, actorRole?: string) => void;
   togglePinMessage: (id: string) => void;
 
@@ -250,6 +273,16 @@ interface DataContextType {
   addStudentDocument: (doc: Omit<StudentDocument, 'id' | 'submittedAt'>, editorRole: 'admin' | 'agent') => boolean;
   updateStudentDocument: (id: string, updates: Partial<StudentDocument>, editorRole: 'admin' | 'agent') => boolean;
   deleteStudentDocument: (id: string, editorRole: 'admin' | 'agent') => boolean;
+
+  // Student Curriculum Study Progress (Mark As Completed & Reflection)
+  studentProgressList: StudentCurriculumProgress[];
+  toggleChapterCompletion: (chapterId: string, studentId?: string, studentName?: string, studentBatch?: string) => boolean;
+  toggleTopicCompletion: (topicId: string, studentId?: string, studentName?: string, studentBatch?: string) => boolean;
+  isChapterCompleted: (chapterId: string, studentId?: string) => boolean;
+  isTopicCompleted: (topicId: string, studentId?: string) => boolean;
+  getStudentProgress: (studentId?: string) => StudentCurriculumProgress | undefined;
+  getChapterCompletions: (chapterId: string) => { studentId: string; studentName: string; studentBatch: string; avatar?: string }[];
+  getTopicCompletions: (topicId: string) => { studentId: string; studentName: string; studentBatch: string; avatar?: string }[];
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -346,6 +379,27 @@ export const DEFAULT_STUDENT_DOCS: StudentDocument[] = [
     status: 'Pending',
     submittedAt: '2026-10-25T11:00:00.000Z',
     remarks: 'Pending Universitaly portal validation.',
+  },
+];
+
+export const DEFAULT_STUDENT_PROGRESS: StudentCurriculumProgress[] = [
+  {
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    studentBatch: 'Batch 1 (Dec)',
+    avatar: '👩‍🎓',
+    completedChapters: ['chap-bio-1'],
+    completedTopics: ['top-bio-101', 'top-bio-102'],
+    lastUpdated: new Date().toISOString(),
+  },
+  {
+    studentId: 'u-student-2',
+    studentName: 'Alex Rivera',
+    studentBatch: 'Batch 2 (May/June)',
+    avatar: '👨‍🎓',
+    completedChapters: ['chap-bio-2'],
+    completedTopics: ['top-bio-201'],
+    lastUpdated: new Date().toISOString(),
   },
 ];
 
@@ -655,6 +709,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [studentDocuments, setStudentDocuments] = useState<StudentDocument[]>(() =>
     loadFromStorage('sim_student_documents', DEFAULT_STUDENT_DOCS)
   );
+  const [studentProgressList, setStudentProgressList] = useState<StudentCurriculumProgress[]>(() =>
+    loadFromStorage('sim_student_progress', DEFAULT_STUDENT_PROGRESS)
+  );
 
   // Persist to localStorage
   useEffect(() => { saveToStorage('sim_users', users); }, [users]);
@@ -668,6 +725,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveToStorage('sim_notifications', notifications); }, [notifications]);
   useEffect(() => { saveToStorage('sim_audit', auditLogs); }, [auditLogs]);
   useEffect(() => { saveToStorage('sim_student_documents', studentDocuments); }, [studentDocuments]);
+  useEffect(() => { saveToStorage('sim_student_progress', studentProgressList); }, [studentProgressList]);
 
   // Users (Admin Only)
   const addUser = (user: Omit<User, 'id' | 'createdAt'>, actorRole?: string) => {
@@ -902,13 +960,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const addCommunityReply = (
     parentId: string,
-    reply: { authorId: string; authorName: string; authorRole: string; message: string; authorAvatar?: string }
+    reply: {
+      authorId: string;
+      authorName: string;
+      authorRole: string;
+      message: string;
+      authorAvatar?: string;
+      parentReplyId?: string;
+      replyToAuthor?: string;
+    }
   ) => {
     const now = new Date();
     const formattedDate = format(now, 'dd MMM yyyy, hh:mm a');
     const newReply: CommunityReply = {
       id: generateId(),
       parentId,
+      parentReplyId: reply.parentReplyId,
+      replyToAuthor: reply.replyToAuthor,
       authorId: reply.authorId,
       authorName: reply.authorName,
       authorRole: reply.authorRole,
@@ -935,7 +1003,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       action: 'Community Reply Added',
       userId: reply.authorId,
       userName: reply.authorName,
-      details: `Replied to thread ${parentId}`
+      details: `Replied to thread ${parentId}${reply.replyToAuthor ? ` (@${reply.replyToAuthor})` : ''}`
     });
   };
 
@@ -1058,6 +1126,114 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  // Student Curriculum Study Progress
+  const toggleChapterCompletion = (chapterId: string, studentId?: string, studentName?: string, studentBatch?: string): boolean => {
+    const sId = studentId || 'u-student-1';
+    let isNowCompleted = false;
+    setStudentProgressList(prev => {
+      const existing = prev.find(p => p.studentId === sId);
+      if (existing) {
+        const isCompleted = existing.completedChapters.includes(chapterId);
+        isNowCompleted = !isCompleted;
+        const nextChapters = isCompleted
+          ? existing.completedChapters.filter(id => id !== chapterId)
+          : [...existing.completedChapters, chapterId];
+        return prev.map(p => p.studentId === sId ? {
+          ...p,
+          completedChapters: nextChapters,
+          lastUpdated: new Date().toISOString(),
+        } : p);
+      } else {
+        isNowCompleted = true;
+        const newRecord: StudentCurriculumProgress = {
+          studentId: sId,
+          studentName: studentName || 'Student',
+          studentBatch: studentBatch || 'Batch 1 (Dec)',
+          completedChapters: [chapterId],
+          completedTopics: [],
+          lastUpdated: new Date().toISOString(),
+        };
+        return [...prev, newRecord];
+      }
+    });
+
+    addAuditLog({
+      action: isNowCompleted ? 'Chapter Marked Completed' : 'Chapter Marked Incomplete',
+      userId: sId,
+      userName: studentName || 'Student',
+      details: `Student toggled chapter ${chapterId}`
+    });
+    return isNowCompleted;
+  };
+
+  const toggleTopicCompletion = (topicId: string, studentId?: string, studentName?: string, studentBatch?: string): boolean => {
+    const sId = studentId || 'u-student-1';
+    let isNowCompleted = false;
+    setStudentProgressList(prev => {
+      const existing = prev.find(p => p.studentId === sId);
+      if (existing) {
+        const isCompleted = existing.completedTopics.includes(topicId);
+        isNowCompleted = !isCompleted;
+        const nextTopics = isCompleted
+          ? existing.completedTopics.filter(id => id !== topicId)
+          : [...existing.completedTopics, topicId];
+        return prev.map(p => p.studentId === sId ? {
+          ...p,
+          completedTopics: nextTopics,
+          lastUpdated: new Date().toISOString(),
+        } : p);
+      } else {
+        isNowCompleted = true;
+        const newRecord: StudentCurriculumProgress = {
+          studentId: sId,
+          studentName: studentName || 'Student',
+          studentBatch: studentBatch || 'Batch 1 (Dec)',
+          completedChapters: [],
+          completedTopics: [topicId],
+          lastUpdated: new Date().toISOString(),
+        };
+        return [...prev, newRecord];
+      }
+    });
+
+    addAuditLog({
+      action: isNowCompleted ? 'Topic Marked Completed' : 'Topic Marked Incomplete',
+      userId: sId,
+      userName: studentName || 'Student',
+      details: `Student toggled topic ${topicId}`
+    });
+    return isNowCompleted;
+  };
+
+  const isChapterCompleted = (chapterId: string, studentId?: string): boolean => {
+    const sId = studentId || 'u-student-1';
+    const rec = studentProgressList.find(p => p.studentId === sId);
+    return rec ? rec.completedChapters.includes(chapterId) : false;
+  };
+
+  const isTopicCompleted = (topicId: string, studentId?: string): boolean => {
+    const sId = studentId || 'u-student-1';
+    const rec = studentProgressList.find(p => p.studentId === sId);
+    return rec ? rec.completedTopics.includes(topicId) : false;
+  };
+
+  const getStudentProgress = (studentId?: string): StudentCurriculumProgress | undefined => {
+    const sId = studentId || 'u-student-1';
+    return studentProgressList.find(p => p.studentId === sId);
+  };
+
+  const getChapterCompletions = (chapterId: string) => {
+    return studentProgressList
+      .filter(p => p.completedChapters.includes(chapterId))
+      .map(p => ({ studentId: p.studentId, studentName: p.studentName, studentBatch: p.studentBatch, avatar: p.avatar }));
+  };
+
+  const getTopicCompletions = (topicId: string) => {
+    return studentProgressList
+      .filter(p => p.completedTopics.includes(topicId))
+      .map(p => ({ studentId: p.studentId, studentName: p.studentName, studentBatch: p.studentBatch, avatar: p.avatar }));
+  };
+
   return (
     <DataContext.Provider value={{
       users, addUser, updateUser, deleteUser, getUserById, getUsersByRole,
@@ -1071,6 +1247,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       notifications, addNotification, markNotificationRead, markAllRead,
       auditLogs, addAuditLog,
       studentDocuments, addStudentDocument, updateStudentDocument, deleteStudentDocument,
+      studentProgressList,
+      toggleChapterCompletion,
+      toggleTopicCompletion,
+      isChapterCompleted,
+      isTopicCompleted,
+      getStudentProgress,
+      getChapterCompletions,
+      getTopicCompletions,
     }}>
       {children}
     </DataContext.Provider>

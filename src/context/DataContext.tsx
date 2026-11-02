@@ -184,6 +184,15 @@ export interface StudentDocument {
   remarks?: string;
 }
 
+export interface CompletedTopicDetail {
+  id: string;
+  name: string;
+  chapterId?: string;
+  chapterName?: string;
+  subjectId?: string;
+  subjectName?: string;
+}
+
 export interface StudentCurriculumProgress {
   studentId: string;
   studentName: string;
@@ -191,6 +200,7 @@ export interface StudentCurriculumProgress {
   avatar?: string;
   completedChapters: string[]; // chapter IDs
   completedTopics: string[];   // topic IDs
+  completedTopicDetails?: CompletedTopicDetail[];
   lastUpdated: string;
 }
 
@@ -276,8 +286,14 @@ interface DataContextType {
 
   // Student Curriculum Study Progress (Mark As Completed & Reflection)
   studentProgressList: StudentCurriculumProgress[];
-  toggleChapterCompletion: (chapterId: string, studentId?: string, studentName?: string, studentBatch?: string) => boolean;
-  toggleTopicCompletion: (topicId: string, studentId?: string, studentName?: string, studentBatch?: string) => boolean;
+  toggleChapterCompletion: (chapterId: string, studentId?: string, studentName?: string, studentBatch?: string, chapterName?: string) => boolean;
+  toggleTopicCompletion: (
+    topicId: string,
+    studentId?: string,
+    studentName?: string,
+    studentBatch?: string,
+    topicMeta?: { topicName?: string; chapterId?: string; chapterName?: string; subjectId?: string; subjectName?: string }
+  ) => boolean;
   isChapterCompleted: (chapterId: string, studentId?: string) => boolean;
   isTopicCompleted: (topicId: string, studentId?: string) => boolean;
   getStudentProgress: (studentId?: string) => StudentCurriculumProgress | undefined;
@@ -388,8 +404,9 @@ export const DEFAULT_STUDENT_PROGRESS: StudentCurriculumProgress[] = [
     studentName: 'Mary',
     studentBatch: 'Batch 1 (Dec)',
     avatar: '👩‍🎓',
-    completedChapters: ['chap-bio-1'],
-    completedTopics: ['top-bio-101', 'top-bio-102'],
+    completedChapters: [],
+    completedTopics: [],
+    completedTopicDetails: [],
     lastUpdated: new Date().toISOString(),
   },
   {
@@ -397,8 +414,9 @@ export const DEFAULT_STUDENT_PROGRESS: StudentCurriculumProgress[] = [
     studentName: 'Alex Rivera',
     studentBatch: 'Batch 2 (May/June)',
     avatar: '👨‍🎓',
-    completedChapters: ['chap-bio-2'],
-    completedTopics: ['top-bio-201'],
+    completedChapters: [],
+    completedTopics: [],
+    completedTopicDetails: [],
     lastUpdated: new Date().toISOString(),
   },
 ];
@@ -709,9 +727,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [studentDocuments, setStudentDocuments] = useState<StudentDocument[]>(() =>
     loadFromStorage('sim_student_documents', DEFAULT_STUDENT_DOCS)
   );
-  const [studentProgressList, setStudentProgressList] = useState<StudentCurriculumProgress[]>(() =>
-    loadFromStorage('sim_student_progress', DEFAULT_STUDENT_PROGRESS)
-  );
+  const [studentProgressList, setStudentProgressList] = useState<StudentCurriculumProgress[]>(() => {
+    const raw = loadFromStorage('sim_student_progress', DEFAULT_STUDENT_PROGRESS);
+    return (raw || []).map((p: StudentCurriculumProgress) => {
+      const details = p.completedTopicDetails || [];
+      const cleanTopics: string[] = [];
+      (p.completedTopics || []).forEach((t: string) => {
+        // Strip legacy dummy mock IDs if not backed by explicit user detail
+        if (t === 'top-bio-101' || t === 'top-bio-102' || t === 'top-bio-201') {
+          if (!details.some(d => d.id === t)) return;
+        }
+        if (cleanTopics.includes(t)) return;
+        const matchingDetail = details.find(d => d.name && d.name.toLowerCase() === t.toLowerCase());
+        if (matchingDetail && cleanTopics.includes(matchingDetail.id)) return;
+        cleanTopics.push(t);
+      });
+      return {
+        ...p,
+        completedTopics: cleanTopics,
+        completedTopicDetails: details,
+      };
+    });
+  });
 
   // Persist to localStorage
   useEffect(() => { saveToStorage('sim_users', users); }, [users]);
@@ -1127,17 +1164,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   // Student Curriculum Study Progress
-  const toggleChapterCompletion = (chapterId: string, studentId?: string, studentName?: string, studentBatch?: string): boolean => {
+  const toggleChapterCompletion = (chapterId: string, studentId?: string, studentName?: string, studentBatch?: string, chapterName?: string): boolean => {
     const sId = studentId || 'u-student-1';
     let isNowCompleted = false;
+    const cName = chapterName || '';
     setStudentProgressList(prev => {
       const existing = prev.find(p => p.studentId === sId);
       if (existing) {
-        const isCompleted = existing.completedChapters.includes(chapterId);
+        const isCompleted = existing.completedChapters.includes(chapterId) || (cName ? existing.completedChapters.includes(cName) : false);
         isNowCompleted = !isCompleted;
-        const nextChapters = isCompleted
-          ? existing.completedChapters.filter(id => id !== chapterId)
-          : [...existing.completedChapters, chapterId];
+        let nextChapters: string[];
+        if (isCompleted) {
+          nextChapters = existing.completedChapters.filter(id => id !== chapterId && id !== cName);
+        } else {
+          nextChapters = [...existing.completedChapters, chapterId];
+          if (cName && !nextChapters.includes(cName)) {
+            nextChapters.push(cName);
+          }
+        }
         return prev.map(p => p.studentId === sId ? {
           ...p,
           completedChapters: nextChapters,
@@ -1145,11 +1189,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         } : p);
       } else {
         isNowCompleted = true;
+        const initialChapters = [chapterId];
+        if (cName && !initialChapters.includes(cName)) {
+          initialChapters.push(cName);
+        }
         const newRecord: StudentCurriculumProgress = {
           studentId: sId,
           studentName: studentName || 'Student',
           studentBatch: studentBatch || 'Batch 1 (Dec)',
-          completedChapters: [chapterId],
+          completedChapters: initialChapters,
           completedTopics: [],
           lastUpdated: new Date().toISOString(),
         };
@@ -1161,35 +1209,71 @@ export function DataProvider({ children }: { children: ReactNode }) {
       action: isNowCompleted ? 'Chapter Marked Completed' : 'Chapter Marked Incomplete',
       userId: sId,
       userName: studentName || 'Student',
-      details: `Student toggled chapter ${chapterId}`
+      details: `Student toggled chapter ${cName || chapterId}`
     });
     return isNowCompleted;
   };
 
-  const toggleTopicCompletion = (topicId: string, studentId?: string, studentName?: string, studentBatch?: string): boolean => {
+  const toggleTopicCompletion = (
+    topicId: string,
+    studentId?: string,
+    studentName?: string,
+    studentBatch?: string,
+    topicMeta?: { topicName?: string; chapterId?: string; chapterName?: string; subjectId?: string; subjectName?: string }
+  ): boolean => {
     const sId = studentId || 'u-student-1';
     let isNowCompleted = false;
+    const tName = topicMeta?.topicName || '';
+
     setStudentProgressList(prev => {
       const existing = prev.find(p => p.studentId === sId);
       if (existing) {
-        const isCompleted = existing.completedTopics.includes(topicId);
+        const isCompleted = existing.completedTopics.includes(topicId) || (tName ? existing.completedTopics.includes(tName) : false);
         isNowCompleted = !isCompleted;
-        const nextTopics = isCompleted
-          ? existing.completedTopics.filter(id => id !== topicId)
-          : [...existing.completedTopics, topicId];
+
+        let nextTopics: string[];
+        let nextDetails: CompletedTopicDetail[];
+
+        if (isCompleted) {
+          nextTopics = existing.completedTopics.filter(id => id !== topicId && id !== tName);
+          nextDetails = (existing.completedTopicDetails || []).filter(d => d.id !== topicId && d.name !== tName);
+        } else {
+          nextTopics = [...existing.completedTopics.filter(id => id !== topicId && id !== tName), topicId];
+          const detailEntry: CompletedTopicDetail = {
+            id: topicId,
+            name: tName || topicId,
+            chapterId: topicMeta?.chapterId,
+            chapterName: topicMeta?.chapterName,
+            subjectId: topicMeta?.subjectId,
+            subjectName: topicMeta?.subjectName,
+          };
+          nextDetails = [...(existing.completedTopicDetails || []).filter(d => d.id !== topicId && d.name !== tName), detailEntry];
+        }
+
         return prev.map(p => p.studentId === sId ? {
           ...p,
           completedTopics: nextTopics,
+          completedTopicDetails: nextDetails,
           lastUpdated: new Date().toISOString(),
         } : p);
       } else {
         isNowCompleted = true;
+        const initialTopics = [topicId];
+        const initialDetails: CompletedTopicDetail[] = [{
+          id: topicId,
+          name: tName || topicId,
+          chapterId: topicMeta?.chapterId,
+          chapterName: topicMeta?.chapterName,
+          subjectId: topicMeta?.subjectId,
+          subjectName: topicMeta?.subjectName,
+        }];
         const newRecord: StudentCurriculumProgress = {
           studentId: sId,
           studentName: studentName || 'Student',
           studentBatch: studentBatch || 'Batch 1 (Dec)',
           completedChapters: [],
-          completedTopics: [topicId],
+          completedTopics: initialTopics,
+          completedTopicDetails: initialDetails,
           lastUpdated: new Date().toISOString(),
         };
         return [...prev, newRecord];
@@ -1200,21 +1284,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
       action: isNowCompleted ? 'Topic Marked Completed' : 'Topic Marked Incomplete',
       userId: sId,
       userName: studentName || 'Student',
-      details: `Student toggled topic ${topicId}`
+      details: `Student toggled topic ${tName || topicId}`
     });
     return isNowCompleted;
   };
 
-  const isChapterCompleted = (chapterId: string, studentId?: string): boolean => {
+  const isChapterCompleted = (chapterIdOrName: string, studentId?: string): boolean => {
+    if (!chapterIdOrName) return false;
     const sId = studentId || 'u-student-1';
     const rec = studentProgressList.find(p => p.studentId === sId);
-    return rec ? rec.completedChapters.includes(chapterId) : false;
+    if (!rec) return false;
+    if (rec.completedChapters.includes(chapterIdOrName)) return true;
+    return rec.completedChapters.some(c => c.toLowerCase() === chapterIdOrName.toLowerCase());
   };
 
-  const isTopicCompleted = (topicId: string, studentId?: string): boolean => {
+  const isTopicCompleted = (topicIdOrName: string, studentId?: string): boolean => {
+    if (!topicIdOrName) return false;
     const sId = studentId || 'u-student-1';
     const rec = studentProgressList.find(p => p.studentId === sId);
-    return rec ? rec.completedTopics.includes(topicId) : false;
+    if (!rec) return false;
+    if (rec.completedTopics.includes(topicIdOrName)) return true;
+    if (rec.completedTopics.some(t => t.toLowerCase() === topicIdOrName.toLowerCase())) return true;
+    if (rec.completedTopicDetails?.some(d => d.id === topicIdOrName || (d.name && d.name.toLowerCase() === topicIdOrName.toLowerCase()))) {
+      return true;
+    }
+    return false;
   };
 
   const getStudentProgress = (studentId?: string): StudentCurriculumProgress | undefined => {
@@ -1224,13 +1318,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const getChapterCompletions = (chapterId: string) => {
     return studentProgressList
-      .filter(p => p.completedChapters.includes(chapterId))
+      .filter(p => p.completedChapters.includes(chapterId) || p.completedChapters.some(c => c.toLowerCase() === chapterId.toLowerCase()))
       .map(p => ({ studentId: p.studentId, studentName: p.studentName, studentBatch: p.studentBatch, avatar: p.avatar }));
   };
 
   const getTopicCompletions = (topicId: string) => {
     return studentProgressList
-      .filter(p => p.completedTopics.includes(topicId))
+      .filter(p => p.completedTopics.includes(topicId) || p.completedTopics.some(t => t.toLowerCase() === topicId.toLowerCase()) || p.completedTopicDetails?.some(d => d.id === topicId || d.name?.toLowerCase() === topicId.toLowerCase()))
       .map(p => ({ studentId: p.studentId, studentName: p.studentName, studentBatch: p.studentBatch, avatar: p.avatar }));
   };
 

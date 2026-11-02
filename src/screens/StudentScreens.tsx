@@ -57,8 +57,8 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             <p className="text-gray-300 text-[10px]">Active Drills</p>
           </div>
           <div onClick={() => onNavigate('departments')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/20 active:scale-95 transition">
-            <p className="text-teal-300 text-lg font-bold">{departments.length}</p>
-            <p className="text-gray-300 text-[10px]">Dept & Batches</p>
+            <p className="text-teal-300 text-lg font-bold">2</p>
+            <p className="text-gray-300 text-[10px]">Batches</p>
           </div>
         </div>
       </div>
@@ -156,25 +156,43 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
           )}
         </div>
 
-        {/* Department with Batches */}
-        {departments.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-gray-800 font-bold text-sm">Batches</h2>
-              <button onClick={() => onNavigate('departments')} className="text-teal-600 text-xs font-medium">View All</button>
+        {/* Academic Cohort Batches */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <h2 className="text-gray-800 font-bold text-sm">Academic Batches</h2>
+            <button onClick={() => onNavigate('departments')} className="text-teal-600 text-xs font-medium">View Batches</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div
+              onClick={() => onNavigate('departments')}
+              className={`p-2.5 rounded-xl border cursor-pointer transition ${
+                user?.batch === 'Batch 1 (Dec)' ? 'bg-teal-50 border-teal-300 shadow-2xs' : 'bg-white border-gray-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-800">Batch 1 (Dec)</span>
+                {user?.batch === 'Batch 1 (Dec)' && (
+                  <span className="badge bg-teal-600 text-white text-[8px] py-0.2 px-1 rounded-full font-bold">Enrolled</span>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-500 mt-0.5">Winter Session (Dec – Apr)</p>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
-              {departments.slice(0, 6).map((dept) => (
-                <button key={dept.id} onClick={() => onNavigate('departments')} className="flex-shrink-0 w-16">
-                  <div className="w-12 h-12 rounded-xl bg-teal-50 flex items-center justify-center mx-auto mb-1">
-                    <i className={`fas ${dept.icon} text-teal-600 text-sm`} />
-                  </div>
-                  <p className="text-[9px] text-center text-gray-600 font-medium">{dept.name}</p>
-                </button>
-              ))}
+            <div
+              onClick={() => onNavigate('departments')}
+              className={`p-2.5 rounded-xl border cursor-pointer transition ${
+                user?.batch === 'Batch 2 (May/June)' ? 'bg-purple-50 border-purple-300 shadow-2xs' : 'bg-white border-gray-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-800">Batch 2 (May/June)</span>
+                {user?.batch === 'Batch 2 (May/June)' && (
+                  <span className="badge bg-purple-600 text-white text-[8px] py-0.2 px-1 rounded-full font-bold">Enrolled</span>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-500 mt-0.5">Summer Session (May – Oct)</p>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Announcements */}
         {announcements.length > 0 && (
@@ -474,6 +492,10 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
         type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
         subject: cr.subjectName || 'General',
         courseId: cr.subject_id,
+        topicId: cr.topic_id || (cr as any).topicId,
+        topic_id: cr.topic_id || (cr as any).topicId,
+        description: cr.description,
+        batch: (cr as any).batch,
         uploaderId: cr.created_by,
         uploaderName: cr.creatorName || 'Faculty',
         date: cr.created_at?.split('T')[0] || 'Recent',
@@ -497,9 +519,19 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
     return list;
   }, [cloudResources, localResources]);
 
-  // Show published resources to students
+  // Show only general Resource documents to students (filter out topic-specific curriculum documents)
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
-  let filtered = allResources.filter((r: any) => (r.status === 'published' || !r.status) && (!r.batch || r.batch === 'All' || r.batch === studentBatch));
+  let filtered = allResources.filter((r: any) => {
+    // Exclude topic documents: students must see only Resource documents in the Resources tab
+    const isTopicDocument = Boolean(
+      r.topicId ||
+      r.topic_id ||
+      (r.description && typeof r.description === 'string' && r.description.startsWith('Study material for '))
+    );
+    if (isTopicDocument) return false;
+
+    return (r.status === 'published' || !r.status) && (!r.batch || r.batch === 'All' || r.batch === studentBatch);
+  });
   if (filter !== 'All') {
     const fLower = filter.toLowerCase();
     filtered = filtered.filter((r: any) => {
@@ -1173,100 +1205,118 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ==================== DEPARTMENTS WITH RESPECTIVE BATCHES ====================
+// ==================== BATCHES (ONLY BATCHES IN BATCHES TAB) ====================
 export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
-  const { departments, users } = useData();
+  const { users } = useData();
   const { user } = useAuth();
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
+
+  const batch1Students = (users || []).filter(u => u.role === 'student' && (u.batch === 'Batch 1 (Dec)' || !u.batch || u.batch.includes('1'))).length;
+  const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
+
+  const batchesList = [
+    {
+      id: 'batch-1',
+      name: 'Batch 1 (Dec)',
+      session: 'Winter Session: December – April',
+      season: 'Winter Cohort',
+      color: 'teal',
+      studentsCount: batch1Students,
+      isEnrolled: studentBatch === 'Batch 1 (Dec)' || studentBatch.includes('1'),
+      description: 'Accelerated winter medical entrance preparation cohort covering all 7 core subjects.',
+    },
+    {
+      id: 'batch-2',
+      name: 'Batch 2 (May/June)',
+      session: 'Summer Session: May – October',
+      season: 'Summer Cohort',
+      color: 'purple',
+      studentsCount: batch2Students,
+      isEnrolled: studentBatch === 'Batch 2 (May/June)',
+      description: 'Comprehensive summer medical entrance foundation cohort covering all 7 core subjects.',
+    },
+  ];
 
   return (
     <div>
       <Header
         title="Batches"
-        subtitle={`${departments.length} departments • Respective cohort batches`}
+        subtitle="Academic Cohort Batches • Batch 1 & Batch 2"
         showBack
         onBack={onBack}
       />
       <div className="p-4 space-y-3.5">
-        {departments.length === 0 ? (
-          <EmptyState icon="fa-building" title="No Departments" message="No departments have been created yet" />
-        ) : (
-          departments.map((dept) => {
-            const batch1Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 1 (Dec)').length;
-            const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
+        <div className="bg-gradient-to-r from-teal-800 to-indigo-900 rounded-2xl p-4 text-white shadow-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-teal-200 text-xs">
+              <i className="fas fa-layer-group" />
+            </span>
+            <h2 className="text-sm font-bold">Academic Cohort System</h2>
+          </div>
+          <p className="text-[11px] text-teal-100 leading-relaxed">
+            Students are enrolled into dedicated cohort batches with batch-wise access control to learning resources, drills, and curriculum tracking.
+          </p>
+        </div>
 
-            return (
-              <div key={dept.id} className="card space-y-3 border border-gray-100 shadow-xs">
+        <div className="grid grid-cols-1 gap-3">
+          {batchesList.map((b) => (
+            <div
+              key={b.id}
+              className={`card space-y-3 border transition shadow-xs ${
+                b.isEnrolled
+                  ? b.color === 'teal'
+                    ? 'border-teal-300 ring-2 ring-teal-200 bg-teal-50/30'
+                    : 'border-purple-300 ring-2 ring-purple-200 bg-purple-50/30'
+                  : 'border-gray-200 bg-white'
+              }`}
+            >
+              <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
-                    <i className={`fas ${dept.icon} text-teal-600 text-base`} />
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                    b.color === 'teal'
+                      ? 'bg-teal-100/70 text-teal-700 border-teal-200'
+                      : 'bg-purple-100/70 text-purple-700 border-purple-200'
+                  }`}>
+                    <i className="fas fa-layer-group text-base" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-800">{dept.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">{dept.description}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {dept.subjects.map((s) => (
-                        <span key={s} className="badge badge-teal text-[9px]">{s}</span>
-                      ))}
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="text-sm font-extrabold text-gray-900">{b.name}</h3>
+                      <span className={`badge text-[9px] font-bold py-0.5 px-2 rounded-full ${
+                        b.color === 'teal' ? 'bg-teal-600 text-white' : 'bg-purple-600 text-white'
+                      }`}>
+                        {b.season}
+                      </span>
+                      {b.isEnrolled && (
+                        <span className="badge bg-emerald-600 text-white text-[9px] font-bold py-0.5 px-2 rounded-full shadow-2xs flex items-center gap-1">
+                          <i className="fas fa-check text-[8px]" />
+                          <span>Your Enrolled Batch</span>
+                        </span>
+                      )}
                     </div>
-                  </div>
-                </div>
-
-                {/* Respective Batches Section */}
-                <div className="pt-2 border-t border-gray-100 space-y-2">
-                  <p className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
-                    <i className="fas fa-layer-group text-teal-600 text-xs" />
-                    <span>Respective Batches:</span>
-                  </p>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    {/* Batch 1 (Dec) */}
-                    <div className={`p-2.5 rounded-xl border transition ${studentBatch === 'Batch 1 (Dec)' ? 'bg-teal-50/60 border-teal-300' : 'bg-gray-50 border-gray-200'}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-teal-500" />
-                          <span className="text-xs font-bold text-gray-800">Batch 1 (Dec)</span>
-                        </div>
-                        {studentBatch === 'Batch 1 (Dec)' ? (
-                          <span className="badge bg-teal-600 text-white text-[9px] font-bold py-0.5 px-2 shadow-2xs">
-                            Your Enrolled Batch
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-gray-400">Cohort Session</span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-gray-500 mt-1">
-                        <span>Winter Session (Dec – Apr)</span>
-                        <span className="font-semibold text-teal-700">{batch1Students} Enrolled</span>
-                      </div>
-                    </div>
-
-                    {/* Batch 2 (May/June) */}
-                    <div className={`p-2.5 rounded-xl border transition ${studentBatch === 'Batch 2 (May/June)' ? 'bg-purple-50/60 border-purple-300' : 'bg-gray-50 border-gray-200'}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-purple-500" />
-                          <span className="text-xs font-bold text-gray-800">Batch 2 (May/June)</span>
-                        </div>
-                        {studentBatch === 'Batch 2 (May/June)' ? (
-                          <span className="badge bg-purple-600 text-white text-[9px] font-bold py-0.5 px-2 shadow-2xs">
-                            Your Enrolled Batch
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-gray-400">Cohort Session</span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-gray-500 mt-1">
-                        <span>Summer Session (May – Oct)</span>
-                        <span className="font-semibold text-purple-700">{batch2Students} Enrolled</span>
-                      </div>
-                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{b.session}</p>
+                    <p className="text-[11px] text-gray-600 mt-1 leading-snug">{b.description}</p>
                   </div>
                 </div>
               </div>
-            );
-          })
-        )}
+
+              {/* Batch Metrics & Curriculum Subjects */}
+              <div className="p-2.5 bg-slate-50/90 rounded-xl flex items-center justify-between border border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold flex items-center justify-center">
+                    <i className="fas fa-users text-[10px]" />
+                  </div>
+                  <span className="text-xs font-bold text-gray-800">
+                    {b.studentsCount} Students Enrolled
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-teal-700 bg-white px-2 py-0.5 rounded-lg border border-teal-100">
+                  7 Core Subjects
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

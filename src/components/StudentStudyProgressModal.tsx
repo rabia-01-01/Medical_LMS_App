@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useData } from '../context/DataContext';
-import { DEFAULT_CURRICULUM } from '../features/curriculum';
+import { DEFAULT_CURRICULUM, useCurriculum } from '../features/curriculum';
 
 export interface StudentStudyProgressModalProps {
   student: {
@@ -16,7 +16,11 @@ export interface StudentStudyProgressModalProps {
 
 export function StudentStudyProgressModal({ student, onClose }: StudentStudyProgressModalProps) {
   const { isChapterCompleted, isTopicCompleted, getStudentProgress } = useData();
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(DEFAULT_CURRICULUM[0]?.id || 'subj-biology');
+  const { curriculum } = useCurriculum();
+  const effectiveCurriculum = (curriculum && curriculum.length > 0) ? curriculum : DEFAULT_CURRICULUM;
+
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(effectiveCurriculum[0]?.id || 'subj-biology');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'studied-topics' | 'studied-chapters'>('all');
 
   const progress = getStudentProgress(student.id);
   const completedChapters = progress?.completedChapters || [];
@@ -25,14 +29,145 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
   // Total chapters & topics across curriculum
   let totalChapters = 0;
   let totalTopics = 0;
-  DEFAULT_CURRICULUM.forEach(sub => {
+  effectiveCurriculum.forEach(sub => {
     totalChapters += sub.chapters?.length || 0;
     sub.chapters?.forEach(ch => {
       totalTopics += ch.topics?.length || 0;
     });
   });
 
-  const activeSubject = DEFAULT_CURRICULUM.find(s => s.id === selectedSubjectId) || DEFAULT_CURRICULUM[0];
+  // Build full detail list of studied topics
+  const studiedTopicsList: {
+    id: string;
+    name: string;
+    subjectId: string;
+    subjectName: string;
+    subjectCode: string;
+    chapterName: string;
+    chapterNumber: number;
+    topicNumber: number;
+  }[] = [];
+
+  // Build full detail list of studied chapters
+  const studiedChaptersList: {
+    id: string;
+    name: string;
+    subjectId: string;
+    subjectName: string;
+    subjectCode: string;
+    chapterNumber: number;
+    totalTopics: number;
+    studiedTopicsCount: number;
+  }[] = [];
+
+  // Scan through live curriculum (and fallback)
+  effectiveCurriculum.forEach((sub) => {
+    sub.chapters?.forEach((chap, cIdx) => {
+      const isChapDone = isChapterCompleted(chap.id, student.id) || isChapterCompleted(chap.name, student.id);
+      const chapTopics = chap.topics || [];
+      const doneInChap = chapTopics.filter(t => isTopicCompleted(t.id, student.id) || isTopicCompleted(t.name, student.id)).length;
+
+      if (isChapDone) {
+        studiedChaptersList.push({
+          id: chap.id,
+          name: chap.name,
+          subjectId: sub.id,
+          subjectName: sub.name,
+          subjectCode: sub.code,
+          chapterNumber: cIdx + 1,
+          totalTopics: chapTopics.length,
+          studiedTopicsCount: doneInChap,
+        });
+      }
+
+      chapTopics.forEach((top, tIdx) => {
+        const isDone = isTopicCompleted(top.id, student.id) || isTopicCompleted(top.name, student.id);
+        if (isDone) {
+          studiedTopicsList.push({
+            id: top.id,
+            name: top.name,
+            subjectId: sub.id,
+            subjectName: sub.name,
+            subjectCode: sub.code,
+            chapterName: chap.name,
+            chapterNumber: cIdx + 1,
+            topicNumber: tIdx + 1,
+          });
+        }
+      });
+    });
+  });
+
+  // Also include topics recorded with metadata in progress
+  (progress?.completedTopicDetails || []).forEach((d) => {
+    if (!studiedTopicsList.some(st => st.id === d.id || (st.name && st.name.toLowerCase() === (d.name || '').toLowerCase()))) {
+      // Resolve clean name if d.name is empty or is a raw UUID
+      let resolvedName = d.name;
+      if (!resolvedName || (resolvedName.includes('-') && resolvedName.length > 20)) {
+        for (const s of effectiveCurriculum) {
+          for (const c of s.chapters || []) {
+            const t = c.topics?.find(top => top.id === d.id);
+            if (t) {
+              resolvedName = t.name;
+              break;
+            }
+          }
+          if (resolvedName && !resolvedName.includes('-')) break;
+        }
+      }
+
+      studiedTopicsList.push({
+        id: d.id,
+        name: resolvedName || 'Core Topic',
+        subjectId: d.subjectId || 'subj-biology',
+        subjectName: d.subjectName || 'Biology',
+        subjectCode: 'BIO',
+        chapterName: d.chapterName || 'Human Physiology',
+        chapterNumber: 1,
+        topicNumber: studiedTopicsList.length + 1,
+      });
+    }
+  });
+
+  // If completedTopics has IDs that weren't matched yet, try to find in both effectiveCurriculum & DEFAULT_CURRICULUM
+  completedTopics.forEach((cId) => {
+    if (!studiedTopicsList.some(st => st.id === cId || st.name.toLowerCase() === cId.toLowerCase())) {
+      let foundTop: any = null;
+      let foundChap: any = null;
+      let foundSub: any = null;
+
+      const searchable = [...effectiveCurriculum, ...DEFAULT_CURRICULUM];
+      for (const s of searchable) {
+        for (const c of s.chapters || []) {
+          for (const t of c.topics || []) {
+            if (t.id === cId || t.name === cId) {
+              foundTop = t;
+              foundChap = c;
+              foundSub = s;
+              break;
+            }
+          }
+          if (foundTop) break;
+        }
+        if (foundTop) break;
+      }
+
+      if (foundTop && !studiedTopicsList.some(st => st.id === foundTop.id || st.name.toLowerCase() === foundTop.name.toLowerCase())) {
+        studiedTopicsList.push({
+          id: foundTop.id,
+          name: foundTop.name,
+          subjectId: foundSub.id,
+          subjectName: foundSub.name,
+          subjectCode: foundSub.code || 'MED',
+          chapterName: foundChap.name,
+          chapterNumber: 1,
+          topicNumber: 1,
+        });
+      }
+    }
+  });
+
+  const activeSubject = effectiveCurriculum.find(s => s.id === selectedSubjectId) || effectiveCurriculum[0];
 
   return (
     <div
@@ -77,27 +212,179 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
             </div>
           </div>
 
-          {/* Quick Metrics Bar */}
+          {/* Quick Metrics Bar - Interactive Drilldown */}
           <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-teal-400/30">
-            <div className="bg-white/10 rounded-xl p-2 text-center backdrop-blur-xs">
-              <p className="text-xs font-bold text-teal-200">{completedChapters.length} / {totalChapters}</p>
-              <p className="text-[10px] text-teal-100">Chapters Studied</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-2 text-center backdrop-blur-xs">
-              <p className="text-xs font-bold text-emerald-300">{completedTopics.length} / {totalTopics}</p>
-              <p className="text-[10px] text-teal-100">Topics Studied</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => setActiveFilter(activeFilter === 'studied-chapters' ? 'all' : 'studied-chapters')}
+              className={`rounded-xl p-2 text-center transition cursor-pointer border text-left flex flex-col items-center justify-center ${
+                activeFilter === 'studied-chapters'
+                  ? 'bg-white/30 border-white ring-2 ring-teal-300 shadow-sm'
+                  : 'bg-white/10 hover:bg-white/20 border-white/10'
+              }`}
+              title="Click to inspect studied chapters"
+            >
+              <p className="text-xs font-bold text-teal-200">{studiedChaptersList.length} / {totalChapters}</p>
+              <p className="text-[10px] text-teal-100 flex items-center justify-center gap-1">
+                <span>Chapters Studied</span>
+                <i className={`fas ${activeFilter === 'studied-chapters' ? 'fa-chevron-up' : 'fa-chevron-down'} text-[8px] opacity-75`} />
+              </p>
+              <span className="text-[9px] text-teal-200/80 font-medium mt-0.5">(Click to View)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveFilter(activeFilter === 'studied-topics' ? 'all' : 'studied-topics')}
+              className={`rounded-xl p-2 text-center transition cursor-pointer border text-left flex flex-col items-center justify-center ${
+                activeFilter === 'studied-topics'
+                  ? 'bg-emerald-500/30 border-emerald-300 ring-2 ring-emerald-300 shadow-sm'
+                  : 'bg-white/10 hover:bg-white/20 border-white/10'
+              }`}
+              title="Click to view which topics are studied"
+            >
+              <p className="text-xs font-bold text-emerald-300">{studiedTopicsList.length} / {totalTopics}</p>
+              <p className="text-[10px] text-teal-100 flex items-center justify-center gap-1">
+                <span>Topics Studied</span>
+                <i className={`fas ${activeFilter === 'studied-topics' ? 'fa-chevron-up' : 'fa-search'} text-[8px] opacity-75`} />
+              </p>
+              <span className="text-[9px] text-emerald-200/90 font-medium mt-0.5">(Click to View)</span>
+            </button>
           </div>
         </div>
         <div className="italy-accent shrink-0"><div className="green" /><div className="white" /><div className="red" /></div>
 
-        {/* Subject Navigation Tabs */}
-        <div className="p-2 border-b border-gray-100 bg-gray-50 flex gap-1.5 overflow-x-auto shrink-0">
-          {DEFAULT_CURRICULUM.map(sub => (
+        {/* Dedicated Studied Topics Inspector (When clicking "Topics Studied") */}
+        {activeFilter === 'studied-topics' && (
+          <div className="p-3 bg-emerald-50 border-b-2 border-emerald-300 space-y-2 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shadow-2xs">
+                  <i className="fas fa-check" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-extrabold text-emerald-950">
+                    Topics Studied by {student.name} ({studiedTopicsList.length})
+                  </h4>
+                  <p className="text-[10px] text-emerald-700">Detailed list of topics completed by student</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('all')}
+                className="text-[10px] font-bold text-emerald-800 bg-white hover:bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-300 transition"
+              >
+                Close View
+              </button>
+            </div>
+
+            {studiedTopicsList.length === 0 ? (
+              <div className="p-3 bg-white rounded-xl text-center text-xs text-gray-500 border border-emerald-100">
+                <i className="fas fa-info-circle text-gray-400 mr-1.5" />
+                No topics marked as studied yet for this student.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
+                {studiedTopicsList.map((st, sIdx) => (
+                  <div
+                    key={st.id || sIdx}
+                    onClick={() => {
+                      if (st.subjectId && DEFAULT_CURRICULUM.some(s => s.id === st.subjectId)) {
+                        setSelectedSubjectId(st.subjectId);
+                      }
+                    }}
+                    className="p-2.5 bg-white rounded-xl border border-emerald-200 shadow-2xs flex items-center justify-between gap-2 hover:border-emerald-400 transition cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="badge bg-teal-100 text-teal-800 text-[9px] font-bold py-0.2 px-1.5 rounded">
+                          {st.subjectName} ({st.subjectCode})
+                        </span>
+                        <span className="badge bg-gray-100 text-gray-600 text-[9px] font-medium py-0.2 px-1.5 rounded">
+                          Ch {st.chapterNumber}: {st.chapterName}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-gray-900 mt-1 truncate">
+                        {st.name}
+                      </p>
+                    </div>
+                    <span className="badge bg-emerald-600 text-white text-[10px] font-bold py-1 px-2 rounded-lg flex items-center gap-1 shrink-0 shadow-2xs">
+                      <i className="fas fa-check text-[9px]" />
+                      <span>Studied</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dedicated Studied Chapters Inspector (When clicking "Chapters Studied") */}
+        {activeFilter === 'studied-chapters' && (
+          <div className="p-3 bg-teal-50 border-b-2 border-teal-300 space-y-2 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs shadow-2xs">
+                  <i className="fas fa-book-open" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-extrabold text-teal-950">
+                    Chapters Studied by {student.name} ({studiedChaptersList.length})
+                  </h4>
+                  <p className="text-[10px] text-teal-700">Curriculum chapters marked complete</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('all')}
+                className="text-[10px] font-bold text-teal-800 bg-white hover:bg-teal-100 px-2 py-0.5 rounded-lg border border-teal-300 transition"
+              >
+                Close View
+              </button>
+            </div>
+
+            {studiedChaptersList.length === 0 ? (
+              <div className="p-3 bg-white rounded-xl text-center text-xs text-gray-500 border border-teal-100">
+                <i className="fas fa-info-circle text-gray-400 mr-1.5" />
+                No chapters marked as complete yet for this student.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
+                {studiedChaptersList.map((sc, scIdx) => (
+                  <div
+                    key={sc.id || scIdx}
+                    onClick={() => {
+                      if (sc.subjectId && DEFAULT_CURRICULUM.some(s => s.id === sc.subjectId)) {
+                        setSelectedSubjectId(sc.subjectId);
+                      }
+                    }}
+                    className="p-2.5 bg-white rounded-xl border border-teal-200 shadow-2xs flex items-center justify-between gap-2 hover:border-teal-400 transition cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="badge bg-teal-100 text-teal-800 text-[9px] font-bold py-0.2 px-1.5 rounded">
+                        {sc.subjectName} ({sc.subjectCode})
+                      </span>
+                      <p className="text-xs font-bold text-gray-900 mt-1 truncate">
+                        Ch {sc.chapterNumber}: {sc.name}
+                      </p>
+                    </div>
+                    <span className="badge bg-teal-600 text-white text-[10px] font-bold py-1 px-2 rounded-lg flex items-center gap-1 shrink-0">
+                      <i className="fas fa-check text-[9px]" />
+                      <span>{sc.studiedTopicsCount}/{sc.totalTopics} Topics</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Subject Navigation Tabs - Clean Non-scrolling Wrap */}
+        <div className="p-2 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-1.5 shrink-0 overflow-x-hidden no-scrollbar">
+          {effectiveCurriculum.map(sub => (
             <button
               key={sub.id}
               onClick={() => setSelectedSubjectId(sub.id)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
                 selectedSubjectId === sub.id
                   ? 'bg-teal-600 text-white shadow-xs'
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
@@ -120,9 +407,9 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
           </div>
 
           {activeSubject?.chapters?.map((chap, cIdx) => {
-            const chapDone = isChapterCompleted(chap.id, student.id);
+            const chapDone = isChapterCompleted(chap.id, student.id) || isChapterCompleted(chap.name, student.id);
             const chapTopics = chap.topics || [];
-            const completedInChap = chapTopics.filter(t => isTopicCompleted(t.id, student.id)).length;
+            const completedInChap = chapTopics.filter(t => isTopicCompleted(t.id, student.id) || isTopicCompleted(t.name, student.id)).length;
 
             return (
               <div
@@ -168,7 +455,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                   </div>
 
                   {chapTopics.map((top, tIdx) => {
-                    const topDone = isTopicCompleted(top.id, student.id);
+                    const topDone = isTopicCompleted(top.id, student.id) || isTopicCompleted(top.name, student.id);
                     return (
                       <div
                         key={top.id}

@@ -780,12 +780,13 @@ export function CurriculumBrowser({
     setActiveStudyChapter(null);
   };
 
-  const handleToggleMasterChapter = (chapterId: string) => {
+  const handleToggleMasterChapter = (chapterId: string, chapterName?: string) => {
     const isNow = toggleChapterCompletion(
       chapterId,
       activeUser?.id,
       activeUser?.name,
-      activeUser?.batch
+      activeUser?.batch,
+      chapterName
     );
     const updated = { ...chapterMasteredMap, [chapterId]: isNow };
     setChapterMasteredMap(updated);
@@ -807,12 +808,24 @@ export function CurriculumBrowser({
     setTimeout(() => setSuccessMessage(null), 2500);
   };
 
-  const handleToggleTopicCompletion = (topicId: string, topicName?: string) => {
+  const handleToggleTopicCompletion = (
+    topicId: string,
+    topicName?: string,
+    chapterId?: string,
+    chapterName?: string
+  ) => {
     const isNow = toggleTopicCompletion(
       topicId,
       activeUser?.id,
       activeUser?.name,
-      activeUser?.batch
+      activeUser?.batch,
+      {
+        topicName,
+        chapterId,
+        chapterName,
+        subjectId: activeSubject?.id,
+        subjectName: activeSubject?.name,
+      }
     );
     if (isNow) {
       confetti({
@@ -918,13 +931,14 @@ export function CurriculumBrowser({
         )}
       </AnimatePresence>
 
-      {/* Subject Selector Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      {/* Subject Selector Tabs - Clean Non-scrolling Flex Wrap with Full Subject Names */}
+      <div className="flex flex-wrap gap-1.5 pb-1 overflow-x-hidden no-scrollbar">
         {curriculum.map((subj) => {
           const isActive = activeSubject?.id === subj.id;
           return (
             <button
               key={subj.id}
+              type="button"
               onClick={() => {
                 setActiveSubjectId(subj.id);
                 if (subj.chapters.length > 0) {
@@ -933,29 +947,19 @@ export function CurriculumBrowser({
                   setExpandedChapterId(null);
                 }
               }}
-              className={`flex-1 min-w-[100px] py-2.5 px-3 rounded-xl border text-left transition flex items-center gap-2.5 ${
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs ${
                 isActive
-                  ? 'bg-gradient-to-r from-[#0f2b46] to-[#1a3a5c] text-white border-teal-500/40 shadow-sm'
-                  : 'bg-white text-gray-700 border-gray-200 hover:border-teal-300'
+                  ? 'bg-gradient-to-r from-[#0f2b46] to-[#1a3a5c] text-white ring-2 ring-teal-400/50 shadow-xs'
+                  : 'bg-white text-gray-800 border border-gray-200 hover:border-teal-300 hover:bg-teal-50/50'
               }`}
             >
-              <div
-                className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs ${
-                  isActive ? 'bg-teal-500/20 text-teal-400' : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                <i className={`fas ${getSubjectIcon(subj.code)}`} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold truncate leading-tight">{subj.name}</p>
-                <span
-                  className={`text-[9px] font-semibold uppercase ${
-                    isActive ? 'text-teal-300' : 'text-gray-400'
-                  }`}
-                >
-                  {subj.code} • {subj.chapters.length} Ch
-                </span>
-              </div>
+              <i className={`fas ${getSubjectIcon(subj.code)} text-xs ${isActive ? 'text-teal-300' : ''}`} />
+              <span className="font-bold">{subj.name}</span>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-md ${
+                isActive ? 'bg-teal-400/20 text-teal-200' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {subj.chapters.length} Ch
+              </span>
             </button>
           );
         })}
@@ -1040,37 +1044,65 @@ export function CurriculumBrowser({
               >
                 {/* Clickable Chapter Header */}
                 <div
-                  className="p-3 flex items-center justify-between cursor-pointer hover:bg-teal-50/30 transition group select-none"
+                  className="p-3 cursor-pointer hover:bg-teal-50/30 transition group select-none space-y-2"
                   onClick={() => handleOpenChapterStudyHub(chapter, idx)}
                   title="Click to view full chapter study guide & clinical details"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span className={`w-5 h-5 rounded-md text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
-                      isMastered ? 'bg-emerald-500 text-white' : 'bg-teal-100/80 text-teal-800'
-                    }`}>
-                      {isMastered ? '✓' : idx + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-bold text-gray-900 group-hover:text-teal-700 transition truncate">
-                          {chapter.name}
-                        </p>
-                        <span className="text-[9px] text-teal-600 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200/50 font-medium hidden sm:inline">
-                          Study Guide
-                        </span>
-                      </div>
-                      {chapter.description && (
-                        <p className="text-[10px] text-gray-400 truncate mt-0.5">{chapter.description}</p>
-                      )}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <span className={`w-5 h-5 rounded-md text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
+                        isMastered ? 'bg-emerald-500 text-white' : 'bg-teal-100/80 text-teal-800'
+                      }`}>
+                        {isMastered ? '✓' : idx + 1}
+                      </span>
+                      <p className="text-xs font-bold text-gray-900 group-hover:text-teal-700 transition leading-snug">
+                        {chapter.name}
+                      </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleChapter(chapter.id);
+                      }}
+                      className="p-1 text-gray-400 hover:text-teal-600 transition shrink-0"
+                      title={isExpanded ? "Collapse topics" : "Expand topics"}
+                    >
+                      <i
+                        className={`fas fa-chevron-down text-xs transition-transform duration-200 ${
+                          isExpanded ? 'rotate-180 text-teal-600' : ''
+                        }`}
+                      />
+                    </button>
                   </div>
 
-                  <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {chapter.description && (
+                    <p className="text-[10px] text-gray-400 line-clamp-1">{chapter.description}</p>
+                  )}
+
+                  <div className="flex items-center justify-between gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <i className="fas fa-layer-group text-[9px]" />
+                        <span>{chapter.topics.length} topics</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenChapterStudyHub(chapter, idx)}
+                        className="text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-full transition flex items-center gap-1"
+                        title="Open Chapter Study Hub"
+                      >
+                        <i className="fas fa-book-reader text-[9px]" />
+                        <span>Study Guide</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
                     {!isFacultyOrAdmin ? (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleToggleMasterChapter(chapter.id);
+                          handleToggleMasterChapter(chapter.id, chapter.name);
                         }}
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition flex items-center gap-1 border shadow-2xs ${
                           isMastered
@@ -1100,15 +1132,6 @@ export function CurriculumBrowser({
                       </button>
                     )}
 
-                    <button
-                      onClick={() => handleOpenChapterStudyHub(chapter, idx)}
-                      className="text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-full transition flex items-center gap-1"
-                      title="Open Chapter Study Hub"
-                    >
-                      <i className="fas fa-book-reader text-[9px]" />
-                      <span>{chapter.topics.length} topics</span>
-                    </button>
-
                     {isFacultyOrAdmin && (
                       <button
                         onClick={(e) => {
@@ -1123,23 +1146,9 @@ export function CurriculumBrowser({
                         <i className="fas fa-trash" />
                       </button>
                     )}
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleChapter(chapter.id);
-                      }}
-                      className="p-1 text-gray-400 hover:text-teal-600 transition"
-                      title={isExpanded ? "Collapse topics" : "Expand topics"}
-                    >
-                      <i
-                        className={`fas fa-chevron-down text-xs transition-transform duration-200 ${
-                          isExpanded ? 'rotate-180 text-teal-600' : ''
-                        }`}
-                      />
-                    </button>
                   </div>
                 </div>
+              </div>
 
                 {/* Topics Panel */}
                 {isExpanded && (
@@ -1172,12 +1181,12 @@ export function CurriculumBrowser({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5 shrink-0">
                             {!isFacultyOrAdmin ? (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleToggleTopicCompletion(topic.id, topic.name);
+                                  handleToggleTopicCompletion(topic.id, topic.name, chapter.id, chapter.name);
                                 }}
                                 className={`text-[9px] font-bold px-2 py-0.5 rounded-md transition flex items-center gap-1 border shadow-2xs ${
                                   isTopicDone
@@ -1459,7 +1468,7 @@ export function CurriculumBrowser({
                 {/* Actions Footer */}
                 <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
                   <button
-                    onClick={() => handleToggleMasterChapter(activeStudyChapter.chapter.id)}
+                    onClick={() => handleToggleMasterChapter(activeStudyChapter.chapter.id, activeStudyChapter.chapter.name)}
                     className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                       isChapterCompleted(activeStudyChapter.chapter.id, activeUser?.id) || chapterMasteredMap[activeStudyChapter.chapter.id]
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -1853,7 +1862,7 @@ export function CurriculumBrowser({
               {/* Actions Footer */}
               <div className="p-3 bg-white border-t border-gray-100 flex items-center justify-between gap-2 shrink-0">
                 <button
-                  onClick={() => handleToggleTopicCompletion(activeStudyTopic.topic.id, activeStudyTopic.topic.name)}
+                  onClick={() => handleToggleTopicCompletion(activeStudyTopic.topic.id, activeStudyTopic.topic.name, activeStudyTopic.chapter.id, activeStudyTopic.chapter.name)}
                   className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs ${
                     isTopicCompleted(activeStudyTopic.topic.id, activeUser?.id)
                       ? 'bg-emerald-600 hover:bg-emerald-700 text-white'

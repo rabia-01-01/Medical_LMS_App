@@ -91,9 +91,8 @@ export function FullscreenControl({ mode, onModeChange }: FullscreenControlProps
         {/* Menu expander button */}
         <button
           onClick={() => setShowMenu(prev => !prev)}
-          className={`w-6 h-7 rounded-r-full hover:bg-white/15 flex items-center justify-center transition text-slate-400 hover:text-white ${
-            showMenu ? 'text-teal-400' : ''
-          }`}
+          className={`w-6 h-7 rounded-r-full hover:bg-white/15 flex items-center justify-center transition text-slate-400 hover:text-white ${showMenu ? 'text-teal-400' : ''
+            }`}
           title="Display and Fullscreen options"
         >
           <i className="fas fa-ellipsis-v text-[10px]" />

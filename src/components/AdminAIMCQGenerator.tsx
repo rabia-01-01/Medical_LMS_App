@@ -34,6 +34,7 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
 
   const [includeDiagramQuestion, setIncludeDiagramQuestion] = useState(true);
   const [targetBatch, setTargetBatch] = useState<'Batch 1 (Dec)' | 'Batch 2 (May/June)'>('Batch 1 (Dec)');
+  const [questionCount, setQuestionCount] = useState<number>(5);
   const [generating, setGenerating] = useState(false);
   const [generatingStatus, setGeneratingStatus] = useState<string>('');
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedMCQ[]>([]);
@@ -58,72 +59,102 @@ export function AdminAIMCQGenerator({ onBack }: { onBack?: () => void }) {
     setGenerating(true);
     setSavedSuccess(false);
     setErrorMessage(null);
-    setGeneratingStatus('Connecting to Groq AI Engine...');
+    setGeneratingStatus('Connecting to AI Engine...');
 
     const chapterName = activeChapter?.name || 'Human Physiology';
     const subjName = activeSubj?.name || 'Biology';
     const activeTopic = topics.find((t) => t.id === selectedTopicId);
     const topicName = activeTopic ? activeTopic.name : 'Core Concepts & Clinical Synthesis';
 
-    const sampleDiagramSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="340" height="160" viewBox="0 0 340 160"><rect width="100%" height="100%" fill="%230f172a" rx="12"/><circle cx="90" cy="80" r="42" fill="%230d9488" opacity="0.85"/><circle cx="170" cy="80" r="42" fill="%233b82f6" opacity="0.85"/><circle cx="250" cy="80" r="42" fill="%238b5cf6" opacity="0.85"/><text x="170" y="85" fill="%23ffffff" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle">Figure 1.1: ${chapterName.slice(0, 22)}</text><text x="170" y="105" fill="%2394a3b8" font-family="sans-serif" font-size="9" text-anchor="middle">Option A Keyed Pathway</text></svg>`;
+    const sampleDiagramSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="340" height="160" viewBox="0 0 340 160"><rect width="100%" height="100%" fill="%230f172a" rx="12"/><circle cx="90" cy="80" r="42" fill="%230d9488" opacity="0.85"/><circle cx="170" cy="80" r="42" fill="%233b82f6" opacity="0.85"/><circle cx="250" cy="80" r="42" fill="%238b5cf6" opacity="0.85"/><text x="170" y="85" fill="%23ffffff" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle">Figure 1.1: ${chapterName.slice(0, 22)}</text><text x="170" y="105" fill="%2394a3b8" font-family="sans-serif" font-size="9" text-anchor="middle">Diagnostic Pathway</text></svg>`;
+
+    let parsedQuestions: any[] | null = null;
 
     try {
-      const promptSystem = `You are a world-class medical school professor and entrance exam question author.
-Return a strictly valid JSON object with a single "questions" array containing exactly 3 challenging multiple-choice questions for the requested curriculum Subject, Chapter, and Topic.
+      // 1. Try local Express backend if running
+      try {
+        setGeneratingStatus('Checking AI Backend Service...');
+        const backendRes = await fetch("http://localhost:5000/api/ai/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject: subjName,
+            chapter: chapterName,
+            topic: topicName,
+            targetBatch,
+            questionCount,
+          }),
+        });
+        if (backendRes.ok) {
+          const backendData = await backendRes.json();
+          if (Array.isArray(backendData.questions) && backendData.questions.length > 0) {
+            parsedQuestions = backendData.questions;
+          }
+        }
+      } catch {
+        // Backend offline or unreachable - proceed to direct Groq Cloud API
+      }
+
+      // 2. Direct Groq Cloud API synthesis if not loaded from backend
+      if (!parsedQuestions) {
+        const promptSystem = `You are a world-class medical school professor and entrance exam question author.
+Return a strictly valid JSON object with a single "questions" array containing exactly ${questionCount} challenging multiple-choice questions for the requested curriculum Subject, Chapter, and Topic.
 CRITICAL REQUIREMENTS:
 1. Each question must have:
    - "question": string (detailed clinical scenario or theoretical problem).
    - "options": array of exactly 5 strings: Option A, Option B, Option C, Option D, Option E.
-   - "explanation": string (diagnostic or biochemical clinical pearl explaining why Option A is correct).
-2. OPTION A MUST ALWAYS BE THE ONLY CORRECT ANSWER (index 0).
+   - "correctAnswer": integer from 0 to 4 (0 = Option A, 1 = Option B, 2 = Option C, 3 = Option D, 4 = Option E).
+   - "explanation": string (diagnostic or biochemical clinical pearl explaining why the chosen option is correct).
+2. DISTRIBUTE THE CORRECT ANSWER NATURALLY ACROSS OPTIONS A, B, C, D, AND E. Do NOT make Option A always the correct answer. Vary the correct option index (0, 1, 2, 3, 4) evenly across the questions.
 3. Do not include markdown code fences or conversational text; return only the raw JSON object.`;
 
-      const promptUser = `Subject: ${subjName}
+        const promptUser = `Subject: ${subjName}
 Chapter: ${chapterName}
 Topic: ${topicName}
 Target Examination Cohort: ${targetBatch}
-Please generate 3 high-yield chapter-wise and topic-wise examination questions with 5 options (A, B, C, D, E) where Option A is correct.`;
+Number of questions: ${questionCount}
+Please generate exactly ${questionCount} high-yield chapter-wise and topic-wise examination questions with 5 options (A, B, C, D, E) and distributed correct answers across Options A, B, C, D, and E.`;
 
-      let parsedQuestions: any[] | null = null;
-      const modelsToTry = [GROQ_PRIMARY_MODEL, ...GROQ_FALLBACK_MODELS];
+        const modelsToTry = [GROQ_PRIMARY_MODEL, ...GROQ_FALLBACK_MODELS];
 
-      for (const model of modelsToTry) {
-        try {
-          setGeneratingStatus(`Synthesizing questions via ${model}...`);
-          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${GROQ_API_KEY}`,
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: 'system', content: promptSystem },
-                { role: 'user', content: promptUser },
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0.6,
-            }),
-          });
+        for (const model of modelsToTry) {
+          try {
+            setGeneratingStatus(`Synthesizing questions via ${model}...`);
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model,
+                messages: [
+                  { role: 'system', content: promptSystem },
+                  { role: 'user', content: promptUser },
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.6,
+              }),
+            });
 
-          if (!response.ok) {
-            console.warn(`Groq model ${model} returned HTTP ${response.status}`);
-            continue;
-          }
-
-          const data = await response.json();
-          const content = data.choices?.[0]?.message?.content;
-          if (content) {
-            const parsed = JSON.parse(content);
-            const qList = parsed.questions || parsed.data || (Array.isArray(parsed) ? parsed : null);
-            if (Array.isArray(qList) && qList.length > 0) {
-              parsedQuestions = qList;
-              break;
+            if (!response.ok) {
+              console.warn(`Groq model ${model} returned HTTP ${response.status}`);
+              continue;
             }
+
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content;
+            if (content) {
+              const parsed = JSON.parse(content);
+              const qList = parsed.questions || parsed.data || (Array.isArray(parsed) ? parsed : null);
+              if (Array.isArray(qList) && qList.length > 0) {
+                parsedQuestions = qList;
+                break;
+              }
+            }
+          } catch (innerErr) {
+            console.warn(`Failed with model ${model}:`, innerErr);
           }
-        } catch (innerErr) {
-          console.warn(`Failed with model ${model}:`, innerErr);
         }
       }
 
@@ -150,23 +181,38 @@ Please generate 3 high-yield chapter-wise and topic-wise examination questions w
             return opt;
           });
 
+          // Parse correct answer (0-4), naturally distributed across A-E
+          let ans = 0;
+          if (typeof q.correctAnswer === 'number' && q.correctAnswer >= 0 && q.correctAnswer <= 4) {
+            ans = q.correctAnswer;
+          } else if (typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex <= 4) {
+            ans = q.correctIndex;
+          } else if (typeof q.correct === 'string') {
+            const letterIdx = ['a', 'b', 'c', 'd', 'e'].indexOf(q.correct.trim().toLowerCase().charAt(0));
+            ans = letterIdx !== -1 ? letterIdx : (idx % 5);
+          } else {
+            ans = idx % 5;
+          }
+
+          const correctLetter = String.fromCharCode(65 + ans);
+
           return {
             id: idx + 1,
             question: q.question || `In ${subjName} • ${chapterName}, which physiological principle governs ${topicName}?`,
             imageUrl: idx === 0 && includeDiagramQuestion ? sampleDiagramSvg : undefined,
             options: opts,
-            correctAnswer: 0, // Option A always keyed
+            correctAnswer: ans,
             marks: 4,
             negativeMarks: 1,
-            explanation: q.explanation || `High-Yield Clinical Pearl: Option A is the correct answer for ${topicName}.`,
+            explanation: q.explanation || `High-Yield Clinical Pearl: Option ${correctLetter} is the correct answer for ${topicName}.`,
           };
         });
 
-        setGeneratedQuestions(formatted);
+        setGeneratedQuestions(formatted.slice(0, questionCount));
         setQuizTitle(`AI Drill: ${subjName} - ${chapterName} (${topicName})`);
       } else {
         // High-Yield Contextual Fallback if Groq API is temporarily unreachable
-        const fallbackQuestions: GeneratedMCQ[] = [
+        const baseFallback: GeneratedMCQ[] = [
           {
             id: 1,
             question: includeDiagramQuestion
@@ -195,10 +241,10 @@ Please generate 3 high-yield chapter-wise and topic-wise examination questions w
               `Option D: Serum osmolar gap calculation omitting blood urea nitrogen`,
               `Option E: Fractional excretion of sodium exceeding 3.5% with pre-renal azotemia`,
             ],
-            correctAnswer: 0,
+            correctAnswer: 1,
             marks: 4,
             negativeMarks: 1,
-            explanation: `Option A correctly represents the serum anion gap equation, essential for distinguishing between high anion gap metabolic acidosis (HAGMA) and normal anion gap metabolic acidosis (NAGMA).`,
+            explanation: `Option B correctly represents the diagnostic standard ratio, essential for distinguishing between high anion gap metabolic acidosis (HAGMA) and normal anion gap metabolic acidosis (NAGMA).`,
           },
           {
             id: 3,
@@ -210,12 +256,57 @@ Please generate 3 high-yield chapter-wise and topic-wise examination questions w
               `Option D: Lactate dehydrogenase operating under standard anaerobic conditions exclusively`,
               `Option E: Fructose-1,6-bisphosphatase stimulated by fructose-2,6-bisphosphate in hepatocytes`,
             ],
-            correctAnswer: 0,
+            correctAnswer: 2,
             marks: 4,
             negativeMarks: 1,
-            explanation: `PFK-1 is the primary committed and rate-limiting step of glycolysis, regulated allosterically by AMP, ATP, and fructose 2,6-bisphosphate.`,
+            explanation: `Option C represents the committed step: Hexokinase IV acts as the primary committed glucose sensor in pancreatic beta-cells.`,
+          },
+          {
+            id: 4,
+            question: `During clinical pharmacological intervention in ${chapterName} (${topicName}), which therapeutic mechanism prevents secondary receptor desensitization?`,
+            options: [
+              `Option A: Sustained high-affinity partial agonist occupancy at peripheral ganglionic sites`,
+              `Option B: Competitive antagonism at ligand-gated ion channels with rapid dissociation kinetics`,
+              `Option C: Allosteric modulation at extracellular cysteine-rich domains preventing internalization`,
+              `Option D: Pulsatile dosing schedule with selective beta-arrestin uncoupling`,
+              `Option E: Covalent irreversible binding to catalytic tyrosine kinase residues`,
+            ],
+            correctAnswer: 3,
+            marks: 4,
+            negativeMarks: 1,
+            explanation: `Option D: Pulsatile dosing avoids persistent beta-arrestin recruitment, thereby attenuating clathrin-mediated receptor internalization.`,
+          },
+          {
+            id: 5,
+            question: `Which compensatory physiological reflex is immediately recruited upon systemic deviation in ${chapterName} (${topicName})?`,
+            options: [
+              `Option A: Renin-angiotensin-aldosterone axis activation via juxtaglomerular macula densa signaling`,
+              `Option B: Baroreceptor afferent signaling reduction leading to decreased sympathetic tone`,
+              `Option C: Atrial natriuretic peptide release stimulated by hyperosmolar extracellular volume shift`,
+              `Option D: Chemoreceptor-mediated hyperventilation secondary to isolated central metabolic alkalosis`,
+              `Option E: Arterial baroreflex unloading inducing rapid sympathetic vasoconstriction`,
+            ],
+            correctAnswer: 4,
+            marks: 4,
+            negativeMarks: 1,
+            explanation: `Option E: The arterial baroreflex acts within seconds to restore mean arterial pressure via sympathetic vasoconstriction.`,
           },
         ];
+
+        // Scale fallback questions to match requested questionCount
+        const fallbackQuestions: GeneratedMCQ[] = [];
+        for (let i = 0; i < questionCount; i++) {
+          const template = baseFallback[i % baseFallback.length];
+          const assignedAns = i % 5;
+          const assignedLetter = String.fromCharCode(65 + assignedAns);
+          fallbackQuestions.push({
+            ...template,
+            id: i + 1,
+            question: i >= baseFallback.length ? `[Drill Q${i + 1}] ${template.question}` : template.question,
+            correctAnswer: assignedAns,
+            explanation: `High-Yield Clinical Pearl: Option ${assignedLetter} is the correct answer for ${topicName}.`,
+          });
+        }
 
         setGeneratedQuestions(fallbackQuestions);
         setQuizTitle(`AI Drill: ${subjName} - ${chapterName} (${targetBatch})`);
@@ -277,7 +368,7 @@ Please generate 3 high-yield chapter-wise and topic-wise examination questions w
           )}
         </div>
         <p className="text-[11px] text-teal-100 leading-relaxed">
-          Powered by Groq Cloud AI Engine with Option A keying, 5 choices (A, B, C, D, E), and diagram synthesis.
+          Powered by Groq Cloud AI Engine with distributed answer keys across 5 choices (A, B, C, D, E), customizable question count, and diagram synthesis.
         </p>
       </div>
 
@@ -351,33 +442,92 @@ Please generate 3 high-yield chapter-wise and topic-wise examination questions w
           </select>
         </div>
 
-        {/* Batch Target & Diagram Option */}
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          <div>
-            <label className="text-[11px] font-bold text-gray-700 block mb-1">
-              Cohort Batch Allocation
+        {/* Cohort Batch Allocation */}
+        <div>
+          <label className="text-[11px] font-bold text-gray-700 block mb-1">
+            Cohort Batch Allocation
+          </label>
+          <select
+            value={targetBatch}
+            onChange={(e) => setTargetBatch(e.target.value as any)}
+            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="Batch 1 (Dec)">Batch 1 (Dec) • Winter Cohort</option>
+            <option value="Batch 2 (May/June)">Batch 2 (May/June) • Summer Cohort</option>
+          </select>
+        </div>
+
+        {/* Question Count Selection - Full Width Row */}
+        <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+              <i className="fas fa-list-ol text-teal-600 text-xs" />
+              <span>Questions to Generate</span>
             </label>
-            <select
-              value={targetBatch}
-              onChange={(e) => setTargetBatch(e.target.value as any)}
-              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800"
-            >
-              <option value="Batch 1 (Dec)">Batch 1 (Dec)</option>
-              <option value="Batch 2 (May/June)">Batch 2 (May/June)</option>
-            </select>
+            <span className="badge badge-teal text-[10px] font-extrabold px-2 py-0.5">
+              {questionCount} Questions
+            </span>
           </div>
-          <div className="flex items-center pt-5">
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-700">
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden shrink-0 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setQuestionCount(Math.max(1, questionCount - 1))}
+                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-xs font-bold active:bg-gray-200"
+                title="Decrease question count"
+              >
+                <i className="fas fa-minus text-[10px]" />
+              </button>
               <input
-                type="checkbox"
-                checked={includeDiagramQuestion}
-                onChange={(e) => setIncludeDiagramQuestion(e.target.checked)}
-                className="w-4 h-4 text-teal-600 rounded"
+                type="number"
+                min={1}
+                max={25}
+                value={questionCount}
+                onChange={(e) => setQuestionCount(Math.max(1, Math.min(25, parseInt(e.target.value) || 1)))}
+                className="w-10 h-8 text-center text-xs font-extrabold text-gray-800 border-x border-gray-200 focus:outline-none"
               />
-              <span>Include Diagram MCQ</span>
-            </label>
+              <button
+                type="button"
+                onClick={() => setQuestionCount(Math.min(25, questionCount + 1))}
+                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-xs font-bold active:bg-gray-200"
+                title="Increase question count"
+              >
+                <i className="fas fa-plus text-[10px]" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1.5 flex-1">
+              {[3, 5, 10, 15].map((cnt) => (
+                <button
+                  key={cnt}
+                  type="button"
+                  onClick={() => setQuestionCount(cnt)}
+                  className={`py-1.5 text-[11px] font-bold rounded-lg border transition text-center ${questionCount === cnt
+                    ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
+                    }`}
+                >
+                  {cnt} Qs
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* Visual Diagram Option */}
+        <label className="flex items-center gap-2.5 p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer transition">
+          <input
+            type="checkbox"
+            checked={includeDiagramQuestion}
+            onChange={(e) => setIncludeDiagramQuestion(e.target.checked)}
+            className="w-4 h-4 text-teal-600 rounded shrink-0 focus:ring-teal-500"
+          />
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-bold text-gray-800 block">Include Diagram Question</span>
+            <span className="text-[10px] text-gray-500 block">Generates a visual diagnostic pathway / anatomical figure question</span>
+          </div>
+        </label>
 
         <button
           onClick={handleGenerateAI}
@@ -405,7 +555,7 @@ Please generate 3 high-yield chapter-wise and topic-wise examination questions w
             <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
               Generated Questions ({generatedQuestions.length})
             </h3>
-            <span className="badge badge-teal text-[10px]">5 Options • Option A Keyed</span>
+            <span className="badge badge-teal text-[10px]">5 Options (A–E) • Distributed Answer Key</span>
           </div>
 
           <div className="space-y-3">
@@ -435,18 +585,16 @@ Please generate 3 high-yield chapter-wise and topic-wise examination questions w
                   {q.options.map((opt, oIdx) => (
                     <div
                       key={oIdx}
-                      className={`p-2 rounded-lg text-xs flex items-center gap-2 border ${
-                        oIdx === q.correctAnswer
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
-                          : 'bg-gray-50 border-gray-100 text-gray-700'
-                      }`}
+                      className={`p-2 rounded-lg text-xs flex items-center gap-2 border ${oIdx === q.correctAnswer
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
+                        : 'bg-gray-50 border-gray-100 text-gray-700'
+                        }`}
                     >
                       <span
-                        className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                          oIdx === q.correctAnswer
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-gray-200 text-gray-600'
-                        }`}
+                        className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${oIdx === q.correctAnswer
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-gray-200 text-gray-600'
+                          }`}
                       >
                         {String.fromCharCode(65 + oIdx)}
                       </span>

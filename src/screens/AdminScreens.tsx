@@ -279,7 +279,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           {[
             { icon: 'fa-users', label: 'User Management', desc: `${users.length} registered profiles (${metrics?.activeUsers || users.length} active)`, screen: 'users' },
             { icon: 'fa-book-medical', label: 'Academic & Course Management', desc: `${courses.length} courses, curriculum & cohorts`, screen: 'courses' },
-            { icon: 'fa-building', label: 'Batches', desc: `${departments.length} departments & cohort batches`, screen: 'departments' },
+            { icon: 'fa-layer-group', label: 'Batches', desc: 'Academic Cohort Batches • Batch 1 & Batch 2', screen: 'departments' },
             { icon: 'fa-shield-alt', label: 'Resource Governance & Moderation', desc: `${resources.length} resources (${resources.filter(r => r.status === 'published').length} published)`, screen: 'resources' },
             { icon: 'fa-clipboard-check', label: 'Assessment & Quiz Engine', desc: `${totalAssessmentsCount} exams & mock drills`, screen: 'quizzes' },
             { icon: 'fa-history', label: 'Security & Audit Logs', desc: `${auditLogs.length} events logged`, screen: 'audit-logs' },
@@ -675,151 +675,199 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   );
 }
 
-// ==================== ADMIN DEPARTMENTS WITH RESPECTIVE BATCHES ====================
+// ==================== ADMIN BATCHES (ONLY BATCHES IN BATCHES TAB) ====================
 export function AdminDepartments({ onBack }: { onBack: () => void }) {
-  const { departments, users, courses, addDepartment, deleteDepartment } = useData();
+  const { users, courses } = useData();
   const [selectedBatchModal, setSelectedBatchModal] = useState<{ batch: string; deptName: string; subjects: string[] } | null>(null);
   const [batchTab, setBatchTab] = useState<'students' | 'courses'>('students');
   const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [subjects, setSubjects] = useState('');
-  const [icon, setIcon] = useState('fa-book');
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [batchName, setBatchName] = useState('');
+  const [batchSession, setBatchSession] = useState('');
+  const [customBatches, setCustomBatches] = useState<{ id: string; name: string; session: string }[]>(() => {
+    try {
+      const s = localStorage.getItem('sim_admin_batches');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
 
-  const icons = ['fa-book', 'fa-bone', 'fa-heart-pulse', 'fa-flask', 'fa-leaf', 'fa-paw', 'fa-atom', 'fa-vial', 'fa-brain', 'fa-graduation-cap', 'fa-stethoscope', 'fa-microscope'];
-
-  const handleAdd = () => {
-    if (!name) return;
-    addDepartment({
-      name,
-      icon,
-      description,
-      subjects: subjects.split(',').map(s => s.trim()).filter(Boolean),
-      batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)']
-    });
-    setName(''); setDescription(''); setSubjects(''); setShowForm(false);
+  const handleAddBatch = () => {
+    if (!batchName.trim()) return;
+    const newB = {
+      id: Date.now().toString(36),
+      name: batchName.trim(),
+      session: batchSession.trim() || 'Custom Academic Session',
+    };
+    const updated = [...customBatches, newB];
+    setCustomBatches(updated);
+    try { localStorage.setItem('sim_admin_batches', JSON.stringify(updated)); } catch {}
+    setBatchName('');
+    setBatchSession('');
+    setShowForm(false);
   };
+
+  const batch1Students = (users || []).filter(u => u.role === 'student' && (u.batch === 'Batch 1 (Dec)' || !u.batch || u.batch.includes('1'))).length;
+  const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
+
+  const defaultBatches = [
+    {
+      id: 'batch-1',
+      name: 'Batch 1 (Dec)',
+      session: 'Session: December – April • Winter Cohort',
+      badge: 'Winter Session',
+      color: 'teal',
+      studentsCount: batch1Students,
+      tag: 'Dec Intake',
+    },
+    {
+      id: 'batch-2',
+      name: 'Batch 2 (May/June)',
+      session: 'Session: May – October • Summer Cohort',
+      badge: 'Summer Session',
+      color: 'purple',
+      studentsCount: batch2Students,
+      tag: 'May/June Intake',
+    },
+  ];
 
   return (
     <div>
       <Header
         title="Batches"
-        subtitle={`${departments.length} departments • Respective cohort batches`}
+        subtitle="Academic Cohort Batches • Joined Students & Courses to Study"
         showBack
         onBack={onBack}
         rightAction={
-          <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm" title="Add Department">
+          <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm" title="Add Batch">
             <i className="fas fa-plus" />
           </button>
         }
       />
       <div className="p-4 space-y-3.5">
         {showForm && (
-          <div className="card border-2 border-teal-200 space-y-2">
-            <h3 className="text-sm font-bold text-gray-800 mb-2">Add Department & Batches</h3>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Department Name *" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-            <input value={subjects} onChange={(e) => setSubjects(e.target.value)} placeholder="Subjects (comma separated)" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
-            
-            <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Respective Cohort Batches:</span>
-              <div className="flex gap-2">
-                <span className="badge bg-teal-50 text-teal-700 border border-teal-200 font-semibold py-0.5 px-2">Batch 1 (Dec)</span>
-                <span className="badge bg-purple-50 text-purple-700 border border-purple-200 font-semibold py-0.5 px-2">Batch 2 (May/June)</span>
-              </div>
+          <div className="card border-2 border-teal-200 space-y-2.5 animate-slide-up">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">Create New Academic Batch</h3>
+              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-xs">
+                <i className="fas fa-times" />
+              </button>
             </div>
-
-            <div className="mb-2">
-              <label className="text-[10px] text-gray-500">Icon</label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {icons.map((ic) => (
-                  <button key={ic} onClick={() => setIcon(ic)} className={`w-8 h-8 rounded-lg flex items-center justify-center ${icon === ic ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                    <i className={`fas ${ic} text-xs`} />
-                  </button>
-                ))}
-              </div>
-            </div>
-            <button onClick={handleAdd} className="btn-primary w-full">Add Department & Batches</button>
+            <input
+              value={batchName}
+              onChange={(e) => setBatchName(e.target.value)}
+              placeholder="Batch Name * (e.g., Batch 3 (Sept))"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+            />
+            <input
+              value={batchSession}
+              onChange={(e) => setBatchSession(e.target.value)}
+              placeholder="Session Timeline (e.g., Sept – Feb • Autumn Intake)"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+            />
+            <button onClick={handleAddBatch} className="btn-primary w-full py-2">
+              Add Batch Cohort
+            </button>
           </div>
         )}
 
-        {departments.length === 0 ? (
-          <EmptyState icon="fa-building" title="No Departments" message="Add your first department" />
-        ) : (
-          departments.map((dept) => {
-            const batch1Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 1 (Dec)').length;
-            const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
+        {/* Batches Overview Cards */}
+        <div className="grid grid-cols-1 gap-3">
+          {defaultBatches.map((b) => {
+            const enrolled = (users || []).filter(u => u.role === 'student' && (u.batch === b.name || (b.name.includes('1') ? (u.batch?.includes('1') || !u.batch) : u.batch?.includes('2'))));
 
             return (
-              <div key={dept.id} className="card space-y-3 border border-gray-100 shadow-xs">
-                <div className="flex items-start gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
-                    <i className={`fas ${dept.icon} text-teal-600`} />
+              <div
+                key={b.id}
+                className="card space-y-3 border border-gray-200 hover:border-teal-400/80 transition shadow-xs group"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                      b.color === 'teal' ? 'bg-teal-50 text-teal-600 border border-teal-200' : 'bg-purple-50 text-purple-600 border border-purple-200'
+                    }`}>
+                      <i className="fas fa-layer-group text-lg" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-extrabold text-gray-900">{b.name}</h3>
+                        <span className={`badge text-[9px] font-bold py-0.5 px-2 rounded-full ${
+                          b.color === 'teal' ? 'bg-teal-600 text-white' : 'bg-purple-600 text-white'
+                        }`}>
+                          {b.badge}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">{b.session}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-800">{dept.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">{dept.description}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {dept.subjects.map((s) => (
-                        <span key={s} className="badge badge-teal text-[9px]">{s}</span>
+                </div>
+
+                {/* Batch Metrics & Student Avatars */}
+                <div className="p-2.5 bg-slate-50 rounded-xl flex items-center justify-between border border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="flex -space-x-1.5 overflow-hidden">
+                      {enrolled.slice(0, 3).map((stu, sIdx) => (
+                        <div key={stu.id || sIdx} className="inline-block w-6 h-6 rounded-full ring-2 ring-white bg-teal-100 text-teal-800 text-[10px] font-bold flex items-center justify-center">
+                          {stu.avatar || stu.name.charAt(0)}
+                        </div>
                       ))}
                     </div>
+                    <span className="text-xs font-bold text-gray-800">
+                      {b.studentsCount} Students Joined
+                    </span>
                   </div>
-                  <button onClick={() => setConfirmDelete(dept.id)} className="text-red-400 hover:text-red-600 text-xs p-1" title="Delete Department">
-                    <i className="fas fa-trash" />
-                  </button>
+
+                  <span className="text-[10px] font-semibold text-gray-500">
+                    7 Core Subjects
+                  </span>
                 </div>
 
-                {/* Respective Batches Grouping */}
-                <div className="pt-2 border-t border-gray-100 space-y-2">
-                  <p className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
-                    <i className="fas fa-layer-group text-teal-600 text-xs" />
-                    <span>Respective Batches & Enrolled Students:</span>
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div 
-                      onClick={() => setSelectedBatchModal({ batch: 'Batch 1 (Dec)', deptName: dept.name, subjects: dept.subjects })}
-                      className="p-2.5 rounded-xl bg-teal-50/70 border border-teal-200 cursor-pointer hover:bg-teal-100/70 transition shadow-2xs group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-teal-900 group-hover:underline">Batch 1 (Dec)</span>
-                        <span className="badge bg-teal-600 text-white text-[9px] py-0.5 px-1.5 flex items-center gap-1">
-                          <span>Winter</span>
-                          <i className="fas fa-chevron-right text-[8px]" />
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Session: Dec – April • Click to Inspect</p>
-                      <p className="text-[11px] font-bold text-teal-700 mt-1 flex items-center justify-between">
-                        <span>{batch1Students} Enrolled Students</span>
-                        <span className="text-[10px] font-semibold text-teal-600 underline">View Batch Details</span>
-                      </p>
-                    </div>
-
-                    <div 
-                      onClick={() => setSelectedBatchModal({ batch: 'Batch 2 (May/June)', deptName: dept.name, subjects: dept.subjects })}
-                      className="p-2.5 rounded-xl bg-purple-50/70 border border-purple-200 cursor-pointer hover:bg-purple-100/70 transition shadow-2xs group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-purple-900 group-hover:underline">Batch 2 (May/June)</span>
-                        <span className="badge bg-purple-600 text-white text-[9px] py-0.5 px-1.5 flex items-center gap-1">
-                          <span>Summer</span>
-                          <i className="fas fa-chevron-right text-[8px]" />
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Session: May – October • Click to Inspect</p>
-                      <p className="text-[11px] font-bold text-purple-700 mt-1 flex items-center justify-between">
-                        <span>{batch2Students} Enrolled Students</span>
-                        <span className="text-[10px] font-semibold text-purple-600 underline">View Batch Details</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                {/* Action button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedBatchModal({ batch: b.name, deptName: `${b.name} Cohort`, subjects: CORE_CURRICULUM_SUBJECTS.map(s => s.name) })}
+                  className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs ${
+                    b.color === 'teal'
+                      ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                      : 'bg-purple-600 hover:bg-purple-700 text-white'
+                  }`}
+                >
+                  <i className="fas fa-users text-xs" />
+                  <span>Inspect Joined Students & Courses</span>
+                </button>
               </div>
             );
-          })
-        )}
+          })}
+
+          {/* Any Custom Batches */}
+          {customBatches.map((cb) => {
+            const count = (users || []).filter(u => u.role === 'student' && u.batch === cb.name).length;
+            return (
+              <div key={cb.id} className="card space-y-3 border border-gray-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <i className="fas fa-layer-group text-sm" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900">{cb.name}</h3>
+                      <p className="text-xs text-gray-500">{cb.session}</p>
+                    </div>
+                  </div>
+                  <span className="badge badge-teal text-[9px] font-bold">{count} Students</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBatchModal({ batch: cb.name, deptName: `${cb.name} Cohort`, subjects: CORE_CURRICULUM_SUBJECTS.map(s => s.name) })}
+                  className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                >
+                  <i className="fas fa-users text-xs" />
+                  <span>Inspect Joined Students & Courses</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Batch Joined Students & Courses to Study Modal */}
@@ -967,18 +1015,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
-            <h3 className="text-lg font-bold text-gray-800 text-center mb-2">Delete Department?</h3>
-            <p className="text-sm text-gray-500 text-center mb-4">This cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => { deleteDepartment(confirmDelete); setConfirmDelete(null); }} className="flex-1 py-3 bg-red-500 text-white rounded-xl font-semibold text-sm">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
@@ -1025,7 +1062,7 @@ export function AdminCourses({ onBack, onNavigate }: { onBack: () => void; onNav
           <i className="fas fa-layer-group text-teal-600 text-[11px]" />
           <span>Curriculum Hierarchy Subjects:</span>
         </p>
-        <div className="flex gap-1.5 overflow-x-auto pb-1.5 no-scrollbar">
+        <div className="flex flex-wrap gap-1.5 pb-1">
           {CORE_CURRICULUM_SUBJECTS.map((sub) => {
             const isActive = selectedSubjectId === sub.id;
             return (

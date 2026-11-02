@@ -207,7 +207,7 @@ function AppContent() {
         <SecurityShield>
           {ViewingAsBanner}
           <div className="screen-content">{renderScreen()}</div>
-          {user?.role === 'student' && <StudentAIChatbot />}
+          {user?.role === 'student' && currentScreen !== 'community' && currentScreen !== 'announcements' && currentScreen !== 'active-quiz' && currentScreen !== 'quiz-results' && <StudentAIChatbot />}
           {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
         </SecurityShield>
       </div>

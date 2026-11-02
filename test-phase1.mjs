@@ -17,11 +17,16 @@ console.log(`${colors.bold}${colors.blue}=======================================
 console.log(`${colors.bold}${colors.cyan}  MEDICAL LMS - PHASE 1 VERIFICATION TEST ${colors.reset}`);
 console.log(`${colors.bold}${colors.blue}====================================================${colors.reset}\n`);
 
-// 1. Read .env file
-const envPath = path.resolve(process.cwd(), '.env');
+// 1. Read .env file (root or backend)
+let envPath = path.resolve(process.cwd(), '.env');
 if (!fs.existsSync(envPath)) {
-  console.error(`${colors.red}❌ Error: .env file not found in root directory!${colors.reset}`);
-  process.exit(1);
+  const backendEnv = path.resolve(process.cwd(), 'backend', '.env');
+  if (fs.existsSync(backendEnv)) {
+    envPath = backendEnv;
+  } else {
+    console.error(`${colors.red}❌ Error: .env file not found in root or backend directory!${colors.reset}`);
+    process.exit(1);
+  }
 }
 
 const envContent = fs.readFileSync(envPath, 'utf8');

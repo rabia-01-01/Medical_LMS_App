@@ -6,6 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
+    "test": "node test-all.mjs",
+    "test:all": "node test-all.mjs",
     "test:phase1": "node test-phase1.mjs",
     "test:phase2": "node test-phase2.mjs",
     "test:phase3": "node test-phase3.mjs",
@@ -15,7 +17,8 @@
     "test:phase7": "node test-phase7.mjs",
     "test:phase8": "node test-phase8.mjs",
     "test:phase9": "node test-phase9.mjs",
-    "test:features": "node test-features.mjs"
+    "test:features": "node test-features.mjs",
+    "test:backend": "node test-backend.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

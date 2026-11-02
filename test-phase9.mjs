@@ -215,7 +215,11 @@ assert(
 // 8. Test Live Supabase Connectivity if .env exists
 console.log(`\n${colors.bold}[Step 8] Testing Cloud Backend Infrastructure:${colors.reset}`);
 try {
-  const envPath = path.resolve(process.cwd(), '.env');
+  let envPath = path.resolve(process.cwd(), '.env');
+  if (!fs.existsSync(envPath)) {
+    const backendEnv = path.resolve(process.cwd(), 'backend', '.env');
+    if (fs.existsSync(backendEnv)) envPath = backendEnv;
+  }
   if (fs.existsSync(envPath)) {
     const envContent = fs.readFileSync(envPath, 'utf8');
     const envVars = {};

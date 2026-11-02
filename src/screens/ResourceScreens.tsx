@@ -396,7 +396,7 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
         {activeTab === 'stream' && resolvedUrl ? (
           <div className="flex-1 w-full h-full relative overflow-hidden bg-gray-200">
             <iframe
-              src={resolvedUrl}
+              src={resolvedUrl.includes('#') ? resolvedUrl : `${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`}
               className="w-full h-full border-0 pointer-events-auto"
               title={resource.title}
             />
@@ -622,7 +622,7 @@ function PDFViewer({ onBack, resource }: { onBack: () => void; resource: any }) 
                   className="w-full h-full flex justify-center"
                 >
                   <iframe
-                    src={resolvedUrl}
+                    src={resolvedUrl.includes('#') ? resolvedUrl : `${resolvedUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                     className="w-full h-full border-0"
                     title={resource.title}
                   />

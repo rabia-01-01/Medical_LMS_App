@@ -519,18 +519,13 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
     return list;
   }, [cloudResources, localResources]);
 
-  // Show only general Resource documents to students (filter out topic-specific curriculum documents)
+  // Show resources uploaded by Admin and Faculty to students
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
   let filtered = allResources.filter((r: any) => {
-    // Exclude topic documents: students must see only Resource documents in the Resources tab
-    const isTopicDocument = Boolean(
-      r.topicId ||
-      r.topic_id ||
-      (r.description && typeof r.description === 'string' && r.description.startsWith('Study material for '))
-    );
-    if (isTopicDocument) return false;
+    // Only exclude materials explicitly marked as inline topic-only
+    if (r.topicMaterialOnly) return false;
 
-    return (r.status === 'published' || !r.status) && (!r.batch || r.batch === 'All' || r.batch === studentBatch);
+    return (r.status === 'published' || r.status === 'PUBLISHED' || !r.status) && (!r.batch || r.batch === 'All' || r.batch === studentBatch);
   });
   if (filter !== 'All') {
     const fLower = filter.toLowerCase();

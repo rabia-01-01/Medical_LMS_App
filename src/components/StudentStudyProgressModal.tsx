@@ -63,9 +63,9 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
   // Scan through live curriculum (and fallback)
   effectiveCurriculum.forEach((sub) => {
     sub.chapters?.forEach((chap, cIdx) => {
-      const isChapDone = isChapterCompleted(chap.id, student.id) || isChapterCompleted(chap.name, student.id);
+      const isChapDone = isChapterCompleted(chap.id, student.id);
       const chapTopics = chap.topics || [];
-      const doneInChap = chapTopics.filter(t => isTopicCompleted(t.id, student.id) || isTopicCompleted(t.name, student.id)).length;
+      const doneInChap = chapTopics.filter(t => isTopicCompleted(t.id, student.id)).length;
 
       if (isChapDone) {
         studiedChaptersList.push({
@@ -81,7 +81,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
       }
 
       chapTopics.forEach((top, tIdx) => {
-        const isDone = isTopicCompleted(top.id, student.id) || isTopicCompleted(top.name, student.id);
+        const isDone = isTopicCompleted(top.id, student.id);
         if (isDone) {
           studiedTopicsList.push({
             id: top.id,
@@ -98,71 +98,35 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
     });
   });
 
-  // Also include topics recorded with metadata in progress
+  // Reconcile with completedTopicDetails if any verified topic was marked
   (progress?.completedTopicDetails || []).forEach((d) => {
-    if (!studiedTopicsList.some(st => st.id === d.id || (st.name && st.name.toLowerCase() === (d.name || '').toLowerCase()))) {
-      // Resolve clean name if d.name is empty or is a raw UUID
-      let resolvedName = d.name;
-      if (!resolvedName || (resolvedName.includes('-') && resolvedName.length > 20)) {
-        for (const s of effectiveCurriculum) {
-          for (const c of s.chapters || []) {
-            const t = c.topics?.find(top => top.id === d.id);
-            if (t) {
-              resolvedName = t.name;
-              break;
-            }
-          }
-          if (resolvedName && !resolvedName.includes('-')) break;
+    if (!d.id) return;
+    // Strip dummy mock IDs or raw UUID strings
+    if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') return;
+    if (d.name && d.name.includes('-') && d.name.length > 25) return;
+    
+    // Check if already in studiedTopicsList
+    if (studiedTopicsList.some(st => st.id === d.id)) return;
+
+    // Try finding within effectiveCurriculum
+    for (const sub of effectiveCurriculum) {
+      for (let cIdx = 0; cIdx < (sub.chapters || []).length; cIdx++) {
+        const chap = sub.chapters[cIdx];
+        const tIdx = (chap.topics || []).findIndex(top => top.id === d.id || top.name.toLowerCase() === (d.name || '').toLowerCase());
+        if (tIdx !== -1) {
+          const top = chap.topics[tIdx];
+          studiedTopicsList.push({
+            id: top.id,
+            name: top.name,
+            subjectId: sub.id,
+            subjectName: sub.name,
+            subjectCode: sub.code,
+            chapterName: chap.name,
+            chapterNumber: cIdx + 1,
+            topicNumber: tIdx + 1,
+          });
+          return;
         }
-      }
-
-      studiedTopicsList.push({
-        id: d.id,
-        name: resolvedName || 'Core Topic',
-        subjectId: d.subjectId || 'subj-biology',
-        subjectName: d.subjectName || 'Biology',
-        subjectCode: 'BIO',
-        chapterName: d.chapterName || 'Human Physiology',
-        chapterNumber: 1,
-        topicNumber: studiedTopicsList.length + 1,
-      });
-    }
-  });
-
-  // If completedTopics has IDs that weren't matched yet, try to find in both effectiveCurriculum & DEFAULT_CURRICULUM
-  completedTopics.forEach((cId) => {
-    if (!studiedTopicsList.some(st => st.id === cId || st.name.toLowerCase() === cId.toLowerCase())) {
-      let foundTop: any = null;
-      let foundChap: any = null;
-      let foundSub: any = null;
-
-      const searchable = [...effectiveCurriculum, ...DEFAULT_CURRICULUM];
-      for (const s of searchable) {
-        for (const c of s.chapters || []) {
-          for (const t of c.topics || []) {
-            if (t.id === cId || t.name === cId) {
-              foundTop = t;
-              foundChap = c;
-              foundSub = s;
-              break;
-            }
-          }
-          if (foundTop) break;
-        }
-        if (foundTop) break;
-      }
-
-      if (foundTop && !studiedTopicsList.some(st => st.id === foundTop.id || st.name.toLowerCase() === foundTop.name.toLowerCase())) {
-        studiedTopicsList.push({
-          id: foundTop.id,
-          name: foundTop.name,
-          subjectId: foundSub.id,
-          subjectName: foundSub.name,
-          subjectCode: foundSub.code || 'MED',
-          chapterName: foundChap.name,
-          chapterNumber: 1,
-          topicNumber: 1,
-        });
       }
     }
   });
@@ -288,7 +252,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                   <div
                     key={st.id || sIdx}
                     onClick={() => {
-                      if (st.subjectId && DEFAULT_CURRICULUM.some(s => s.id === st.subjectId)) {
+                      if (st.subjectId && effectiveCurriculum.some(s => s.id === st.subjectId)) {
                         setSelectedSubjectId(st.subjectId);
                       }
                     }}
@@ -353,7 +317,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                   <div
                     key={sc.id || scIdx}
                     onClick={() => {
-                      if (sc.subjectId && DEFAULT_CURRICULUM.some(s => s.id === sc.subjectId)) {
+                      if (sc.subjectId && effectiveCurriculum.some(s => s.id === sc.subjectId)) {
                         setSelectedSubjectId(sc.subjectId);
                       }
                     }}
@@ -455,7 +419,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                   </div>
 
                   {chapTopics.map((top, tIdx) => {
-                    const topDone = isTopicCompleted(top.id, student.id) || isTopicCompleted(top.name, student.id);
+                    const topDone = isTopicCompleted(top.id, student.id);
                     return (
                       <div
                         key={top.id}
@@ -467,7 +431,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                           <span className="text-[10px] text-gray-400 font-bold shrink-0">
                             {cIdx + 1}.{tIdx + 1}
                           </span>
-                          <span className="text-[11px] text-gray-800 font-medium truncate">
+                          <span className="text-[11px] text-gray-800 font-medium leading-snug">
                             {top.name}
                           </span>
                         </div>

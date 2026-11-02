@@ -180,7 +180,7 @@ function SortableTopicItem({
           {chapterIdx + 1}.{idx + 1}
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-gray-800 truncate">{topic.name}</p>
+          <p className="text-xs font-semibold text-gray-800 leading-snug">{topic.name}</p>
           {topic.description && (
             <p className="text-[10px] text-gray-500 line-clamp-1">{topic.description}</p>
           )}
@@ -1174,7 +1174,7 @@ export function CurriculumBrowser({
                               {idx + 1}.{tIdx + 1}
                             </span>
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-gray-700 truncate">{topic.name}</p>
+                              <p className="text-xs font-semibold text-gray-700 leading-snug">{topic.name}</p>
                               {topic.description && (
                                 <p className="text-[10px] text-gray-400 line-clamp-1">{topic.description}</p>
                               )}

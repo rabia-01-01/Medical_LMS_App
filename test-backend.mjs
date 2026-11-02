@@ -104,3 +104,4 @@ if (passedTests === totalTests) {
   console.log(`${colors.red}${colors.bold}❌ Some backend tests failed.${colors.reset}\n`);
   process.exit(1);
 }
+

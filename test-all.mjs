@@ -75,3 +75,4 @@ if (suitesFailed === 0) {
   console.log(`${colors.bold}${colors.red}❌ ${suitesFailed} test suite(s) failed. Check details above.${colors.reset}\n`);
   process.exit(1);
 }
+

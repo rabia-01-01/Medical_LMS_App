@@ -731,21 +731,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const raw = loadFromStorage('sim_student_progress', DEFAULT_STUDENT_PROGRESS);
     return (raw || []).map((p: StudentCurriculumProgress) => {
       const details = p.completedTopicDetails || [];
-      const cleanTopics: string[] = [];
-      (p.completedTopics || []).forEach((t: string) => {
-        // Strip legacy dummy mock IDs if not backed by explicit user detail
-        if (t === 'top-bio-101' || t === 'top-bio-102' || t === 'top-bio-201') {
-          if (!details.some(d => d.id === t)) return;
+      const validDetails: CompletedTopicDetail[] = [];
+      const validTopics: string[] = [];
+
+      details.forEach((d) => {
+        if (!d.id) return;
+        // Purge dummy mock IDs and raw UUID strings stored as names
+        if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') return;
+        const isRawUuid = d.name && d.name.includes('-') && d.name.length > 25;
+        if (isRawUuid) return;
+        if (!validTopics.includes(d.id)) {
+          validTopics.push(d.id);
+          validDetails.push({
+            ...d,
+            name: d.name || 'Core Topic',
+          });
         }
-        if (cleanTopics.includes(t)) return;
-        const matchingDetail = details.find(d => d.name && d.name.toLowerCase() === t.toLowerCase());
-        if (matchingDetail && cleanTopics.includes(matchingDetail.id)) return;
-        cleanTopics.push(t);
       });
+
+      // Also reconcile any completedTopics that match validDetails
+      (p.completedTopics || []).forEach((t: string) => {
+        if (t === 'top-bio-101' || t === 'top-bio-102' || t === 'top-bio-201') return;
+        if (t.includes('-') && t.length > 25 && !validDetails.some(d => d.id === t)) {
+          // Orphaned raw UUID with no detail entry - purge it
+          return;
+        }
+        const matchingDetail = validDetails.find(d => d.id === t || (d.name && d.name.toLowerCase() === t.toLowerCase()));
+        if (matchingDetail) {
+          if (!validTopics.includes(matchingDetail.id)) {
+            validTopics.push(matchingDetail.id);
+          }
+        }
+      });
+
       return {
         ...p,
-        completedTopics: cleanTopics,
-        completedTopicDetails: details,
+        completedTopics: validTopics,
+        completedTopicDetails: validDetails,
       };
     });
   });
@@ -1228,26 +1250,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setStudentProgressList(prev => {
       const existing = prev.find(p => p.studentId === sId);
       if (existing) {
-        const isCompleted = existing.completedTopics.includes(topicId) || (tName ? existing.completedTopics.includes(tName) : false);
+        const isCompleted = existing.completedTopics.includes(topicId) ||
+          (existing.completedTopicDetails || []).some(d => d.id === topicId || (tName && d.name && d.name.toLowerCase() === tName.toLowerCase()));
         isNowCompleted = !isCompleted;
 
         let nextTopics: string[];
         let nextDetails: CompletedTopicDetail[];
 
         if (isCompleted) {
-          nextTopics = existing.completedTopics.filter(id => id !== topicId && id !== tName);
-          nextDetails = (existing.completedTopicDetails || []).filter(d => d.id !== topicId && d.name !== tName);
+          nextTopics = existing.completedTopics.filter(id => id !== topicId && (!tName || id !== tName));
+          nextDetails = (existing.completedTopicDetails || []).filter(d => d.id !== topicId && (!tName || d.name?.toLowerCase() !== tName.toLowerCase()));
+          nextTopics = nextDetails.map(d => d.id);
         } else {
-          nextTopics = [...existing.completedTopics.filter(id => id !== topicId && id !== tName), topicId];
+          const cleanName = tName && (!tName.includes('-') || tName.length <= 25) ? tName : 'Core Topic';
           const detailEntry: CompletedTopicDetail = {
             id: topicId,
-            name: tName || topicId,
+            name: cleanName,
             chapterId: topicMeta?.chapterId,
             chapterName: topicMeta?.chapterName,
             subjectId: topicMeta?.subjectId,
             subjectName: topicMeta?.subjectName,
           };
-          nextDetails = [...(existing.completedTopicDetails || []).filter(d => d.id !== topicId && d.name !== tName), detailEntry];
+          nextDetails = [
+            ...(existing.completedTopicDetails || []).filter(d => d.id !== topicId && (!tName || d.name?.toLowerCase() !== tName.toLowerCase())),
+            detailEntry,
+          ];
+          nextTopics = nextDetails.map(d => d.id);
         }
 
         return prev.map(p => p.studentId === sId ? {
@@ -1258,10 +1286,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         } : p);
       } else {
         isNowCompleted = true;
-        const initialTopics = [topicId];
+        const cleanName = tName && (!tName.includes('-') || tName.length <= 25) ? tName : 'Core Topic';
         const initialDetails: CompletedTopicDetail[] = [{
           id: topicId,
-          name: tName || topicId,
+          name: cleanName,
           chapterId: topicMeta?.chapterId,
           chapterName: topicMeta?.chapterName,
           subjectId: topicMeta?.subjectId,
@@ -1272,7 +1300,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           studentName: studentName || 'Student',
           studentBatch: studentBatch || 'Batch 1 (Dec)',
           completedChapters: [],
-          completedTopics: initialTopics,
+          completedTopics: [topicId],
           completedTopicDetails: initialDetails,
           lastUpdated: new Date().toISOString(),
         };
@@ -1304,7 +1332,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const rec = studentProgressList.find(p => p.studentId === sId);
     if (!rec) return false;
     if (rec.completedTopics.includes(topicIdOrName)) return true;
-    if (rec.completedTopics.some(t => t.toLowerCase() === topicIdOrName.toLowerCase())) return true;
     if (rec.completedTopicDetails?.some(d => d.id === topicIdOrName || (d.name && d.name.toLowerCase() === topicIdOrName.toLowerCase()))) {
       return true;
     }

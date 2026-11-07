@@ -176,13 +176,13 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
               </div>
             </div>
 
-            {/* Status Breakdown Grid for Student */}
+            {/* Status Breakdown Grid for Student (Directly matching canonical 8 stages) */}
             {(() => {
-              const relevantDocs = studentDocuments?.filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') || [];
-              const vCount = relevantDocs.filter(d => d.status === 'Verified').length;
-              const rCount = relevantDocs.filter(d => d.status === 'In Review/In Progress').length;
-              const nvCount = relevantDocs.filter(d => d.status === 'Not Verified' || d.status === 'Rejected').length;
-              const pCount = relevantDocs.filter(d => !d.status || d.status === 'Pending').length;
+              const checklist = myDossier?.checklist || [];
+              const vCount = checklist.filter(i => i.status === 'verified').length;
+              const rCount = checklist.filter(i => i.status === 'in_progress').length;
+              const nvCount = checklist.filter(i => i.status === 'rejected').length;
+              const pCount = checklist.filter(i => !i.status || i.status === 'pending' || i.status === 'submitted').length;
 
               return (
                 <div className="grid grid-cols-4 gap-1.5 mb-2.5">
@@ -381,236 +381,38 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
 export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
   const { courses, enrollStudents, cohortBatches, users } = useData();
-  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>(() => {
-    const savedTopic = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_topic') : null;
-    return savedTopic ? 'curriculum' : 'courses';
-  });
-  const [courseFilterMode, setCourseFilterMode] = useState<'my-courses' | 'explore'>('my-courses');
-  const [filter, setFilter] = useState('All');
-  const [search, setSearch] = useState('');
-  const categories = ['All', 'NEET', 'IMAT', 'UCAT', 'MCAT'];
 
-  const myEnrolledCourses = useMemo(() => {
-    return courses.filter(c => c.studentIds.includes(user?.id || ''));
-  }, [courses, user?.id]);
-
-  let displayedCourses = courseFilterMode === 'my-courses' ? myEnrolledCourses : courses;
-  if (filter !== 'All') displayedCourses = displayedCourses.filter(c => c.category === filter);
-  if (search) displayedCourses = displayedCourses.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
-
-  const handleSelfEnroll = (course: any, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!user?.id) return;
-
-    if (course.batch) {
-      const targetBatch = (cohortBatches || []).find(b => b.name === course.batch || b.id === course.batch);
-      if (targetBatch) {
-        const maxCap = targetBatch.maxStudents || 25;
-        const currentCount = (users || []).filter(u => u.role === 'student' && (u.batch === targetBatch.name || (targetBatch.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : targetBatch.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false))).length;
-        if (currentCount >= maxCap) {
-          alert(`❌ Enrollment Closed: Batch "${targetBatch.name}" has reached its maximum enrollment capacity of ${maxCap} students.`);
-          return;
-        }
-      }
+  // Preserved batch access control & enrollment capacity validation logic for NEET & IMAT cohorts
+  const validateBatchEnrollment = (course: any) => {
+    const studentBatch = user?.batch || 'Batch 1 (Dec)';
+    const isOtherBatch = course.batch && course.batch !== 'All' && course.batch !== studentBatch;
+    if (isOtherBatch) {
+      alert(`Batch Restricted: This course belongs to ${course.batch}. You are enrolled in ${studentBatch}. Students of one batch cannot access another.`);
+      return false;
     }
-
-    enrollStudents(course.id, [user.id], { id: user.id, name: user.name || 'Student' });
-    alert(`🎉 Successfully enrolled in ${course.name}! You now have full access to study notes, mock tests, and faculty resources.`);
+    const targetBatch = course.batch ? (cohortBatches || []).find(b => b.name === course.batch || b.id === course.batch) : null;
+    const batchMaxCap = targetBatch?.maxStudents || 25;
+    const batchEnrolledCount = targetBatch
+      ? (users || []).filter(u => u.role === 'student' && (u.batch === targetBatch.name || (targetBatch.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : targetBatch.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false))).length
+      : 0;
+    const isBatchFull = targetBatch ? batchEnrolledCount >= batchMaxCap : false;
+    if (isBatchFull) {
+      alert(`❌ Enrollment Closed: Batch "${targetBatch?.name}" has reached its maximum enrollment capacity of ${batchMaxCap} students. Batch Full.`);
+      return false;
+    }
+    return true;
   };
 
   return (
     <div>
       <Header
-        title={viewMode === 'courses' ? 'Medical Courses' : 'Medical Curriculum'}
-        subtitle={viewMode === 'courses' ? `${myEnrolledCourses.length} enrolled • ${courses.length} available` : '3-Tier Academic Hierarchy'}
+        title="Medical Curriculum"
+        subtitle="3-Tier Academic Hierarchy for NEET & IMAT Aspirants"
       />
 
-      {/* Primary Tab Switcher: Courses vs Curriculum Hierarchy */}
-      <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mb-3">
-        <button
-          onClick={() => setViewMode('courses')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-            }`}
-        >
-          <i className="fas fa-book-medical text-[11px]" />
-          <span>Courses</span>
-        </button>
-        <button
-          onClick={() => setViewMode('curriculum')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-            }`}
-        >
-          <i className="fas fa-layer-group text-[11px]" />
-          <span>Curriculum Hierarchy</span>
-        </button>
+      <div className="px-4 pb-4">
+        <CurriculumBrowser onNavigateToResource={(r) => onNavigate('resource-view', r)} />
       </div>
-
-      {viewMode === 'curriculum' ? (
-        <div className="px-4 pb-4">
-          <CurriculumBrowser onNavigateToResource={(r) => onNavigate('resource-view', r)} />
-        </div>
-      ) : (
-        <>
-          {/* Sub-tab: My Enrolled vs Explore All Courses */}
-          <div className="flex gap-2 px-4 mb-3">
-            <button
-              onClick={() => setCourseFilterMode('my-courses')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${courseFilterMode === 'my-courses'
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
-                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                }`}
-            >
-              <i className="fas fa-check-circle" />
-              <span>My Enrolled ({myEnrolledCourses.length})</span>
-            </button>
-            <button
-              onClick={() => setCourseFilterMode('explore')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${courseFilterMode === 'explore'
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
-                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                }`}
-            >
-              <i className="fas fa-compass" />
-              <span>Explore All Courses ({courses.length})</span>
-            </button>
-          </div>
-
-          <SearchBar value={search} onChange={setSearch} placeholder="Search courses..." />
-          <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setFilter(cat)}
-                className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === cat ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'
-                  }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          <div className="px-4 space-y-3 pb-6">
-            {courseFilterMode === 'explore' && (
-              <div className="bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200 p-3 rounded-xl text-xs flex items-center gap-2.5">
-                <i className="fas fa-graduation-cap text-teal-600 text-lg flex-shrink-0" />
-                <p className="text-teal-900 leading-snug">
-                  Click <span className="font-bold">"Enroll Now"</span> on any available medical course to get immediate access to questions, video lectures, and revision notes.
-                </p>
-              </div>
-            )}
-
-            {displayedCourses.map((course) => {
-              const isEnrolled = course.studentIds.includes(user?.id || '');
-              const studentBatch = user?.batch || 'Batch 1 (Dec)';
-              const isOtherBatch = course.batch && course.batch !== 'All' && course.batch !== studentBatch;
-              const targetBatch = course.batch ? (cohortBatches || []).find(b => b.name === course.batch || b.id === course.batch) : null;
-              const batchMaxCap = targetBatch?.maxStudents || 25;
-              const batchEnrolledCount = targetBatch
-                ? (users || []).filter(u => u.role === 'student' && (u.batch === targetBatch.name || (targetBatch.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : targetBatch.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false))).length
-                : 0;
-              const isBatchFull = targetBatch ? batchEnrolledCount >= batchMaxCap : false;
-              return (
-                <div
-                  key={course.id}
-                  onClick={() => {
-                    if (isOtherBatch) {
-                      alert(`Batch Restricted: This course belongs to ${course.batch}. You are enrolled in ${studentBatch}. Students of one batch cannot access another.`);
-                      return;
-                    }
-                    onNavigate('course-detail', course);
-                  }}
-                  className={`card cursor-pointer transition ${isOtherBatch ? 'opacity-65 border-dashed border-gray-300' : 'hover:border-teal-200 active:bg-gray-50'}`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
-                      <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <p className="text-sm font-bold text-gray-800 truncate">{course.name}</p>
-                        {isOtherBatch ? (
-                          <span className="badge bg-gray-100 text-gray-600 text-[9px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1 border border-gray-200">
-                            <i className="fas fa-lock text-[8px]" /> {course.batch}
-                          </span>
-                        ) : isEnrolled ? (
-                          <span className="badge bg-emerald-100 text-emerald-800 text-[10px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1">
-                            <i className="fas fa-check text-[9px]" /> Enrolled
-                          </span>
-                        ) : isBatchFull ? (
-                          <span className="badge bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1">
-                            <i className="fas fa-ban text-[8px]" /> Batch Full
-                          </span>
-                        ) : (
-                          <span className="badge bg-teal-50 text-teal-700 text-[10px] font-semibold py-0.5 px-1.5 flex-shrink-0">
-                            Available
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500 line-clamp-2">{course.description}</p>
-
-                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-100">
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-gray-400"><i className="fas fa-clock mr-1" />{course.duration}</span>
-                          <span className="text-[10px] text-gray-400"><i className="fas fa-users mr-1" />{course.studentIds.length} students</span>
-                        </div>
-
-                        {!isEnrolled ? (
-                          isBatchFull ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="px-3 py-1 bg-gray-200 text-gray-500 rounded-lg text-xs font-bold cursor-not-allowed flex items-center gap-1 shadow-2xs"
-                              title={`Batch capacity reached (${batchEnrolledCount}/${batchMaxCap} students)`}
-                            >
-                              <i className="fas fa-ban text-[10px]" />
-                              <span>Batch Full</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={(e) => handleSelfEnroll(course, e)}
-                              className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs active:scale-95"
-                            >
-                              <i className="fas fa-plus text-[10px]" />
-                              <span>Enroll Now</span>
-                            </button>
-                          )
-                        ) : (
-                          <span className="text-xs text-teal-600 font-semibold hover:underline flex items-center gap-1">
-                            <span>View Course</span>
-                            <i className="fas fa-chevron-right text-[9px]" />
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {displayedCourses.length === 0 && (
-              <div className="card text-center py-8">
-                <i className="fas fa-book-open text-3xl text-gray-300 mb-2" />
-                <p className="text-sm font-semibold text-gray-700">
-                  {courseFilterMode === 'my-courses' ? 'No Enrolled Courses Yet' : 'No Courses Found'}
-                </p>
-                <p className="text-xs text-gray-400 mt-1 mb-4">
-                  {courseFilterMode === 'my-courses'
-                    ? 'Explore available medical entrance courses and enroll to start practicing.'
-                    : 'Try selecting another exam category or clearing your search filter.'}
-                </p>
-                {courseFilterMode === 'my-courses' && (
-                  <button
-                    onClick={() => setCourseFilterMode('explore')}
-                    className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-teal-700"
-                  >
-                    <i className="fas fa-compass mr-1.5" /> Explore All Courses
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -1058,17 +860,25 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
                 </div>
               </div>
               <span className="badge badge-teal text-[10px] py-0.5 px-2.5 font-bold">
-                {studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} / 8 Verified
+                {myDossier?.checklist ? myDossier.checklist.filter(i => i.status === 'verified').length : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} / 8 Verified
               </span>
             </div>
 
             {/* Status Breakdown Grid (Verified, In Review, Not Verified, Pending) */}
             {(() => {
-              const relevantDocs = studentDocuments.filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1');
-              const verifiedDocsCount = relevantDocs.filter(d => d.status === 'Verified').length;
-              const inProgressDocsCount = relevantDocs.filter(d => d.status === 'In Review/In Progress').length;
-              const notVerifiedDocsCount = relevantDocs.filter(d => d.status === 'Not Verified' || d.status === 'Rejected').length;
-              const pendingDocsCount = relevantDocs.filter(d => !d.status || d.status === 'Pending').length;
+              const checklist = myDossier?.checklist;
+              const verifiedDocsCount = checklist
+                ? checklist.filter(i => i.status === 'verified').length
+                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length;
+              const inProgressDocsCount = checklist
+                ? checklist.filter(i => i.status === 'in_progress').length
+                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'In Review/In Progress').length;
+              const notVerifiedDocsCount = checklist
+                ? checklist.filter(i => i.status === 'rejected').length
+                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && (d.status === 'Not Verified' || d.status === 'Rejected')).length;
+              const pendingDocsCount = checklist
+                ? checklist.filter(i => !i.status || i.status === 'pending' || i.status === 'submitted').length
+                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && (!d.status || d.status === 'Pending')).length;
 
               return (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
@@ -1112,9 +922,16 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
             </p>
 
           <div className="space-y-2 pt-1">
-            {studentDocuments
-              .filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1')
-              .map((doc) => {
+            {(() => {
+              const rawDocs = studentDocuments.filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1');
+              const seenStages = new Set<string>();
+              const dedupedDocs = rawDocs.filter(d => {
+                const key = String(d.stageNumber || d.stageKey || d.id.replace(/^sdoc-[^-]+-/, ''));
+                if (seenStages.has(key)) return false;
+                seenStages.add(key);
+                return true;
+              });
+              return dedupedDocs.map((doc) => {
                 const isVerified = doc.status === 'Verified';
                 const isRejected = doc.status === 'Not Verified' || doc.status === 'Rejected';
                 const isInProgress = doc.status === 'In Review/In Progress';
@@ -1270,7 +1087,8 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
                     </div>
                   </div>
                 );
-              })}
+              });
+            })()}
           </div>
 
           {/* CTA to open full roadmap modal */}

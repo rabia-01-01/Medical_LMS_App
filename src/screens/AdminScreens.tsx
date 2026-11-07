@@ -43,8 +43,8 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
             <h1 className="text-white text-lg font-bold">{user?.name || 'Administrator'}</h1>
           </div>
           <div className="flex items-center gap-2 relative z-10">
-            <button 
-              onClick={() => refreshMetrics()} 
+            <button
+              onClick={() => refreshMetrics()}
               disabled={metricsLoading}
               className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xs transition"
               title="Refresh System Metrics"
@@ -125,7 +125,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center mb-1 text-blue-600"><i className="fas fa-paper-plane text-xs" /></div>
             <span className="text-[10px] font-medium text-gray-700">Notify</span>
           </button>
-          <button 
+          <button
             onClick={() => {
               const formattedLogs = auditLogs.map(l => ({
                 id: l.id,
@@ -137,7 +137,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
                 severity: 'info' as const
               }));
               adminService.exportAuditLogs(formattedLogs);
-            }} 
+            }}
             className="card flex flex-col items-center py-2.5 active:bg-gray-50 mb-0 shadow-xs"
             title="Download audit trail as JSON"
           >
@@ -146,7 +146,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           </button>
         </div>
 
-        
+
         {/* AI Chapter MCQ Generator CTA */}
         <div
           onClick={() => setShowAIMCQModal(true)}
@@ -205,11 +205,10 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
               <button
                 key={b}
                 onClick={() => setSelectedBatchFilter(b)}
-                className={`flex-1 py-1 px-2.5 rounded-lg text-[10px] font-bold transition whitespace-nowrap ${
-                  selectedBatchFilter === b
+                className={`flex-1 py-1 px-2.5 rounded-lg text-[10px] font-bold transition whitespace-nowrap ${selectedBatchFilter === b
                     ? 'bg-white text-teal-700 shadow-2xs'
                     : 'text-gray-500 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 {b === 'All' ? 'All Batches' : b}
               </button>
@@ -316,7 +315,7 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.email || !formData.password) return;
-    
+
     if (isSupabaseConfigured()) {
       try {
         await signUpUser({
@@ -327,7 +326,7 @@ export function AddUser({ onBack }: { onBack: () => void }) {
           role: formData.role,
           department: formData.department.trim(),
           targetExam: formData.targetExam,
-      batch: formData.batch,
+          batch: formData.batch,
         });
       } catch (err) {
         console.warn('[AddUser] Supabase register error:', err);
@@ -492,12 +491,11 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
         {/* Filter Pills */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
           {roles.map((r) => (
-            <button 
-              key={r} 
-              onClick={() => setFilter(r)} 
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
-                filter === r ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+            <button
+              key={r}
+              onClick={() => setFilter(r)}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === r ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               {r}
             </button>
@@ -510,9 +508,8 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
         ) : (
           filtered.map((u) => (
             <div key={u.id} className="card flex items-center gap-3 p-3 mb-0 hover:border-teal-200 border border-gray-100 transition">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${
-                u.role === 'student' ? 'bg-teal-100 text-teal-800' : u.role === 'faculty' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${u.role === 'student' ? 'bg-teal-100 text-teal-800' : u.role === 'faculty' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                }`}>
                 {u.avatar || '👤'}
               </div>
               <div className="flex-1 min-w-0">
@@ -527,9 +524,8 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                 </div>
                 <p className="text-[10px] text-gray-400 truncate">{u.email}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`badge text-[9px] py-0 px-1.5 ${
-                    u.role === 'student' ? 'badge-teal' : u.role === 'faculty' ? 'badge-navy' : 'badge-green'
-                  }`}>
+                  <span className={`badge text-[9px] py-0 px-1.5 ${u.role === 'student' ? 'badge-teal' : u.role === 'faculty' ? 'badge-navy' : 'badge-green'
+                    }`}>
                     {u.role}
                   </span>
                   <span className={`text-[10px] font-semibold flex items-center gap-1 ${u.status === 'active' ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -555,16 +551,15 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                   </button>
                 )}
                 <div className="flex items-center gap-1">
-                  <button 
-                    onClick={() => toggleStatus(u.id)} 
-                    className={`text-[10px] px-2 py-0.5 rounded font-medium transition ${
-                      u.status === 'active' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                    }`}
+                  <button
+                    onClick={() => toggleStatus(u.id)}
+                    className={`text-[10px] px-2 py-0.5 rounded font-medium transition ${u.status === 'active' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      }`}
                   >
                     {u.status === 'active' ? 'Suspend' : 'Activate'}
                   </button>
-                  <button 
-                    onClick={() => setConfirmDelete(u.id)} 
+                  <button
+                    onClick={() => setConfirmDelete(u.id)}
                     className="text-[10px] p-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition"
                     title="Delete user"
                   >
@@ -596,9 +591,8 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                 <button
                   key={st}
                   onClick={() => setDocFilter(st)}
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition ${
-                    docFilter === st ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
-                  }`}
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition ${docFilter === st ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
+                    }`}
                 >
                   {st}
                 </button>
@@ -612,9 +606,8 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                   <div key={doc.id} className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 space-y-1.5 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-gray-800 truncate">{doc.title}</span>
-                      <span className={`badge text-[8px] py-0 px-1.5 ${
-                        doc.status === 'Verified' ? 'badge-green' : doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'badge-red'
-                      }`}>
+                      <span className={`badge text-[8px] py-0 px-1.5 ${doc.status === 'Verified' ? 'badge-green' : doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'badge-red'
+                        }`}>
                         {doc.status}
                       </span>
                     </div>
@@ -659,7 +652,7 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
       )}
 
       {/* Delete Confirmation */}
-      
+
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -688,6 +681,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [batchName, setBatchName] = useState('');
   const [batchSession, setBatchSession] = useState('');
+  const [batchTargetCourse, setBatchTargetCourse] = useState('');
   const [batchMaxStudents, setBatchMaxStudents] = useState<number | string>(25);
 
   const handleAddBatch = () => {
@@ -698,9 +692,11 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
       session: batchSession.trim() || 'Custom Academic Session',
       season: 'Academic Cohort',
       maxStudents: maxVal > 0 ? maxVal : 25,
+      targetCourse: batchTargetCourse.trim() || 'NEET & IMAT Aspirants',
     });
     setBatchName('');
     setBatchSession('');
+    setBatchTargetCourse('');
     setBatchMaxStudents(25);
     setShowForm(false);
   };
@@ -763,6 +759,12 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
               placeholder="Session Timeline (e.g., Sept – Feb • Autumn Intake)"
               className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
             />
+            <input
+              value={batchTargetCourse}
+              onChange={(e) => setBatchTargetCourse(e.target.value)}
+              placeholder="Target User / Target Course * (e.g., NEET-UG & IMAT Aspirants)"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+            />
             <div>
               <label className="text-[11px] font-bold text-gray-700 block mb-1">
                 Batch Enrollment Capacity (Max Students)
@@ -800,18 +802,19 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                      color === 'teal' ? 'bg-teal-50 text-teal-600 border border-teal-200' : color === 'purple' ? 'bg-purple-50 text-purple-600 border border-purple-200' : 'bg-blue-50 text-blue-600 border border-blue-200'
-                    }`}>
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${color === 'teal' ? 'bg-teal-50 text-teal-600 border border-teal-200' : color === 'purple' ? 'bg-purple-50 text-purple-600 border border-purple-200' : 'bg-blue-50 text-blue-600 border border-blue-200'
+                      }`}>
                       <i className="fas fa-layer-group text-lg" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-sm font-extrabold text-gray-900">{b.name}</h3>
-                        <span className={`badge text-[9px] font-bold py-0.5 px-2 rounded-full ${
-                          color === 'teal' ? 'bg-teal-600 text-white' : color === 'purple' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
-                        }`}>
+                        <span className={`badge text-[9px] font-bold py-0.5 px-2 rounded-full ${color === 'teal' ? 'bg-teal-600 text-white' : color === 'purple' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
+                          }`}>
                           {badge}
+                        </span>
+                        <span className="badge bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-semibold py-0.5 px-2 flex items-center gap-1">
+                          <i className="fas fa-bullseye text-[9px]" /> Target: {b.targetCourse || 'NEET & IMAT Aspirants'}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">{b.session}</p>
@@ -868,13 +871,12 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   onClick={() => setSelectedBatchModal({ batch: b.name, deptName: `${b.name} Cohort`, subjects: CORE_CURRICULUM_SUBJECTS.map(s => s.name) })}
-                  className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs ${
-                    color === 'teal'
+                  className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs ${color === 'teal'
                       ? 'bg-teal-600 hover:bg-teal-700 text-white'
                       : color === 'purple'
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }`}
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
                 >
                   <i className="fas fa-users text-xs" />
                   <span>Inspect Joined Students & Courses</span>
@@ -902,7 +904,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                   <h3 className="text-base font-bold mt-1 text-white">Batch Cohort Overview</h3>
                   <p className="text-xs text-teal-100 mt-0.5">Joined students & curriculum courses to study</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedBatchModal(null)}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition"
                 >
@@ -915,9 +917,8 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   onClick={() => setBatchTab('students')}
-                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                    batchTab === 'students' ? 'bg-white text-teal-800 shadow-xs font-bold' : 'text-teal-100 hover:text-white'
-                  }`}
+                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${batchTab === 'students' ? 'bg-white text-teal-800 shadow-xs font-bold' : 'text-teal-100 hover:text-white'
+                    }`}
                 >
                   <i className="fas fa-user-graduate text-[11px]" />
                   <span>Joined Students ({users.filter(u => u.role === 'student' && (u.batch === selectedBatchModal.batch || (selectedBatchModal.batch.includes('1') ? (u.batch?.includes('1') || !u.batch) : u.batch?.includes('2')))).length})</span>
@@ -925,9 +926,8 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   onClick={() => setBatchTab('courses')}
-                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                    batchTab === 'courses' ? 'bg-white text-teal-800 shadow-xs font-bold' : 'text-teal-100 hover:text-white'
-                  }`}
+                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${batchTab === 'courses' ? 'bg-white text-teal-800 shadow-xs font-bold' : 'text-teal-100 hover:text-white'
+                    }`}
                 >
                   <i className="fas fa-book text-[11px]" />
                   <span>Courses to Study</span>
@@ -1059,16 +1059,16 @@ export function AdminCourses({ onBack, onNavigate }: { onBack: () => void; onNav
     setSelectedSubjectId(id);
     try {
       sessionStorage.setItem('lms_curriculum_active_subject', id);
-    } catch {}
+    } catch { }
   };
 
   return (
     <div>
-      <Header 
-        title="Academic Curriculum" 
-        subtitle="7 Core Subjects • Academic Hierarchy" 
-        showBack 
-        onBack={onBack} 
+      <Header
+        title="Academic Curriculum"
+        subtitle="7 Core Subjects • Academic Hierarchy"
+        showBack
+        onBack={onBack}
       />
 
       {/* 7 Bold Subjects Selector */}
@@ -1085,11 +1085,10 @@ export function AdminCourses({ onBack, onNavigate }: { onBack: () => void; onNav
                 key={sub.id}
                 type="button"
                 onClick={() => handleSelectSubject(sub.id)}
-                className={`px-3 py-2 rounded-xl text-xs transition flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-2xs ${
-                  isActive
+                className={`px-3 py-2 rounded-xl text-xs transition flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-2xs ${isActive
                     ? 'bg-teal-600 text-white shadow-xs ring-2 ring-teal-300 font-bold'
                     : 'bg-white border border-gray-200 text-gray-800 hover:bg-teal-50 hover:text-teal-700 font-bold'
-                }`}
+                  }`}
               >
                 <i className={`fas ${sub.icon} text-xs`} />
                 <span className="font-bold">{sub.name}</span>
@@ -1101,12 +1100,12 @@ export function AdminCourses({ onBack, onNavigate }: { onBack: () => void; onNav
 
       {/* Academic Curriculum Hierarchy for the selected subject */}
       <div className="p-4">
-        <CurriculumBrowser 
+        <CurriculumBrowser
           key={selectedSubjectId}
           initialSubjectId={selectedSubjectId}
           hideSubjectTabs={true}
-          canManage={true} 
-          onNavigateToResource={(r) => onNavigate ? onNavigate('resource-view', r) : undefined} 
+          canManage={true}
+          onNavigateToResource={(r) => onNavigate ? onNavigate('resource-view', r) : undefined}
         />
       </div>
     </div>
@@ -1145,8 +1144,8 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
 
   if (search.trim()) {
     const q = search.toLowerCase();
-    filtered = filtered.filter(r => 
-      r.title.toLowerCase().includes(q) || 
+    filtered = filtered.filter(r =>
+      r.title.toLowerCase().includes(q) ||
       (r.subject && r.subject.toLowerCase().includes(q)) ||
       (r.uploaderName && r.uploaderName.toLowerCase().includes(q))
     );
@@ -1180,10 +1179,10 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
 
   return (
     <div>
-      <Header 
-        title="Resource Governance" 
-        subtitle={`${allResources.length} total resources`} 
-        showBack 
+      <Header
+        title="Resource Governance"
+        subtitle={`${allResources.length} total resources`}
+        showBack
         onBack={onBack}
         rightAction={
           cloudLoading ? (
@@ -1235,9 +1234,8 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
-                filter === f ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === f ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               {f === 'Cloud' && <i className="fas fa-cloud mr-1 text-[10px]" />}
               {f}
@@ -1252,19 +1250,18 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
           <div className="space-y-2">
             {filtered.map((r) => (
               <div key={r.id} className="card p-3 mb-0 flex items-center gap-3 border border-gray-100 hover:border-teal-300 transition">
-                <div 
+                <div
                   onClick={() => onNavigate && onNavigate('resource-view', r)}
                   className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-teal-50 transition"
                 >
-                  <i className={`fas ${
-                    r.type === 'Video' ? 'fa-play text-blue-500' :
-                    r.type === 'PDF' ? 'fa-file-pdf text-red-500' :
-                    r.type === 'Notes' ? 'fa-sticky-note text-yellow-500' : 'fa-file-alt text-teal-600'
-                  } text-base`} />
+                  <i className={`fas ${r.type === 'Video' ? 'fa-play text-blue-500' :
+                      r.type === 'PDF' ? 'fa-file-pdf text-red-500' :
+                        r.type === 'Notes' ? 'fa-sticky-note text-yellow-500' : 'fa-file-alt text-teal-600'
+                    } text-base`} />
                 </div>
 
-                <div 
-                  onClick={() => onNavigate && onNavigate('resource-view', r)} 
+                <div
+                  onClick={() => onNavigate && onNavigate('resource-view', r)}
                   className="flex-1 min-w-0 cursor-pointer"
                 >
                   <p className="text-xs font-bold text-gray-800 truncate hover:text-teal-600 transition">{r.title}</p>
@@ -1288,11 +1285,10 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
                   </button>
                   <button
                     onClick={() => handleTogglePublish(r.id, r.status)}
-                    className={`px-1.5 py-1 rounded-lg text-[10px] font-semibold transition ${
-                      r.status === 'published'
+                    className={`px-1.5 py-1 rounded-lg text-[10px] font-semibold transition ${r.status === 'published'
                         ? 'bg-amber-50 hover:bg-amber-100 text-amber-700'
                         : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
-                    }`}
+                      }`}
                     title={r.status === 'published' ? 'Move to Draft' : 'Approve & Publish'}
                   >
                     <i className={`fas ${r.status === 'published' ? 'fa-eye-slash' : 'fa-check'} text-[9px]`} />
@@ -1306,8 +1302,8 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
                       <i className="fas fa-eye text-[10px]" />
                     </button>
                   )}
-                  <button 
-                    onClick={() => setConfirmDelete(r.id)} 
+                  <button
+                    onClick={() => setConfirmDelete(r.id)}
                     className="w-7 h-7 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center text-xs transition"
                     title="Delete resource"
                   >
@@ -1329,8 +1325,8 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
             </p>
             <div className="flex gap-2">
               <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1 py-2 text-xs">Cancel</button>
-              <button 
-                onClick={() => { if (confirmDelete) handleDelete(confirmDelete); }} 
+              <button
+                onClick={() => { if (confirmDelete) handleDelete(confirmDelete); }}
                 className="flex-1 py-2 bg-red-600 text-white rounded-xl font-semibold text-xs hover:bg-red-700 transition"
               >
                 Delete
@@ -1636,18 +1632,16 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
                   return (
                     <div
                       key={rep.id}
-                      className={`p-2.5 rounded-xl text-xs space-y-1.5 transition ${
-                        isSubReply
+                      className={`p-2.5 rounded-xl text-xs space-y-1.5 transition ${isSubReply
                           ? 'bg-emerald-50/50 border border-emerald-200/60 ml-2.5'
                           : 'bg-slate-50 border border-slate-100'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold text-gray-800">{rep.authorName}</span>
-                          <span className={`badge text-[8px] py-0 px-1 ${
-                            rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
-                          }`}>
+                          <span className={`badge text-[8px] py-0 px-1 ${rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
+                            }`}>
                             {rep.authorRole}
                           </span>
                           {rep.replyToAuthor && (
@@ -1726,21 +1720,21 @@ export function AuditLogs({ onBack }: { onBack: () => void }) {
 
   return (
     <div>
-      <Header 
-        title="Audit Logs" 
-        subtitle={`${filtered.length} recorded events`} 
-        showBack 
+      <Header
+        title="Audit Logs"
+        subtitle={`${filtered.length} recorded events`}
+        showBack
         onBack={onBack}
         rightAction={
-          <button 
-            onClick={handleExport} 
+          <button
+            onClick={handleExport}
             className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
             title="Export audit log report as JSON"
           >
             <i className="fas fa-download text-[10px]" />
             <span>Export</span>
           </button>
-        } 
+        }
       />
 
       <div className="p-4 space-y-3">
@@ -1764,12 +1758,11 @@ export function AuditLogs({ onBack }: { onBack: () => void }) {
         {/* Filter Pills */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
           {categories.map((c) => (
-            <button 
-              key={c} 
-              onClick={() => setFilter(c)} 
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
-                filter === c ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+            <button
+              key={c}
+              onClick={() => setFilter(c)}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === c ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               {c}
             </button>
@@ -1821,7 +1814,7 @@ export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNa
     const legacyCount = quizzes.filter(q => !seen.has(q.id)).length;
     return assessments.length + legacyCount;
   }, [assessments, quizzes]);
-  
+
   const [activeModal, setActiveModal] = useState<'security' | 'notifications' | 'database' | 'storage' | null>(null);
   const [dbPingStatus, setDbPingStatus] = useState<string | null>(null);
   const [testNotifSent, setTestNotifSent] = useState(false);
@@ -2070,9 +2063,8 @@ export function AdminSettings({ onBack, onNavigate }: { onBack: () => void; onNa
                     </div>
                     <button
                       onClick={item.onToggle}
-                      className={`w-10 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
-                        item.enabled ? 'bg-teal-600' : 'bg-gray-300'
-                      }`}
+                      className={`w-10 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${item.enabled ? 'bg-teal-600' : 'bg-gray-300'
+                        }`}
                     >
                       <div className={`w-5 h-5 rounded-full bg-white transition-transform ${item.enabled ? 'translate-x-4' : 'translate-x-0'} shadow-xs`} />
                     </button>

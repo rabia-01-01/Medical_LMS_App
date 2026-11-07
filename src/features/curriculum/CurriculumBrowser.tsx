@@ -992,7 +992,7 @@ export function CurriculumBrowser({
             <span>Academic Hierarchy — {activeSubject?.name}</span>
           </h3>
           <p className="text-[11px] text-gray-400">
-            {chapters.length} Chapters • {chapters.reduce((sum, c) => sum + c.topics.length, 0)} Core Topics • Click chapter to open Study Guide
+            {chapters.length} Chapters • {chapters.reduce((sum, c) => sum + (c.topics || []).filter(t => !t.name?.toLowerCase().includes('molecular basis of inheritance') && t.id !== 'top-bio-204' && !t.name?.toLowerCase().includes('body fluids')).length, 0)} Core Topics • Click chapter to open Study Guide
           </p>
         </div>
 
@@ -1050,8 +1050,13 @@ export function CurriculumBrowser({
           </div>
         ) : (
           chapters.map((chapter, idx) => {
+            const visibleTopics = (chapter.topics || []).filter(t =>
+              !t.name?.toLowerCase().includes('molecular basis of inheritance') &&
+              t.id !== 'top-bio-204' &&
+              !t.name?.toLowerCase().includes('body fluids')
+            );
             const isExpanded = expandedChapterId === chapter.id;
-            const allTopicsDone = (chapter.topics || []).length > 0 && (chapter.topics || []).every(t =>
+            const allTopicsDone = visibleTopics.length > 0 && visibleTopics.every(t =>
               isTopicCompleted(t.id, activeUser?.id) || isTopicCompleted(t.name, activeUser?.id)
             );
             const isMastered = isChapterCompleted(chapter.id, activeUser?.id) ||
@@ -1174,12 +1179,12 @@ export function CurriculumBrowser({
                 {/* Topics Panel */}
                 {isExpanded && (
                   <div className="px-3 pb-3 pt-1 border-t border-gray-100 space-y-1.5 animate-slide-up bg-gray-50/40">
-                    {chapter.topics.length === 0 ? (
+                    {visibleTopics.length === 0 ? (
                       <p className="text-[11px] text-gray-400 py-2 italic text-center">
                         No topics added to this chapter yet.
                       </p>
                     ) : (
-                      chapter.topics.map((topic, tIdx) => {
+                      visibleTopics.map((topic, tIdx) => {
                         const isTopicDone = isTopicCompleted(topic.id, activeUser?.id);
                         const topicStudents = getTopicCompletions(topic.id);
                         return (

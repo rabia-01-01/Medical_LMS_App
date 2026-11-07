@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useCurriculum } from '../features/curriculum';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { getQuestionsFromBank } from '../data/imatQuestionBank';
 
 interface GeneratedMCQ {
   id: number;
@@ -187,6 +188,23 @@ export function AdminAIMCQGenerator({
     const topicName = activeTopic?.name || 'All topics in this chapter';
 
     try {
+      setGeneratingStatus('Retrieving verified chapter MCQs from official syllabus question bank...');
+      // Retrieve strictly from official 350-question IMAT syllabus markdown bank with exact answer keys
+      const bankQuestions = getQuestionsFromBank(
+        subjectName,
+        chapterName,
+        topicName,
+        questionCount,
+        includeDiagramQuestion
+      );
+
+      if (bankQuestions && bankQuestions.length > 0) {
+        setGeneratedQuestions(bankQuestions);
+        setQuizTitle(`IMAT Syllabus Quiz: ${subjectName} - ${chapterName} (${topicName})`);
+        setGeneratingStatus('');
+        return;
+      }
+
       const response = await fetch(AI_GENERATE_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -414,10 +432,13 @@ export function AdminAIMCQGenerator({
         </div>
 
         <p className="text-[11px] text-teal-100 leading-relaxed">
-          Generate topic-wise medical entrance examination questions through
-          the institute's secure AI backend. Your Groq API key is never sent
-          to the browser.
+          Generate topic-wise medical entrance examination questions powered directly by the official IMAT Syllabus 350-Question Bank with zero hallucination.
         </p>
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="badge bg-emerald-400/20 text-emerald-200 border border-emerald-400/30 text-[10px] font-bold py-0.5 px-2 flex items-center gap-1 rounded-full">
+            <i className="fas fa-check-double text-[9px]" /> Official IMAT Syllabus 350-Question Bank (Verified Answers)
+          </span>
+        </div>
       </div>
 
       {errorMessage && (

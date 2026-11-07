@@ -530,10 +530,28 @@ export interface CustomCurriculumData {
   deletedTopicIds?: string[];
 }
 
+export function isDeprecatedTopic(t: { id?: string; name?: string }): boolean {
+  if (!t) return false;
+  const n = (t.name || '').toLowerCase();
+  const id = (t.id || '').toLowerCase();
+  return (
+    n.includes('molecular basis of inheritance') ||
+    id === 'top-bio-204' ||
+    n.includes('body fluids') ||
+    id.includes('body-fluids')
+  );
+}
+
 export function getCustomCurriculumData(): CustomCurriculumData {
   try {
     const raw = localStorage.getItem(CUSTOM_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.topics) {
+        parsed.topics = parsed.topics.filter((t: Topic) => !isDeprecatedTopic(t));
+      }
+      return parsed;
+    }
   } catch (e) {
     // ignore
   }
@@ -542,6 +560,9 @@ export function getCustomCurriculumData(): CustomCurriculumData {
 
 export function saveCustomCurriculumData(data: CustomCurriculumData): void {
   try {
+    if (data.topics) {
+      data.topics = data.topics.filter((t: Topic) => !isDeprecatedTopic(t));
+    }
     localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
     // ignore
@@ -558,9 +579,9 @@ function mergeWithCustomCurriculum(baseCurriculum: SubjectWithChapters[]): Subje
     const validBaseChapters: ChapterWithTopics[] = subj.chapters
       .filter((c) => !deletedChaps.has(c.id))
       .map((ch) => {
-        const existingTopics = ch.topics.filter((t) => !deletedTops.has(t.id));
+        const existingTopics = ch.topics.filter((t) => !deletedTops.has(t.id) && !isDeprecatedTopic(t));
         const customForThisChapter = (custom.topics || []).filter(
-          (t) => t.chapter_id === ch.id && !deletedTops.has(t.id) && !existingTopics.some((et) => et.id === t.id)
+          (t) => t.chapter_id === ch.id && !deletedTops.has(t.id) && !isDeprecatedTopic(t) && !existingTopics.some((et) => et.id === t.id)
         );
         return {
           ...ch,
@@ -580,7 +601,7 @@ function mergeWithCustomCurriculum(baseCurriculum: SubjectWithChapters[]): Subje
       )
       .map((c) => {
         const topics = (custom.topics || [])
-          .filter((t) => t.chapter_id === c.id && !deletedTops.has(t.id))
+          .filter((t) => t.chapter_id === c.id && !deletedTops.has(t.id) && !isDeprecatedTopic(t))
           .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
         return {
           ...c,
@@ -627,14 +648,14 @@ export async function getFullCurriculum(): Promise<SubjectWithChapters[]> {
       .order('display_order', { ascending: true });
 
     const allChapters = chapters || [];
-    const allTopics = topics || [];
+    const allTopics = (topics || []).filter((t) => !isDeprecatedTopic(t));
 
     // Assemble nested hierarchy
     const nested: SubjectWithChapters[] = subjects.map((subj) => {
       const subjChapters = allChapters.filter((c) => c.subject_id === subj.id);
       const chaptersWithTopics: ChapterWithTopics[] = subjChapters.map((ch) => ({
         ...ch,
-        topics: allTopics.filter((t) => t.chapter_id === ch.id),
+        topics: allTopics.filter((t) => t.chapter_id === ch.id && !isDeprecatedTopic(t)),
       }));
 
       // Ensure all standard default chapters and topics for this subject are merged
@@ -647,9 +668,12 @@ export async function getFullCurriculum(): Promise<SubjectWithChapters[]> {
             (c) => c.name.toLowerCase() === defChap.name.toLowerCase() || c.id === defChap.id
           );
           if (!matchChap) {
-            chaptersWithTopics.push(defChap);
+            chaptersWithTopics.push({
+              ...defChap,
+              topics: (defChap.topics || []).filter((t) => !isDeprecatedTopic(t)),
+            });
           } else {
-            defChap.topics.forEach((defTop) => {
+            (defChap.topics || []).filter((t) => !isDeprecatedTopic(t)).forEach((defTop) => {
               if (
                 !matchChap.topics.some(
                   (t) => t.name.toLowerCase() === defTop.name.toLowerCase() || t.id === defTop.id

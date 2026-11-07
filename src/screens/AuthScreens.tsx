@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 import { resetPassword } from '../features/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 
-type UserRole = 'admin' | 'faculty' | 'student';
+type UserRole = 'admin' | 'faculty' | 'student' | 'consultant';
 
 export function SplashScreen({ onComplete }: { onComplete: () => void }) {
   useEffect(() => {
@@ -209,6 +209,64 @@ export function LoginScreen() {
               'Sign In'
             )}
           </button>
+
+          {/* Quick Demo Role Selector */}
+          <div className="pt-2">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-px bg-white/10 flex-1" />
+              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Quick Demo Login</span>
+              <div className="h-px bg-white/10 flex-1" />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => { setEmail('consultant@italia.medica'); setPassword('password'); }}
+                className="p-2 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 font-semibold flex items-center gap-1.5 transition text-left"
+              >
+                <span>💼</span>
+                <div className="truncate">
+                  <p className="leading-tight font-bold text-white text-[11px]">Consultant Agent</p>
+                  <p className="text-[9px] text-teal-300/80 truncate">Dr. Marco Rossi</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setEmail('mary@edu.in'); setPassword('password'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 font-semibold flex items-center gap-1.5 transition text-left"
+              >
+                <span>👩‍🎓</span>
+                <div className="truncate">
+                  <p className="leading-tight font-bold text-white text-[11px]">Mary (Student)</p>
+                  <p className="text-[9px] text-gray-400 truncate">Batch 2 (May/June)</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setEmail('sarah@faculty.in'); setPassword('password'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 font-semibold flex items-center gap-1.5 transition text-left"
+              >
+                <span>👨‍⚕️</span>
+                <div className="truncate">
+                  <p className="leading-tight font-bold text-white text-[11px]">Faculty Doctor</p>
+                  <p className="text-[9px] text-gray-400 truncate">Dr. Sarah Jenkins</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setEmail('alice@admin.in'); setPassword('password'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 font-semibold flex items-center gap-1.5 transition text-left"
+              >
+                <span>👨‍💼</span>
+                <div className="truncate">
+                  <p className="leading-tight font-bold text-white text-[11px]">Admin Kernel</p>
+                  <p className="text-[9px] text-gray-400 truncate">Alice Kernel</p>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="text-center mt-6">
@@ -339,7 +397,7 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
           phone: formData.phone.trim(),
           password: formData.password,
           role: formData.role,
-          avatar: formData.role === 'admin' ? '👨‍💼' : formData.role === 'faculty' ? '👨‍⚕️' : '👩‍🎓',
+          avatar: formData.role === 'admin' ? '👨‍💼' : formData.role === 'faculty' ? '👨‍⚕️' : formData.role === 'consultant' ? '💼' : '👩‍🎓',
           status: 'active',
           department: formData.department.trim(),
           targetExam: formData.targetExam,
@@ -365,7 +423,7 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
         phone: formData.phone.trim(),
         password: formData.password,
         role: formData.role,
-        avatar: formData.role === 'admin' ? '👨‍💼' : formData.role === 'faculty' ? '👨‍⚕️' : '👩‍🎓',
+        avatar: formData.role === 'admin' ? '👨‍💼' : formData.role === 'faculty' ? '👨‍⚕️' : formData.role === 'consultant' ? '💼' : '👩‍🎓',
         status: 'active',
         department: formData.department.trim(),
         targetExam: formData.targetExam,
@@ -434,6 +492,7 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
                     { id: 'student' as UserRole, label: 'Medical Aspirant (Student)', desc: 'NEET, IMAT, UCAT exam prep, DPPs, mocks & lecture notes', icon: 'fa-graduation-cap' },
                     { id: 'faculty' as UserRole, label: 'Faculty & Medical Doctor', desc: 'Create curriculum, author medical questions & upload resources', icon: 'fa-user-md' },
                     { id: 'admin' as UserRole, label: 'Academy Administrator', desc: 'Manage batches, system governance & institutional analytics', icon: 'fa-user-shield' },
+                    { id: 'consultant' as UserRole, label: 'Consultant Agent (Study Abroad)', desc: 'Passport, HRD, Apostille, Scholarship docs, Universitaly & IMAT verification', icon: 'fa-briefcase' },
                   ].map((r) => (
                     <button
                       key={r.id}

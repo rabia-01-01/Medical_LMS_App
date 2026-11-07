@@ -2,24 +2,29 @@ import React, { useState, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
+import { useData, deduplicateCompletedChapters } from '../context/DataContext';
 import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../components/Navigation';
 import { CurriculumBrowser } from '../features/curriculum';
-import { useResources } from '../features/resources';
+import { useResources, deduplicateAndMergeResources } from '../features/resources';
 import { PerformanceAnalyticsView, useStudentAnalytics } from '../features/attempts';
 import { useAssessments } from '../features/assessments';
+import { StudentConsultancyRoadmapModal, DocumentAttachmentPreviewModal } from './ConsultantScreens';
 
 // ==================== HOME SCREEN ====================
 export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { courses, announcements, communityMessages, quizzes, departments, notifications, getStudentProgress } = useData();
+  const { courses, announcements, communityMessages, quizzes, departments, notifications, getStudentProgress, getStudentDossier, isConsultancyOptedIn, setConsultancyOptIn } = useData();
   const { assessments } = useAssessments();
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
   const myCourses = courses.filter(c => (!c.batch || c.batch === 'All' || c.batch === studentBatch) && c.studentIds.includes(user?.id || ''));
   const unreadNotifs = notifications.filter(n => !n.read).length;
   const myProgress = getStudentProgress(user?.id);
-  const myCompletedChapters = myProgress?.completedChapters?.length || 0;
-  const myCompletedTopics = myProgress?.completedTopics?.length || 0;
+  const myCompletedChapters = deduplicateCompletedChapters(myProgress?.completedChapters || []).length;
+  const myCompletedTopics = (myProgress?.completedTopicDetails || []).filter(d => d.name && !d.name.toLowerCase().includes('body fluids') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.name.trim())).length || (myProgress?.completedTopics || []).filter(t => !t.toLowerCase().includes('body fluids') && !t.includes('-')).length;
+
+  const myDossier = getStudentDossier ? getStudentDossier(user?.id) : undefined;
+  const isOptedIn = typeof isConsultancyOptedIn === 'function' ? isConsultancyOptedIn(user?.id) : true;
+  const [showRoadmapModal, setShowRoadmapModal] = useState(false);
 
   const totalAssessmentsCount = useMemo(() => {
     const seen = new Set(assessments.map(a => a.id));
@@ -129,6 +134,83 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
           </div>
         </div>
 
+        {/* Study Abroad & Consular Admissions Dossier (Handwritten 8-Stage Checklist) */}
+        {isOptedIn && myDossier ? (
+          <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-[#0f2b46] rounded-2xl p-4 text-white shadow-md relative overflow-hidden border border-teal-500/30">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-lg shadow-inner">
+                  🇮🇹
+                </span>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300">Study Abroad Dossier</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-teal-400 text-teal-950">
+                      {myDossier.overallStatus.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white mt-0.5">{myDossier.targetCountry} — {myDossier.targetCourse}</h3>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setConsultancyOptIn(user?.id || 'u-student-1', false)}
+                className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/10 hover:bg-rose-500/40 text-teal-200 hover:text-white transition"
+                title="Opt out of consultancy assistance"
+              >
+                Opt Out
+              </button>
+            </div>
+
+            <div className="bg-white/10 rounded-xl p-2.5 my-2.5 backdrop-blur-xs flex items-center justify-between text-xs">
+              <div>
+                <p className="text-[10px] text-teal-200">Consultant Agent:</p>
+                <p className="font-semibold text-white text-[11px]">{myDossier.consultantName}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-teal-200">Legalisation Pipeline:</p>
+                <p className="font-black text-emerald-300 text-[11px]">
+                  {myDossier.checklist.filter(i => i.status === 'verified').length} / 8 Stages Cleared
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowRoadmapModal(true)}
+              className="w-full py-2 bg-gradient-to-r from-teal-400 to-emerald-400 text-teal-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition cursor-pointer"
+            >
+              <i className="fas fa-clipboard-check text-[11px]" />
+              View 8-Stage Admissions & Consular Checklist
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-2xl p-3.5 bg-gradient-to-r from-teal-900 via-teal-800 to-[#0f2b46] text-white shadow-md border border-teal-500/30 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-base shrink-0">
+                🇮🇹
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300">Consultancy Assistance</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-gray-600/70 text-gray-200">
+                    Not Opted
+                  </span>
+                </div>
+                <h4 className="text-xs font-bold text-white truncate mt-0.5">Study Abroad & Consular Guidance</h4>
+                <p className="text-[10px] text-teal-200/80">Need help with HRD, Apostille, or Pre-Enrolment?</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setConsultancyOptIn(user?.id || 'u-student-1', true)}
+              className="px-3 py-1.5 bg-teal-400 hover:bg-teal-300 text-teal-950 font-bold text-xs rounded-xl shadow-xs shrink-0 transition active:scale-95"
+            >
+              Opt In
+            </button>
+          </div>
+        )}
+
         {/* My Courses */}
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -165,9 +247,8 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
           <div className="grid grid-cols-2 gap-2">
             <div
               onClick={() => onNavigate('departments')}
-              className={`p-2.5 rounded-xl border cursor-pointer transition ${
-                user?.batch === 'Batch 1 (Dec)' ? 'bg-teal-50 border-teal-300 shadow-2xs' : 'bg-white border-gray-200'
-              }`}
+              className={`p-2.5 rounded-xl border cursor-pointer transition ${user?.batch === 'Batch 1 (Dec)' ? 'bg-teal-50 border-teal-300 shadow-2xs' : 'bg-white border-gray-200'
+                }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-800">Batch 1 (Dec)</span>
@@ -179,9 +260,8 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             </div>
             <div
               onClick={() => onNavigate('departments')}
-              className={`p-2.5 rounded-xl border cursor-pointer transition ${
-                user?.batch === 'Batch 2 (May/June)' ? 'bg-purple-50 border-purple-300 shadow-2xs' : 'bg-white border-gray-200'
-              }`}
+              className={`p-2.5 rounded-xl border cursor-pointer transition ${user?.batch === 'Batch 2 (May/June)' ? 'bg-purple-50 border-purple-300 shadow-2xs' : 'bg-white border-gray-200'
+                }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-800">Batch 2 (May/June)</span>
@@ -256,6 +336,13 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
           </div>
         )}
       </div>
+
+      {showRoadmapModal && myDossier && (
+        <StudentConsultancyRoadmapModal
+          dossier={myDossier}
+          onClose={() => setShowRoadmapModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -263,7 +350,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
 // ==================== COURSES SCREEN ====================
 export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { courses, enrollStudents } = useData();
+  const { courses, enrollStudents, cohortBatches, users } = useData();
   const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>(() => {
     const savedTopic = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_topic') : null;
     return savedTopic ? 'curriculum' : 'courses';
@@ -272,7 +359,7 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const categories = ['All', 'NEET', 'IMAT', 'UCAT', 'MCAT'];
-  
+
   const myEnrolledCourses = useMemo(() => {
     return courses.filter(c => c.studentIds.includes(user?.id || ''));
   }, [courses, user?.id]);
@@ -284,33 +371,44 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
   const handleSelfEnroll = (course: any, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user?.id) return;
+
+    if (course.batch) {
+      const targetBatch = (cohortBatches || []).find(b => b.name === course.batch || b.id === course.batch);
+      if (targetBatch) {
+        const maxCap = targetBatch.maxStudents || 25;
+        const currentCount = (users || []).filter(u => u.role === 'student' && (u.batch === targetBatch.name || (targetBatch.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : targetBatch.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false))).length;
+        if (currentCount >= maxCap) {
+          alert(`❌ Enrollment Closed: Batch "${targetBatch.name}" has reached its maximum enrollment capacity of ${maxCap} students.`);
+          return;
+        }
+      }
+    }
+
     enrollStudents(course.id, [user.id], { id: user.id, name: user.name || 'Student' });
     alert(`🎉 Successfully enrolled in ${course.name}! You now have full access to study notes, mock tests, and faculty resources.`);
   };
 
   return (
     <div>
-      <Header 
-        title={viewMode === 'courses' ? 'Medical Courses' : 'Medical Curriculum'} 
-        subtitle={viewMode === 'courses' ? `${myEnrolledCourses.length} enrolled • ${courses.length} available` : '3-Tier Academic Hierarchy'} 
+      <Header
+        title={viewMode === 'courses' ? 'Medical Courses' : 'Medical Curriculum'}
+        subtitle={viewMode === 'courses' ? `${myEnrolledCourses.length} enrolled • ${courses.length} available` : '3-Tier Academic Hierarchy'}
       />
 
       {/* Primary Tab Switcher: Courses vs Curriculum Hierarchy */}
       <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mb-3">
         <button
           onClick={() => setViewMode('courses')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-            viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-          }`}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+            }`}
         >
           <i className="fas fa-book-medical text-[11px]" />
           <span>Courses</span>
         </button>
         <button
           onClick={() => setViewMode('curriculum')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-            viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-          }`}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+            }`}
         >
           <i className="fas fa-layer-group text-[11px]" />
           <span>Curriculum Hierarchy</span>
@@ -327,22 +425,20 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
           <div className="flex gap-2 px-4 mb-3">
             <button
               onClick={() => setCourseFilterMode('my-courses')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
-                courseFilterMode === 'my-courses'
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${courseFilterMode === 'my-courses'
                   ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-              }`}
+                }`}
             >
               <i className="fas fa-check-circle" />
               <span>My Enrolled ({myEnrolledCourses.length})</span>
             </button>
             <button
               onClick={() => setCourseFilterMode('explore')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
-                courseFilterMode === 'explore'
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${courseFilterMode === 'explore'
                   ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-              }`}
+                }`}
             >
               <i className="fas fa-compass" />
               <span>Explore All Courses ({courses.length})</span>
@@ -352,12 +448,11 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
           <SearchBar value={search} onChange={setSearch} placeholder="Search courses..." />
           <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
             {categories.map((cat) => (
-              <button 
-                key={cat} 
-                onClick={() => setFilter(cat)} 
-                className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
-                  filter === cat ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'
-                }`}
+              <button
+                key={cat}
+                onClick={() => setFilter(cat)}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === cat ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'
+                  }`}
               >
                 {cat}
               </button>
@@ -378,16 +473,22 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
               const isEnrolled = course.studentIds.includes(user?.id || '');
               const studentBatch = user?.batch || 'Batch 1 (Dec)';
               const isOtherBatch = course.batch && course.batch !== 'All' && course.batch !== studentBatch;
+              const targetBatch = course.batch ? (cohortBatches || []).find(b => b.name === course.batch || b.id === course.batch) : null;
+              const batchMaxCap = targetBatch?.maxStudents || 25;
+              const batchEnrolledCount = targetBatch
+                ? (users || []).filter(u => u.role === 'student' && (u.batch === targetBatch.name || (targetBatch.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : targetBatch.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false))).length
+                : 0;
+              const isBatchFull = targetBatch ? batchEnrolledCount >= batchMaxCap : false;
               return (
-                <div 
-                  key={course.id} 
+                <div
+                  key={course.id}
                   onClick={() => {
                     if (isOtherBatch) {
                       alert(`Batch Restricted: This course belongs to ${course.batch}. You are enrolled in ${studentBatch}. Students of one batch cannot access another.`);
                       return;
                     }
                     onNavigate('course-detail', course);
-                  }} 
+                  }}
                   className={`card cursor-pointer transition ${isOtherBatch ? 'opacity-65 border-dashed border-gray-300' : 'hover:border-teal-200 active:bg-gray-50'}`}
                 >
                   <div className="flex items-start gap-3">
@@ -405,6 +506,10 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
                           <span className="badge bg-emerald-100 text-emerald-800 text-[10px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1">
                             <i className="fas fa-check text-[9px]" /> Enrolled
                           </span>
+                        ) : isBatchFull ? (
+                          <span className="badge bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold py-0.5 px-2 flex-shrink-0 flex items-center gap-1">
+                            <i className="fas fa-ban text-[8px]" /> Batch Full
+                          </span>
                         ) : (
                           <span className="badge bg-teal-50 text-teal-700 text-[10px] font-semibold py-0.5 px-1.5 flex-shrink-0">
                             Available
@@ -412,7 +517,7 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
                         )}
                       </div>
                       <p className="text-xs text-gray-500 line-clamp-2">{course.description}</p>
-                      
+
                       <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-100">
                         <div className="flex items-center gap-3">
                           <span className="text-[10px] text-gray-400"><i className="fas fa-clock mr-1" />{course.duration}</span>
@@ -420,13 +525,25 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
                         </div>
 
                         {!isEnrolled ? (
-                          <button
-                            onClick={(e) => handleSelfEnroll(course, e)}
-                            className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs active:scale-95"
-                          >
-                            <i className="fas fa-plus text-[10px]" />
-                            <span>Enroll Now</span>
-                          </button>
+                          isBatchFull ? (
+                            <button
+                              type="button"
+                              disabled
+                              className="px-3 py-1 bg-gray-200 text-gray-500 rounded-lg text-xs font-bold cursor-not-allowed flex items-center gap-1 shadow-2xs"
+                              title={`Batch capacity reached (${batchEnrolledCount}/${batchMaxCap} students)`}
+                            >
+                              <i className="fas fa-ban text-[10px]" />
+                              <span>Batch Full</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => handleSelfEnroll(course, e)}
+                              className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs active:scale-95"
+                            >
+                              <i className="fas fa-plus text-[10px]" />
+                              <span>Enroll Now</span>
+                            </button>
+                          )
                         ) : (
                           <span className="text-xs text-teal-600 font-semibold hover:underline flex items-center gap-1">
                             <span>View Course</span>
@@ -447,12 +564,12 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
                   {courseFilterMode === 'my-courses' ? 'No Enrolled Courses Yet' : 'No Courses Found'}
                 </p>
                 <p className="text-xs text-gray-400 mt-1 mb-4">
-                  {courseFilterMode === 'my-courses' 
+                  {courseFilterMode === 'my-courses'
                     ? 'Explore available medical entrance courses and enroll to start practicing.'
                     : 'Try selecting another exam category or clearing your search filter.'}
                 </p>
                 {courseFilterMode === 'my-courses' && (
-                  <button 
+                  <button
                     onClick={() => setCourseFilterMode('explore')}
                     className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-teal-700"
                   >
@@ -480,50 +597,18 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
 
   // Merge cloud resources with local DataContext resources
   const allResources = useMemo(() => {
-    const list: any[] = [];
-    const seen = new Set<string>();
-
-    // 1. Cloud resources
-    cloudResources.forEach((cr) => {
-      seen.add(cr.id);
-      list.push({
-        id: cr.id,
-        title: cr.title,
-        type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
-        subject: cr.subjectName || 'General',
-        courseId: cr.subject_id,
-        topicId: cr.topic_id || (cr as any).topicId,
-        topic_id: cr.topic_id || (cr as any).topicId,
-        description: cr.description,
-        batch: (cr as any).batch,
-        uploaderId: cr.created_by,
-        uploaderName: cr.creatorName || 'Faculty',
-        date: cr.created_at?.split('T')[0] || 'Recent',
-        size: cr.sizeFormatted || 'Cloud',
-        status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
-        examCategory: 'Medical',
-        fileName: cr.file?.file_name || 'document.pdf',
-        storagePath: cr.file?.storage_path,
-        signedUrl: cr.signedUrl,
-        fileData: cr.fileData,
-      });
-    });
-
-    // 2. Local context resources
-    localResources.forEach((lr) => {
-      if (!seen.has(lr.id)) {
-        list.push(lr);
-      }
-    });
-
-    return list;
+    return deduplicateAndMergeResources(cloudResources, localResources);
   }, [cloudResources, localResources]);
 
   // Show resources uploaded by Admin and Faculty to students
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
   let filtered = allResources.filter((r: any) => {
-    // Only exclude materials explicitly marked as inline topic-only
-    if (r.topicMaterialOnly) return false;
+    // Exclude topic documents: students must see only general Resource documents in the Resources tab
+    const isTopicDocument = Boolean(
+      r.topicMaterialOnly ||
+      (typeof r.description === 'string' && r.description.startsWith('Study material for '))
+    );
+    if (isTopicDocument) return false;
 
     return (r.status === 'published' || r.status === 'PUBLISHED' || !r.status) && (!r.batch || r.batch === 'All' || r.batch === studentBatch);
   });
@@ -531,6 +616,7 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
     const fLower = filter.toLowerCase();
     filtered = filtered.filter((r: any) => {
       const tLower = (r.type || '').toLowerCase();
+      if (fLower === 'pdf') return tLower.includes('pdf') || (r.fileName && r.fileName.toLowerCase().endsWith('.pdf'));
       if (fLower === 'notes') return tLower.includes('note');
       if (fLower === 'video') return tLower.includes('vid');
       if (fLower === 'pyq') return tLower.includes('pyq') || tLower.includes('past');
@@ -541,8 +627,8 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
 
   if (search) {
     const s = search.toLowerCase();
-    filtered = filtered.filter((r: any) => 
-      r.title.toLowerCase().includes(s) || 
+    filtered = filtered.filter((r: any) =>
+      r.title.toLowerCase().includes(s) ||
       (r.subject && r.subject.toLowerCase().includes(s))
     );
   }
@@ -557,9 +643,9 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
 
   return (
     <div>
-      <Header 
-        title="Resources" 
-        subtitle={`${filtered.length} learning resources`} 
+      <Header
+        title="Resources"
+        subtitle={`${filtered.length} learning resources`}
         rightAction={
           cloudLoading ? (
             <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" title="Syncing cloud resources..." />
@@ -567,15 +653,14 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
         }
       />
       <SearchBar value={search} onChange={setSearch} placeholder="Search high-yield notes, PYQs, videos..." />
-      
+
       <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
         {types.map((type) => (
-          <button 
-            key={type} 
-            onClick={() => setFilter(type)} 
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
-              filter === type ? 'bg-teal-500 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+          <button
+            key={type}
+            onClick={() => setFilter(type)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === type ? 'bg-teal-500 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
           >
             {type}
           </button>
@@ -584,9 +669,9 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
 
       <div className="px-4 space-y-2">
         {filtered.map((resource: any) => (
-          <div 
-            key={resource.id} 
-            onClick={() => onNavigate('resource-view', resource)} 
+          <div
+            key={resource.id}
+            onClick={() => onNavigate('resource-view', resource)}
             className="card flex items-center gap-3 cursor-pointer active:bg-gray-50 border border-gray-100 hover:border-teal-300 transition"
           >
             <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center flex-shrink-0">
@@ -612,10 +697,10 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
           </div>
         ))}
         {filtered.length === 0 && (
-          <EmptyState 
-            icon="fa-folder-open" 
-            title="No Resources Found" 
-            message={search ? 'No materials match your search query.' : 'No resources available for this category yet.'} 
+          <EmptyState
+            icon="fa-folder-open"
+            title="No Resources Found"
+            message={search ? 'No materials match your search query.' : 'No resources available for this category yet.'}
           />
         )}
       </div>
@@ -761,18 +846,16 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
                     return (
                       <div
                         key={rep.id}
-                        className={`p-2.5 rounded-xl text-xs space-y-1.5 transition ${
-                          isSubReply
+                        className={`p-2.5 rounded-xl text-xs space-y-1.5 transition ${isSubReply
                             ? 'bg-emerald-50/50 border border-emerald-200/60 ml-2.5'
                             : 'bg-slate-50 border border-slate-100'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-gray-800">{rep.authorName}</span>
-                            <span className={`badge text-[8px] py-0 px-1 ${
-                              rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
-                            }`}>
+                            <span className={`badge text-[8px] py-0 px-1 ${rep.authorRole === 'Faculty' ? 'badge-teal' : rep.authorRole === 'Admin' ? 'badge-navy' : 'badge-green'
+                              }`}>
                               {rep.authorRole}
                             </span>
                             {rep.replyToAuthor && (
@@ -824,10 +907,20 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
 // ==================== PROFILE SCREEN ====================
 export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
-  const { courses, quizzes, studentDocuments } = useData();
+  const { courses, quizzes, studentDocuments, getStudentDossier, isConsultancyOptedIn, setConsultancyOptIn } = useData();
   const { assessments } = useAssessments();
   const { analytics, loading: analyticsLoading } = useStudentAnalytics(user?.id);
   const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
+  const myDossier = getStudentDossier ? getStudentDossier(user?.id) : undefined;
+  const isOptedIn = typeof isConsultancyOptedIn === 'function' ? isConsultancyOptedIn(user?.id) : true;
+  const [showRoadmapModal, setShowRoadmapModal] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{
+    fileName: string;
+    fileSize: string;
+    stageTitle: string;
+    studentName: string;
+    submittedAt?: string;
+  } | null>(null);
 
   const totalAssessmentsCount = useMemo(() => {
     const seen = new Set(assessments.map(a => a.id));
@@ -864,7 +957,7 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
         </div>
 
         {/* Quick Analytics CTA Card */}
-        <div 
+        <div
           onClick={() => onNavigate('analytics')}
           style={{ background: 'linear-gradient(135deg, #0d9488 0%, #0f2b46 100%)' }}
           className="rounded-xl text-white p-4 cursor-pointer hover:shadow-lg transition active:scale-[0.99] flex items-center justify-between mb-3 shadow-md border border-teal-600/30"
@@ -883,52 +976,238 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
           </div>
         </div>
 
-        
-        {/* Student Verified Documentation List (View-Only) */}
-        <div className="card p-3.5 space-y-2 border border-slate-200">
+
+        {/* Consultancy Assistance Opt-In / Opt-Out Choice */}
+        <div className="card space-y-2.5 border border-teal-200/80 bg-gradient-to-r from-teal-50/70 to-slate-50">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <i className="fas fa-file-shield text-teal-600 text-sm" />
-              <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
-                My Verification Documents
-              </h3>
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center text-sm shadow-2xs">
+                <i className="fas fa-passport" />
+              </span>
+              <div>
+                <h3 className="text-xs font-bold text-gray-900">Study Abroad Consultancy Assistance</h3>
+                <p className="text-[10px] text-gray-500">Official HRD, Apostille & Italian admissions pipeline</p>
+              </div>
             </div>
-            <span className="badge badge-teal text-[9px] py-0.5 px-2">
-              {studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} Verified
+
+            <button
+              type="button"
+              onClick={() => setConsultancyOptIn(user?.id || 'u-student-1', !isOptedIn)}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs active:scale-95 ${
+                isOptedIn
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+            >
+              <i className={`fas ${isOptedIn ? 'fa-check-circle' : 'fa-circle'}`} />
+              <span>{isOptedIn ? 'Opted In' : 'Not Opted'}</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-600">
+            {isOptedIn
+              ? '✅ You have opted in for expert Consultancy Assistance with assigned Consultant Agent Dr. Marco Rossi.'
+              : 'ℹ️ You are currently preparing independently. Click "Not Opted" above anytime to opt in for full consular assistance.'}
+          </p>
+        </div>
+
+        {/* Student Verified Documentation List (Official 8 Stages from Consultant Agent) */}
+        <div className="card p-4 space-y-3 border border-slate-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-sm shadow-2xs">
+                <i className="fas fa-file-shield" />
+              </span>
+              <div>
+                <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  My Verification Documents
+                </h3>
+                <p className="text-[10px] text-gray-500">
+                  8 Official Consular & Admissions Legalisation Documents
+                </p>
+              </div>
+            </div>
+            <span className="badge badge-teal text-[10px] py-0.5 px-2.5 font-bold">
+              {studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} / 8 Verified
             </span>
           </div>
+
           <p className="text-[10px] text-gray-400">
-            Read-only verification status managed strictly by Academy Admin and AI Agent.
+            Read-only verification status managed strictly by Academy Admin and AI Agent (Consultant Agent Dr. Marco Rossi).
           </p>
+
           <div className="space-y-2 pt-1">
             {studentDocuments
               .filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1')
-              .map((doc) => (
-                <div key={doc.id} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <p className="text-xs font-bold text-gray-800 truncate">{doc.title}</p>
-                      <span className={`badge text-[8px] py-0 px-1.5 ${
-                        doc.status === 'Verified' ? 'badge-green' : doc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'badge-red'
-                      }`}>
-                        {doc.status}
-                      </span>
+              .map((doc) => {
+                const isVerified = doc.status === 'Verified';
+                const isRejected = doc.status === 'Not Verified' || doc.status === 'Rejected';
+                const isInProgress = doc.status === 'In Review/In Progress';
+
+                const markerLabel = isVerified
+                  ? 'Verified'
+                  : isRejected
+                  ? 'Not Verified'
+                  : isInProgress
+                  ? 'In Review/In Progress'
+                  : 'Pending';
+
+                const badgeClass = isVerified
+                  ? 'badge-green'
+                  : isRejected
+                  ? 'badge-red'
+                  : isInProgress
+                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                  : 'bg-gray-100 text-gray-700 border border-gray-300';
+
+                const badgeIcon = isVerified
+                  ? 'fa-check-circle'
+                  : isRejected
+                  ? 'fa-times-circle'
+                  : isInProgress
+                  ? 'fa-hourglass-half'
+                  : 'fa-clock';
+
+                return (
+                  <div
+                    key={doc.id}
+                    className={`p-3 rounded-2xl border transition ${
+                      isVerified
+                        ? 'bg-emerald-50/50 border-emerald-200'
+                        : isRejected
+                        ? 'bg-rose-50/40 border-rose-200'
+                        : isInProgress
+                        ? 'bg-amber-50/40 border-amber-200'
+                        : 'bg-gray-50/80 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs font-bold text-gray-900 truncate">{doc.title}</p>
+                          <span
+                            className={`badge text-[9px] font-bold py-0.5 px-2 flex items-center gap-1 ${badgeClass}`}
+                          >
+                            <i className={`fas ${badgeIcon}`} />
+                            {markerLabel}
+                          </span>
+                        </div>
+
+                        {/* Submission file details */}
+                        {doc.fileName && (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mb-1">
+                            <span className="flex items-center gap-1 text-gray-700 font-medium">
+                              <i className="fas fa-paperclip text-[9px] text-teal-600" />
+                              {doc.fileName} {doc.fileSize ? `(${doc.fileSize})` : ''}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Verification officer */}
+                        <p className="text-[10px] text-gray-400">
+                          Category: <span className="text-gray-600 font-semibold">{doc.category}</span> •{' '}
+                          {isVerified ? (
+                            <span className="text-emerald-700 font-semibold">
+                              Verified by {doc.verifiedBy || 'Dr. Marco Rossi (Consultant Agent)'}{' '}
+                              {doc.verifiedAt ? `on ${doc.verifiedAt}` : ''}
+                            </span>
+                          ) : isRejected ? (
+                            <span className="text-rose-700 font-semibold">
+                              Not Verified — Action Required
+                            </span>
+                          ) : isInProgress ? (
+                            <span className="text-amber-700 font-semibold">
+                              In Review/In Progress by Consultant Agent
+                            </span>
+                          ) : (
+                            <span className="text-gray-500 font-semibold">
+                              Pending Consultant Agent Verification
+                            </span>
+                          )}
+                        </p>
+
+                        {/* Sub-items if any */}
+                        {doc.subItems && doc.subItems.length > 0 && (
+                          <div className="mt-2 space-y-1 pt-1.5 border-t border-gray-100">
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                              Checklist Sub-Items:
+                            </p>
+                            {doc.subItems.map((sub) => (
+                              <div key={sub.id} className="flex items-center justify-between text-[10px] text-gray-700">
+                                <span className="flex items-center gap-1.5">
+                                  <i className={`fas ${sub.status === 'verified' ? 'fa-check text-emerald-600' : 'fa-clock text-amber-500'} text-[8px]`} />
+                                  {sub.title}
+                                </span>
+                                <span className={`text-[9px] font-bold ${sub.status === 'verified' ? 'text-emerald-700' : 'text-gray-500'}`}>
+                                  {sub.status === 'verified' ? 'Verified' : 'Pending'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Remarks */}
+                        {doc.remarks && (
+                          <p className="text-[10px] text-teal-800 bg-teal-50/80 p-1.5 rounded-lg mt-1.5 border border-teal-200/60 font-medium">
+                            <span className="font-bold text-teal-900">Consultant Remarks:</span> {doc.remarks}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="shrink-0 flex flex-col items-center gap-1">
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shadow-2xs ${
+                            isVerified
+                              ? 'bg-emerald-600 text-white'
+                              : isRejected
+                              ? 'bg-red-100 text-red-600'
+                              : isInProgress
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-gray-200 text-gray-500'
+                          }`}
+                        >
+                          <i className={`fas ${
+                            isVerified
+                              ? 'fa-check'
+                              : isRejected
+                              ? 'fa-times'
+                              : isInProgress
+                              ? 'fa-hourglass-half'
+                              : 'fa-clock'
+                          }`} />
+                        </div>
+                        {doc.fileName && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDoc({
+                              fileName: doc.fileName || 'Document.pdf',
+                              fileSize: doc.fileSize || '1.8 MB',
+                              stageTitle: doc.title,
+                              studentName: user?.name || 'Mary',
+                              submittedAt: doc.submittedAt,
+                            })}
+                            className="text-[9px] font-bold text-teal-600 hover:text-teal-800 hover:underline pt-0.5"
+                          >
+                            Preview
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-[10px] text-gray-400">
-                      Category: {doc.category} • {doc.verifiedBy ? `Verified by ${doc.verifiedBy} on ${doc.verifiedAt || '2026-10-15'}` : 'Under Review'}
-                    </p>
-                    {doc.remarks && (
-                      <p className="text-[10px] text-teal-800 bg-teal-50/70 p-1 rounded mt-1">
-                        {doc.remarks}
-                      </p>
-                    )}
                   </div>
-                  <div className="w-6 h-6 rounded-full bg-white shadow-2xs flex items-center justify-center shrink-0 text-xs">
-                    <i className={`fas ${doc.status === 'Verified' ? 'fa-check-circle text-emerald-600' : 'fa-clock text-amber-500'}`} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
+
+          {/* CTA to open full roadmap modal */}
+          {myDossier && (
+            <button
+              type="button"
+              onClick={() => setShowRoadmapModal(true)}
+              className="w-full py-2.5 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 text-xs font-bold flex items-center justify-center gap-2 transition"
+            >
+              <i className="fas fa-route text-teal-600" />
+              View Full 8-Stage Consular Admissions Roadmap
+            </button>
+          )}
         </div>
 
         <div className="card p-0 overflow-hidden">
@@ -957,6 +1236,20 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
           <i className="fas fa-exchange-alt" /> Switch Account / Sign In
         </button>
       </div>
+
+      {showRoadmapModal && myDossier && (
+        <StudentConsultancyRoadmapModal
+          dossier={myDossier}
+          onClose={() => setShowRoadmapModal(false)}
+        />
+      )}
+
+      {previewDoc && (
+        <DocumentAttachmentPreviewModal
+          doc={previewDoc}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1035,7 +1328,7 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <Header title="About Us" showBack onBack={onBack} gradient={false} />
-      
+
       {/* Hero Section */}
       <div className="gradient-header pb-6 text-center">
         <div className="relative z-10">
@@ -1202,41 +1495,34 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
 
 // ==================== BATCHES (ONLY BATCHES IN BATCHES TAB) ====================
 export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
-  const { users } = useData();
+  const { users, cohortBatches } = useData();
   const { user } = useAuth();
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
 
-  const batch1Students = (users || []).filter(u => u.role === 'student' && (u.batch === 'Batch 1 (Dec)' || !u.batch || u.batch.includes('1'))).length;
-  const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
+  const batchesList = (cohortBatches || []).map((b) => {
+    const isEnrolled = studentBatch === b.name || (b.name === 'Batch 1 (Dec)' && (!user?.batch || user.batch.includes('1')));
+    const studentsCount = (users || []).filter(u => u.role === 'student' && (u.batch === b.name || (b.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : b.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false))).length;
+    const color = b.color || (b.name.includes('1') ? 'teal' : b.name.includes('2') ? 'purple' : 'blue');
+    const season = b.season || b.badge || 'Academic Cohort';
+    const description = b.description || `Academic medical entrance preparation cohort for ${b.name} covering all 7 core subjects.`;
 
-  const batchesList = [
-    {
-      id: 'batch-1',
-      name: 'Batch 1 (Dec)',
-      session: 'Winter Session: December – April',
-      season: 'Winter Cohort',
-      color: 'teal',
-      studentsCount: batch1Students,
-      isEnrolled: studentBatch === 'Batch 1 (Dec)' || studentBatch.includes('1'),
-      description: 'Accelerated winter medical entrance preparation cohort covering all 7 core subjects.',
-    },
-    {
-      id: 'batch-2',
-      name: 'Batch 2 (May/June)',
-      session: 'Summer Session: May – October',
-      season: 'Summer Cohort',
-      color: 'purple',
-      studentsCount: batch2Students,
-      isEnrolled: studentBatch === 'Batch 2 (May/June)',
-      description: 'Comprehensive summer medical entrance foundation cohort covering all 7 core subjects.',
-    },
-  ];
+    return {
+      id: b.id,
+      name: b.name,
+      session: b.session,
+      season,
+      color,
+      studentsCount,
+      isEnrolled,
+      description,
+    };
+  });
 
   return (
     <div>
       <Header
         title="Batches"
-        subtitle="Academic Cohort Batches • Batch 1 & Batch 2"
+        subtitle={`Academic Cohort Batches • ${batchesList.length} Cohorts Active`}
         showBack
         onBack={onBack}
       />
@@ -1257,29 +1543,26 @@ export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
           {batchesList.map((b) => (
             <div
               key={b.id}
-              className={`card space-y-3 border transition shadow-xs ${
-                b.isEnrolled
+              className={`card space-y-3 border transition shadow-xs ${b.isEnrolled
                   ? b.color === 'teal'
                     ? 'border-teal-300 ring-2 ring-teal-200 bg-teal-50/30'
                     : 'border-purple-300 ring-2 ring-purple-200 bg-purple-50/30'
                   : 'border-gray-200 bg-white'
-              }`}
+                }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
-                    b.color === 'teal'
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${b.color === 'teal'
                       ? 'bg-teal-100/70 text-teal-700 border-teal-200'
                       : 'bg-purple-100/70 text-purple-700 border-purple-200'
-                  }`}>
+                    }`}>
                     <i className="fas fa-layer-group text-base" />
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <h3 className="text-sm font-extrabold text-gray-900">{b.name}</h3>
-                      <span className={`badge text-[9px] font-bold py-0.5 px-2 rounded-full ${
-                        b.color === 'teal' ? 'bg-teal-600 text-white' : 'bg-purple-600 text-white'
-                      }`}>
+                      <span className={`badge text-[9px] font-bold py-0.5 px-2 rounded-full ${b.color === 'teal' ? 'bg-teal-600 text-white' : 'bg-purple-600 text-white'
+                        }`}>
                         {b.season}
                       </span>
                       {b.isEnrolled && (
@@ -1535,20 +1818,18 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
                 <button
                   key={i}
                   onClick={() => setSelectedDate(prev => prev === dayStr ? null : dayStr)}
-                  className={`py-2 rounded-xl text-xs font-semibold relative transition flex flex-col items-center justify-center ${
-                    isSelected
+                  className={`py-2 rounded-xl text-xs font-semibold relative transition flex flex-col items-center justify-center ${isSelected
                       ? 'bg-teal-600 text-white shadow-xs'
                       : isToday
-                      ? 'bg-teal-50 text-teal-800 border border-teal-300 font-bold'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                        ? 'bg-teal-50 text-teal-800 border border-teal-300 font-bold'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
                 >
                   <span>{format(day, 'd')}</span>
                   {hasEvents && (
                     <span
-                      className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
-                        isSelected ? 'bg-white' : 'bg-teal-500'
-                      }`}
+                      className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-white' : 'bg-teal-500'
+                        }`}
                     />
                   )}
                 </button>
@@ -1578,11 +1859,10 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
             <button
               key={t}
               onClick={() => setFilterType(t)}
-              className={`px-3 py-1.5 rounded-full font-semibold transition text-xs whitespace-nowrap ${
-                filterType === t
+              className={`px-3 py-1.5 rounded-full font-semibold transition text-xs whitespace-nowrap ${filterType === t
                   ? 'bg-teal-600 text-white shadow-2xs'
                   : 'bg-white text-gray-600 border border-gray-200 hover:border-teal-300'
-              }`}
+                }`}
             >
               {t}
             </button>
@@ -1622,24 +1902,22 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
               return (
                 <div
                   key={ev.id}
-                  className={`card border-l-4 transition hover:shadow-xs ${
-                    isAnn
+                  className={`card border-l-4 transition hover:shadow-xs ${isAnn
                       ? 'border-l-amber-500 bg-amber-50/20'
                       : isExam
-                      ? 'border-l-rose-500 bg-rose-50/20'
-                      : 'border-l-teal-600 bg-teal-50/20'
-                  }`}
+                        ? 'border-l-rose-500 bg-rose-50/20'
+                        : 'border-l-teal-600 bg-teal-50/20'
+                    }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2">
                       <span
-                        className={`badge text-[9px] font-bold uppercase py-0.5 px-2 rounded-full ${
-                          isAnn
+                        className={`badge text-[9px] font-bold uppercase py-0.5 px-2 rounded-full ${isAnn
                             ? 'bg-amber-100 text-amber-800 border border-amber-200'
                             : isExam
-                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                            : 'bg-teal-100 text-teal-800 border border-teal-200'
-                        }`}
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : 'bg-teal-100 text-teal-800 border border-teal-200'
+                          }`}
                       >
                         {ev.type}
                       </span>
@@ -1777,28 +2055,28 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
 }
 
 // ==================== ANALYTICS SCREEN (PHASE 6) ====================
-export function AnalyticsScreen({ 
-  onBack, 
-  onNavigate 
-}: { 
-  onBack: () => void; 
+export function AnalyticsScreen({
+  onBack,
+  onNavigate
+}: {
+  onBack: () => void;
   onNavigate?: (screen: string, data?: any) => void;
 }) {
   const { user } = useAuth();
 
   return (
     <div>
-      <Header 
-        title="Performance Analytics" 
-        subtitle="Drill history, score trends & diagnostic insights" 
-        showBack 
-        onBack={onBack} 
-        gradient={false} 
+      <Header
+        title="Performance Analytics"
+        subtitle="Drill history, score trends & diagnostic insights"
+        showBack
+        onBack={onBack}
+        gradient={false}
       />
       <div className="p-4">
-        <PerformanceAnalyticsView 
-          studentId={user?.id} 
-          onNavigateToQuizzes={() => onNavigate?.('quizzes')} 
+        <PerformanceAnalyticsView
+          studentId={user?.id}
+          onNavigateToQuizzes={() => onNavigate?.('quizzes')}
         />
       </div>
     </div>

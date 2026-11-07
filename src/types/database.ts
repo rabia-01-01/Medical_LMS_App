@@ -12,7 +12,7 @@ export type Json =
   | Json[];
 
 // Database ENUMs
-export type UserRole = 'STUDENT' | 'FACULTY' | 'ADMIN';
+export type UserRole = 'STUDENT' | 'FACULTY' | 'ADMIN' | 'CONSULTANT';
 export type ContentStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type ResourceType = 'NOTE' | 'BOOK' | 'DPP' | 'PYQ' | 'VIDEO';
 export type AssessmentType = 'DPP' | 'PYQ' | 'MOCK_TEST' | 'TEST_SERIES';

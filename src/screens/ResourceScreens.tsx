@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 import { CurriculumBrowser } from '../features/curriculum';
-import { resourceService, useResources, DocumentProtectionWrapper } from '../features/resources';
+import { resourceService, useResources, DocumentProtectionWrapper, deduplicateAndMergeResources } from '../features/resources';
 
 // Dedicated helper to resolve clean, non-downloading MIME types
 export function getProperMimeType(fileName = '', type = '', rawMime = ''): string {
@@ -1668,42 +1668,15 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
 
   const courseResources = useMemo(() => {
     if (!c) return [];
-    const list: any[] = [];
-    const seen = new Set<string>();
-
-    cloudResources.forEach((cr) => {
-      const isMatch = cr.subject_id === c.id ||
-        (c.subjects && c.subjects.includes(cr.subject_id)) ||
-        (c.name && cr.subjectName && c.name.toLowerCase().includes(cr.subjectName.toLowerCase()));
-      if (isMatch) {
-        seen.add(cr.id);
-        list.push({
-          id: cr.id,
-          title: cr.title,
-          type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
-          subject: cr.subjectName || c.name || 'General',
-          courseId: c.id,
-          uploaderId: cr.created_by,
-          uploaderName: cr.creatorName || 'Faculty',
-          date: cr.created_at?.split('T')[0] || 'Recent',
-          size: cr.sizeFormatted || 'Cloud',
-          status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
-          examCategory: 'Medical',
-          fileName: cr.file?.file_name || 'document.pdf',
-          storagePath: cr.file?.storage_path,
-          signedUrl: cr.signedUrl,
-          fileData: cr.fileData,
-        });
-      }
+    const merged = deduplicateAndMergeResources(cloudResources, localResources);
+    return merged.filter((r) => {
+      return (
+        r.courseId === c.id ||
+        r.subject_id === c.id ||
+        (c.subjects && (c.subjects.includes(r.subject) || c.subjects.includes(r.subjectId))) ||
+        (c.name && r.subject && c.name.toLowerCase().includes(r.subject.toLowerCase()))
+      );
     });
-
-    localResources.forEach((lr) => {
-      if (lr.courseId === c.id && !seen.has(lr.id)) {
-        list.push(lr);
-      }
-    });
-
-    return list;
   }, [cloudResources, localResources, c]);
 
   const facultyMembers = users.filter(u => c?.facultyIds?.includes(u.id));

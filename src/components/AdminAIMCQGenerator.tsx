@@ -14,7 +14,7 @@ interface GeneratedMCQ {
   negativeMarks: number;
   explanation: string;
 }
-type TargetBatch = 'Batch 1 (Dec)' | 'Batch 2 (May/June)';
+type TargetBatch = string;
 
 // The React app calls your own backend. Never put the Groq key in this file.
 // Configure your frontend dev server / production reverse proxy to forward
@@ -110,7 +110,7 @@ export function AdminAIMCQGenerator({
   onBack?: () => void;
 }) {
   const { curriculum, subjects } = useCurriculum();
-  const { addQuiz } = useData();
+  const { addQuiz, cohortBatches } = useData();
   const { user } = useAuth();
 
   const isFaculty = user?.role === 'faculty';
@@ -508,11 +508,12 @@ export function AdminAIMCQGenerator({
             <select
               id="mcq-batch"
               value={targetBatch}
-              onChange={(event) => setTargetBatch(event.target.value as TargetBatch)}
+              onChange={(event) => setTargetBatch(event.target.value)}
               className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-teal-500"
             >
-              <option value="Batch 1 (Dec)">Batch 1 (Dec)</option>
-              <option value="Batch 2 (May/June)">Batch 2 (May/June)</option>
+              {(cohortBatches || [{ id: 'b1', name: 'Batch 1 (Dec)' }, { id: 'b2', name: 'Batch 2 (May/June)' }]).map((b) => (
+                <option key={b.name} value={b.name}>{b.name}</option>
+              ))}
             </select>
           </div>
 

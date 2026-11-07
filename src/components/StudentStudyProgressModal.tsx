@@ -63,9 +63,11 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
   // Scan through live curriculum (and fallback)
   effectiveCurriculum.forEach((sub) => {
     sub.chapters?.forEach((chap, cIdx) => {
-      const isChapDone = isChapterCompleted(chap.id, student.id);
       const chapTopics = chap.topics || [];
       const doneInChap = chapTopics.filter(t => isTopicCompleted(t.id, student.id)).length;
+      const isChapDone = isChapterCompleted(chap.id, student.id) ||
+        isChapterCompleted(chap.name, student.id) ||
+        (chapTopics.length > 0 && doneInChap === chapTopics.length);
 
       if (isChapDone) {
         studiedChaptersList.push({
@@ -81,6 +83,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
       }
 
       chapTopics.forEach((top, tIdx) => {
+        if (top.name && top.name.toLowerCase().includes('body fluids')) return;
         const isDone = isTopicCompleted(top.id, student.id);
         if (isDone) {
           studiedTopicsList.push({
@@ -101,34 +104,55 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
   // Reconcile with completedTopicDetails if any verified topic was marked
   (progress?.completedTopicDetails || []).forEach((d) => {
     if (!d.id) return;
-    // Strip dummy mock IDs or raw UUID strings
-    if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') return;
-    if (d.name && d.name.includes('-') && d.name.length > 25) return;
-    
-    // Check if already in studiedTopicsList
-    if (studiedTopicsList.some(st => st.id === d.id)) return;
+    if (d.name && d.name.toLowerCase().includes('body fluids')) return;
+    if (d.id && d.id.toLowerCase().includes('body-fluids')) return;
+    if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') {
+      if (!d.name || d.name === d.id) return;
+    }
 
-    // Try finding within effectiveCurriculum
-    for (const sub of effectiveCurriculum) {
+    // Check if already in studiedTopicsList
+    if (studiedTopicsList.some((st) => st.id === d.id)) return;
+
+    // Resolve clean name (never allow raw UUID)
+    let cleanName = d.name;
+    const isUuid = !cleanName || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanName.trim());
+    let chName = d.chapterName;
+    let sName = d.subjectName;
+    let sId = d.subjectId;
+    let sCode = 'BIO';
+
+    const searchable = [...effectiveCurriculum, ...DEFAULT_CURRICULUM];
+    for (const sub of searchable) {
       for (let cIdx = 0; cIdx < (sub.chapters || []).length; cIdx++) {
         const chap = sub.chapters[cIdx];
-        const tIdx = (chap.topics || []).findIndex(top => top.id === d.id || top.name.toLowerCase() === (d.name || '').toLowerCase());
-        if (tIdx !== -1) {
-          const top = chap.topics[tIdx];
-          studiedTopicsList.push({
-            id: top.id,
-            name: top.name,
-            subjectId: sub.id,
-            subjectName: sub.name,
-            subjectCode: sub.code,
-            chapterName: chap.name,
-            chapterNumber: cIdx + 1,
-            topicNumber: tIdx + 1,
-          });
-          return;
+        const top = (chap.topics || []).find(
+          (t) => t.id === d.id || (cleanName && !isUuid && t.name.toLowerCase() === cleanName.toLowerCase())
+        );
+        if (top) {
+          cleanName = top.name;
+          chName = chap.name;
+          sName = sub.name;
+          sId = sub.id;
+          sCode = sub.code;
+          break;
         }
       }
+      if (cleanName && !isUuid) break;
     }
+
+    // If still a UUID or empty or body fluids, do not include ghost entry
+    if (!cleanName || isUuid || cleanName.toLowerCase().includes('body fluids')) return;
+
+    studiedTopicsList.push({
+      id: d.id,
+      name: cleanName,
+      subjectId: sId || 'subj-biology',
+      subjectName: sName || 'Biology',
+      subjectCode: sCode || 'BIO',
+      chapterName: chName || 'Human Physiology',
+      chapterNumber: 1,
+      topicNumber: studiedTopicsList.length + 1,
+    });
   });
 
   const activeSubject = effectiveCurriculum.find(s => s.id === selectedSubjectId) || effectiveCurriculum[0];
@@ -181,11 +205,10 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
             <button
               type="button"
               onClick={() => setActiveFilter(activeFilter === 'studied-chapters' ? 'all' : 'studied-chapters')}
-              className={`rounded-xl p-2 text-center transition cursor-pointer border text-left flex flex-col items-center justify-center ${
-                activeFilter === 'studied-chapters'
-                  ? 'bg-white/30 border-white ring-2 ring-teal-300 shadow-sm'
-                  : 'bg-white/10 hover:bg-white/20 border-white/10'
-              }`}
+              className={`rounded-xl p-2 text-center transition cursor-pointer border text-left flex flex-col items-center justify-center ${activeFilter === 'studied-chapters'
+                ? 'bg-white/30 border-white ring-2 ring-teal-300 shadow-sm'
+                : 'bg-white/10 hover:bg-white/20 border-white/10'
+                }`}
               title="Click to inspect studied chapters"
             >
               <p className="text-xs font-bold text-teal-200">{studiedChaptersList.length} / {totalChapters}</p>
@@ -199,11 +222,10 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
             <button
               type="button"
               onClick={() => setActiveFilter(activeFilter === 'studied-topics' ? 'all' : 'studied-topics')}
-              className={`rounded-xl p-2 text-center transition cursor-pointer border text-left flex flex-col items-center justify-center ${
-                activeFilter === 'studied-topics'
-                  ? 'bg-emerald-500/30 border-emerald-300 ring-2 ring-emerald-300 shadow-sm'
-                  : 'bg-white/10 hover:bg-white/20 border-white/10'
-              }`}
+              className={`rounded-xl p-2 text-center transition cursor-pointer border text-left flex flex-col items-center justify-center ${activeFilter === 'studied-topics'
+                ? 'bg-emerald-500/30 border-emerald-300 ring-2 ring-emerald-300 shadow-sm'
+                : 'bg-white/10 hover:bg-white/20 border-white/10'
+                }`}
               title="Click to view which topics are studied"
             >
               <p className="text-xs font-bold text-emerald-300">{studiedTopicsList.length} / {totalTopics}</p>
@@ -348,11 +370,10 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
             <button
               key={sub.id}
               onClick={() => setSelectedSubjectId(sub.id)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
-                selectedSubjectId === sub.id
-                  ? 'bg-teal-600 text-white shadow-xs'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
-              }`}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${selectedSubjectId === sub.id
+                ? 'bg-teal-600 text-white shadow-xs'
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                }`}
             >
               {sub.name}
             </button>
@@ -360,7 +381,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
         </div>
 
         {/* Scrollable Curriculum Chapters & Topics Status */}
-        <div className="p-4 space-y-3 flex-1 overflow-y-auto">
+        <div className="p-4 space-y-3 flex-1 overflow-y-auto overflow-x-hidden">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
               {activeSubject?.name} Chapters & Topics
@@ -371,18 +392,17 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
           </div>
 
           {activeSubject?.chapters?.map((chap, cIdx) => {
-            const chapDone = isChapterCompleted(chap.id, student.id) || isChapterCompleted(chap.name, student.id);
             const chapTopics = chap.topics || [];
             const completedInChap = chapTopics.filter(t => isTopicCompleted(t.id, student.id) || isTopicCompleted(t.name, student.id)).length;
+            const chapDone = isChapterCompleted(chap.id, student.id) || isChapterCompleted(chap.name, student.id) || (chapTopics.length > 0 && completedInChap === chapTopics.length);
 
             return (
               <div
                 key={chap.id}
-                className={`p-3 rounded-2xl border transition ${
-                  chapDone
-                    ? 'bg-emerald-50/40 border-emerald-200'
-                    : 'bg-white border-gray-200'
-                }`}
+                className={`p-3 rounded-2xl border transition ${chapDone
+                  ? 'bg-emerald-50/40 border-emerald-200'
+                  : 'bg-white border-gray-200'
+                  }`}
               >
                 {/* Chapter Status Header */}
                 <div className="flex items-start justify-between gap-2 mb-2">
@@ -400,11 +420,10 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                     )}
                   </div>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border ${
-                      chapDone
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                        : 'bg-gray-100 text-gray-500 border-gray-200'
-                    }`}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border ${chapDone
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-gray-100 text-gray-500 border-gray-200'
+                      }`}
                   >
                     <i className={`fas ${chapDone ? 'fa-check-circle text-emerald-600' : 'fa-clock text-gray-400'} text-[9px]`} />
                     <span>{chapDone ? 'Studied' : 'Not Studied'}</span>
@@ -423,9 +442,8 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                     return (
                       <div
                         key={top.id}
-                        className={`flex items-center justify-between p-1.5 rounded-lg text-xs ${
-                          topDone ? 'bg-emerald-50/70 border border-emerald-100' : 'bg-gray-50/60'
-                        }`}
+                        className={`flex items-center justify-between p-1.5 rounded-lg text-xs ${topDone ? 'bg-emerald-50/70 border border-emerald-100' : 'bg-gray-50/60'
+                          }`}
                       >
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <span className="text-[10px] text-gray-400 font-bold shrink-0">
@@ -436,11 +454,10 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
                           </span>
                         </div>
                         <span
-                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 flex items-center gap-1 ${
-                            topDone
-                              ? 'bg-emerald-200/60 text-emerald-800'
-                              : 'bg-gray-200/60 text-gray-500'
-                          }`}
+                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 flex items-center gap-1 ${topDone
+                            ? 'bg-emerald-200/60 text-emerald-800'
+                            : 'bg-gray-200/60 text-gray-500'
+                            }`}
                         >
                           <i className={`fas ${topDone ? 'fa-check text-emerald-600' : 'fa-minus text-gray-400'} text-[8px]`} />
                           <span>{topDone ? 'Studied' : 'Pending'}</span>

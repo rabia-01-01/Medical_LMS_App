@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useData, Course, Resource } from '../context/DataContext';
+import { useData, Course, Resource, deduplicateCompletedChapters } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { CurriculumBrowser, useSubjects, useChapters } from '../features/curriculum';
-import { resourceService, normalizeResourceType, useResources } from '../features/resources';
+import { resourceService, normalizeResourceType, useResources, deduplicateAndMergeResources } from '../features/resources';
 import { AssessmentCreator } from '../features/assessments';
 import { AIMCQGenerator } from '../components/AdminAIMCQGenerator';
 import { StudentStudyProgressModal } from '../components/StudentStudyProgressModal';
@@ -11,30 +11,18 @@ import { StudentStudyProgressModal } from '../components/StudentStudyProgressMod
 // ==================== FACULTY DASHBOARD ====================
 export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const [showAIMCQModal, setShowAIMCQModal] = useState(false);
-  const [selectedBatchFilter, setSelectedBatchFilter] = useState<'All' | 'Batch 1 (Dec)' | 'Batch 2 (May/June)'>('All');
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('All');
   const [inspectingStudent, setInspectingStudent] = useState<{ id: string; name: string; email?: string; batch?: string; avatar?: string } | null>(null);
   const { user } = useAuth();
-  const { courses, resources, quizzes, notifications, users, getStudentProgress } = useData();
+  const { courses, resources, quizzes, notifications, users, getStudentProgress, cohortBatches } = useData();
   const enrolledStudents = useMemo(() => users.filter(u => u.role === 'student'), [users]);
   const { resources: cloudResources } = useResources();
   const assignedCourses = useMemo(() => courses.filter(c => (c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
   const adminCourses = useMemo(() => courses.filter(c => !(c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
 
   const myResources = useMemo(() => {
-    const ids = new Set<string>();
-    const list: any[] = [];
-    cloudResources.forEach((cr) => {
-      if (cr.created_by === user?.id || !cr.created_by) {
-        ids.add(cr.id);
-        list.push(cr);
-      }
-    });
-    resources.forEach((r) => {
-      if (r.uploaderId === user?.id && !ids.has(r.id)) {
-        list.push(r);
-      }
-    });
-    return list;
+    const merged = deduplicateAndMergeResources(cloudResources, resources);
+    return merged.filter(r => r.uploaderId === user?.id || !r.uploaderId);
   }, [cloudResources, resources, user?.id]);
   const myQuizzes = quizzes.filter(q => q.createdById === user?.id);
   const unreadNotifs = notifications.filter(n => !n.read).length;
@@ -93,6 +81,10 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
           <button onClick={() => onNavigate('community')} className="card flex flex-col items-center py-4 active:bg-gray-50">
             <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mb-2"><i className="fas fa-comments text-blue-600" /></div>
             <span className="text-xs font-medium text-gray-700">Community</span>
+          </button>
+          <button onClick={() => onNavigate('departments')} className="card flex flex-col items-center py-4 active:bg-gray-50">
+            <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mb-2"><i className="fas fa-layer-group text-indigo-600" /></div>
+            <span className="text-xs font-medium text-gray-700">Batches</span>
           </button>
         </div>
 
@@ -154,12 +146,12 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
           </div>
 
           {/* Batch Filter */}
-          <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
-            {(['All', 'Batch 1 (Dec)', 'Batch 2 (May/June)'] as const).map(b => (
+          <div className="flex flex-wrap gap-1.5 bg-gray-100 p-1 rounded-xl">
+            {['All', ...(cohortBatches || []).map(b => b.name)].map(b => (
               <button
                 key={b}
                 onClick={() => setSelectedBatchFilter(b)}
-                className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition ${
+                className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-bold transition whitespace-nowrap ${
                   selectedBatchFilter === b
                     ? 'bg-white text-teal-700 shadow-2xs'
                     : 'text-gray-500 hover:text-gray-700'
@@ -173,11 +165,16 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
           {/* Student Progress Cards */}
           <div className="space-y-2">
             {enrolledStudents
-              .filter(st => selectedBatchFilter === 'All' || st.batch === selectedBatchFilter)
+              .filter(st => {
+                if (selectedBatchFilter === 'All') return true;
+                if (selectedBatchFilter === 'Batch 1 (Dec)') return st.batch === 'Batch 1 (Dec)' || !st.batch || st.batch.includes('1');
+                if (selectedBatchFilter === 'Batch 2 (May/June)') return st.batch === 'Batch 2 (May/June)' || st.batch?.includes('2');
+                return st.batch === selectedBatchFilter;
+              })
               .map(student => {
                 const prog = getStudentProgress(student.id);
-                const chaps = prog?.completedChapters?.length || 0;
-                const topics = prog?.completedTopics?.length || 0;
+                const chaps = deduplicateCompletedChapters(prog?.completedChapters || []).length;
+                const topics = (prog?.completedTopicDetails || []).filter(d => d.name && !d.name.toLowerCase().includes('body fluids') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.name.trim())).length || (prog?.completedTopics || []).filter(t => !t.toLowerCase().includes('body fluids') && !t.includes('-')).length;
 
                 return (
                   <div
@@ -547,13 +544,19 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
 
       const fileToUpload = selectedFile || new Blob([formData.fileData || ''], { type: formData.mimeType || 'application/pdf' });
 
+      // Resolve human-readable subject and chapter
+      const resolvedSubject = formData.subject || (subjects.find((s: any) => s.id === formData.subjectId)?.name || 'General');
+      const resolvedChapter = chapters.find((c: any) => c.id === formData.chapterId)?.name || null;
+
       // 1. Supabase Storage upload + PostgreSQL insert
       const created = await resourceService.createResource({
         title: formData.title,
-        description: `${formData.examCategory} • ${formData.subject || 'General'}`,
+        description: `${formData.examCategory} • ${resolvedSubject}`,
         resourceType: normalizeResourceType(formData.type),
         subjectId: formData.subjectId || subjects[0]?.id || 'sub-general',
         chapterId: formData.chapterId || null,
+        subjectName: resolvedSubject,
+        chapterName: resolvedChapter,
         status: 'PUBLISHED',
         file: fileToUpload,
         fileName: formData.fileName,
@@ -563,16 +566,18 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
         readingContent: formData.readingContent.trim() || undefined,
       }, user.id, user.name);
 
-      // 2. DataContext state update
+      // 2. DataContext state update with identical id and resolved subject
       addResource({
+        id: created.id,
         title: formData.title,
         type: formData.type,
-        subject: formData.subject || (subjects.find((s: any) => s.id === formData.subjectId)?.name || 'General'),
+        subject: resolvedSubject,
         courseId: formData.courseId,
         uploaderId: user.id,
         uploaderName: user.name,
-        size: formData.size,
+        size: formData.size || created.sizeFormatted || 'Cloud',
         status: 'published',
+        batch: 'All',
         examCategory: formData.examCategory,
         fileName: formData.fileName,
         fileData: formData.fileData,
@@ -1173,39 +1178,8 @@ export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; o
 
   // Merge cloud resources with local DataContext resources
   const myResources = useMemo(() => {
-    const list: any[] = [];
-    const seen = new Set<string>();
-
-    cloudResources.forEach((cr) => {
-      if (cr.created_by === user?.id || !cr.created_by) {
-        seen.add(cr.id);
-        list.push({
-          id: cr.id,
-          title: cr.title,
-          type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
-          subject: cr.subjectName || 'General',
-          courseId: cr.subject_id,
-          uploaderId: cr.created_by,
-          uploaderName: cr.creatorName || user?.name || 'Faculty',
-          date: cr.created_at?.split('T')[0] || 'Recent',
-          size: cr.sizeFormatted || 'Cloud',
-          status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
-          examCategory: 'Medical',
-          fileName: cr.file?.file_name || 'document.pdf',
-          storagePath: cr.file?.storage_path,
-          signedUrl: cr.signedUrl,
-          fileData: cr.fileData,
-        });
-      }
-    });
-
-    localResources.forEach((lr) => {
-      if ((lr.uploaderId === user?.id || !lr.uploaderId) && !seen.has(lr.id)) {
-        list.push(lr);
-      }
-    });
-
-    return list;
+    const merged = deduplicateAndMergeResources(cloudResources, localResources);
+    return merged.filter(r => r.uploaderId === user?.id || !r.uploaderId);
   }, [cloudResources, localResources, user]);
 
   const types = ['All', 'PDF', 'Video', 'Notes', 'PYQ', 'Assignment', 'Syllabus', 'Q.Paper', 'Practice'];

@@ -29,6 +29,7 @@ interface CurriculumBrowserProps {
   onSelectTopic?: (topicId: string, topicName: string) => void;
   onNavigateToResource?: (resource: any) => void;
   canManage?: boolean;
+  hideSubjectTabs?: boolean;
 }
 
 
@@ -168,9 +169,8 @@ function SortableTopicItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-2.5 bg-gray-50 hover:bg-teal-50/50 border rounded-xl flex items-center justify-between transition ${
-        isDragging ? 'border-teal-500 shadow-md bg-teal-50 ring-2 ring-teal-200' : 'border-gray-200'
-      }`}
+      className={`p-2.5 bg-gray-50 hover:bg-teal-50/50 border rounded-xl flex items-center justify-between transition ${isDragging ? 'border-teal-500 shadow-md bg-teal-50 ring-2 ring-teal-200' : 'border-gray-200'
+        }`}
     >
       <div
         onClick={onSelect}
@@ -210,7 +210,7 @@ function SortableTopicItem({
 // Medical Clinical Pearls & High-Yield Blueprint Generator for Chapters
 function getChapterStudyGuide(chapterName: string, subjectName?: string) {
   const lower = chapterName.toLowerCase();
-  
+
   if (lower.includes('physio') || lower.includes('organ') || lower.includes('human')) {
     return {
       highYieldPoints: [
@@ -280,6 +280,7 @@ export function CurriculumBrowser({
   onSelectTopic,
   onNavigateToResource,
   canManage = false,
+  hideSubjectTabs = false,
 }: CurriculumBrowserProps) {
   const { user, isViewingAs, viewingAsUser } = useAuth();
   const activeUser = isViewingAs && viewingAsUser ? viewingAsUser : user;
@@ -367,7 +368,7 @@ export function CurriculumBrowser({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    // Unified study materials list
+  // Unified study materials list
   const allMaterials = useMemo<any[]>(() => {
     const list: any[] = [];
     const seen = new Set<string>();
@@ -489,7 +490,7 @@ export function CurriculumBrowser({
     try {
       sessionStorage.removeItem('lms_curriculum_active_topic');
       sessionStorage.removeItem('lms_curriculum_active_subject');
-    } catch {}
+    } catch { }
   };
 
   const handleTopicClick = (
@@ -792,7 +793,7 @@ export function CurriculumBrowser({
     setChapterMasteredMap(updated);
     try {
       localStorage.setItem('lms_mastered_chapters', JSON.stringify(updated));
-    } catch {}
+    } catch { }
 
     if (isNow) {
       confetti({
@@ -827,6 +828,24 @@ export function CurriculumBrowser({
         subjectName: activeSubject?.name,
       }
     );
+
+    // Update chapterMasteredMap immediately so chapter badge and completed state update in real-time
+    const targetChapId = chapterId || activeSubject?.chapters?.find(c => c.topics?.some(t => t.id === topicId))?.id;
+    if (targetChapId) {
+      const chap = activeSubject?.chapters?.find(c => c.id === targetChapId) ||
+        curriculum.flatMap(s => s.chapters).find(c => c.id === targetChapId);
+      if (chap && chap.topics) {
+        const allDone = chap.topics.every(t =>
+          t.id === topicId ? isNow : (isTopicCompleted(t.id, activeUser?.id) || isTopicCompleted(t.name, activeUser?.id))
+        );
+        setChapterMasteredMap(prev => {
+          const updated = { ...prev, [chap.id]: allDone };
+          try { localStorage.setItem('lms_mastered_chapters', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+      }
+    }
+
     if (isNow) {
       confetti({
         particleCount: 50,
@@ -872,7 +891,7 @@ export function CurriculumBrowser({
     if (res) {
       setSuccessMessage(`Topic "${newTopicName.trim()}" added to chapter!`);
       setTimeout(() => setSuccessMessage(null), 3000);
-      
+
       // Update modal chapter topic list if study hub is currently open
       if (activeStudyChapter && activeStudyChapter.chapter.id === chapterId) {
         setActiveStudyChapter(prev => prev ? {
@@ -910,7 +929,7 @@ export function CurriculumBrowser({
   const studyGuide = activeStudyChapter ? getChapterStudyGuide(activeStudyChapter.chapter.name, activeSubject?.name) : null;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 overflow-x-hidden">
       {/* Toast Notification */}
       <AnimatePresence>
         {successMessage && (
@@ -932,38 +951,38 @@ export function CurriculumBrowser({
       </AnimatePresence>
 
       {/* Subject Selector Tabs - Clean Non-scrolling Flex Wrap with Full Subject Names */}
-      <div className="flex flex-wrap gap-1.5 pb-1 overflow-x-hidden no-scrollbar">
-        {curriculum.map((subj) => {
-          const isActive = activeSubject?.id === subj.id;
-          return (
-            <button
-              key={subj.id}
-              type="button"
-              onClick={() => {
-                setActiveSubjectId(subj.id);
-                if (subj.chapters.length > 0) {
-                  setExpandedChapterId(subj.chapters[0].id);
-                } else {
-                  setExpandedChapterId(null);
-                }
-              }}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs ${
-                isActive
+      {!hideSubjectTabs && (
+        <div className="flex flex-wrap gap-1.5 pb-1 overflow-x-hidden no-scrollbar">
+          {curriculum.map((subj) => {
+            const isActive = activeSubject?.id === subj.id;
+            return (
+              <button
+                key={subj.id}
+                type="button"
+                onClick={() => {
+                  setActiveSubjectId(subj.id);
+                  if (subj.chapters.length > 0) {
+                    setExpandedChapterId(subj.chapters[0].id);
+                  } else {
+                    setExpandedChapterId(null);
+                  }
+                }}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs ${isActive
                   ? 'bg-gradient-to-r from-[#0f2b46] to-[#1a3a5c] text-white ring-2 ring-teal-400/50 shadow-xs'
                   : 'bg-white text-gray-800 border border-gray-200 hover:border-teal-300 hover:bg-teal-50/50'
-              }`}
-            >
-              <i className={`fas ${getSubjectIcon(subj.code)} text-xs ${isActive ? 'text-teal-300' : ''}`} />
-              <span className="font-bold">{subj.name}</span>
-              <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-md ${
-                isActive ? 'bg-teal-400/20 text-teal-200' : 'bg-gray-100 text-gray-500'
-              }`}>
-                {subj.chapters.length} Ch
-              </span>
-            </button>
-          );
-        })}
-      </div>
+                  }`}
+              >
+                <i className={`fas ${getSubjectIcon(subj.code)} text-xs ${isActive ? 'text-teal-300' : ''}`} />
+                <span className="font-bold">{subj.name}</span>
+                <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-md ${isActive ? 'bg-teal-400/20 text-teal-200' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                  {subj.chapters.length} Ch
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Active Subject Header & Action */}
       <div className="flex items-center justify-between pt-1">
@@ -1032,15 +1051,20 @@ export function CurriculumBrowser({
         ) : (
           chapters.map((chapter, idx) => {
             const isExpanded = expandedChapterId === chapter.id;
-            const isMastered = isChapterCompleted(chapter.id, activeUser?.id) || !!chapterMasteredMap[chapter.id];
+            const allTopicsDone = (chapter.topics || []).length > 0 && (chapter.topics || []).every(t =>
+              isTopicCompleted(t.id, activeUser?.id) || isTopicCompleted(t.name, activeUser?.id)
+            );
+            const isMastered = isChapterCompleted(chapter.id, activeUser?.id) ||
+              isChapterCompleted(chapter.name, activeUser?.id) ||
+              !!chapterMasteredMap[chapter.id] ||
+              allTopicsDone;
             const chapterStudents = getChapterCompletions(chapter.id);
 
             return (
               <div
                 key={chapter.id}
-                className={`border rounded-xl transition overflow-hidden bg-white ${
-                  isExpanded ? 'border-teal-400/60 shadow-xs ring-1 ring-teal-400/20' : 'border-gray-200'
-                }`}
+                className={`border rounded-xl transition overflow-hidden bg-white ${isExpanded ? 'border-teal-400/60 shadow-xs ring-1 ring-teal-400/20' : 'border-gray-200'
+                  }`}
               >
                 {/* Clickable Chapter Header */}
                 <div
@@ -1050,9 +1074,8 @@ export function CurriculumBrowser({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <span className={`w-5 h-5 rounded-md text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
-                        isMastered ? 'bg-emerald-500 text-white' : 'bg-teal-100/80 text-teal-800'
-                      }`}>
+                      <span className={`w-5 h-5 rounded-md text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${isMastered ? 'bg-emerald-500 text-white' : 'bg-teal-100/80 text-teal-800'
+                        }`}>
                         {isMastered ? '✓' : idx + 1}
                       </span>
                       <p className="text-xs font-bold text-gray-900 group-hover:text-teal-700 transition leading-snug">
@@ -1069,9 +1092,8 @@ export function CurriculumBrowser({
                       title={isExpanded ? "Collapse topics" : "Expand topics"}
                     >
                       <i
-                        className={`fas fa-chevron-down text-xs transition-transform duration-200 ${
-                          isExpanded ? 'rotate-180 text-teal-600' : ''
-                        }`}
+                        className={`fas fa-chevron-down text-xs transition-transform duration-200 ${isExpanded ? 'rotate-180 text-teal-600' : ''
+                          }`}
                       />
                     </button>
                   </div>
@@ -1098,57 +1120,56 @@ export function CurriculumBrowser({
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                    {!isFacultyOrAdmin ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleMasterChapter(chapter.id, chapter.name);
-                        }}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition flex items-center gap-1 border shadow-2xs ${
-                          isMastered
+                      {!isFacultyOrAdmin ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleMasterChapter(chapter.id, chapter.name);
+                          }}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition flex items-center gap-1 border shadow-2xs ${isMastered
                             ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600'
                             : 'bg-white hover:bg-teal-50 text-gray-700 hover:text-teal-700 border-gray-300'
-                        }`}
-                        title={isMastered ? "Chapter completed! Click to unmark" : "Mark chapter as completed"}
-                      >
-                        <i className={`fas ${isMastered ? 'fa-check-circle' : 'fa-circle-check'} text-[9px]`} />
-                        <span>{isMastered ? 'Completed' : 'Mark As Completed'}</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setViewingCompletionsModal({
-                            title: `Chapter: ${chapter.name}`,
-                            type: 'Chapter',
-                            students: chapterStudents,
-                          });
-                        }}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full transition flex items-center gap-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200"
-                        title="Click to view students who completed this chapter"
-                      >
-                        <i className="fas fa-user-check text-[9px]" />
-                        <span>{chapterStudents.length} Studied</span>
-                      </button>
-                    )}
+                            }`}
+                          title={isMastered ? "Chapter completed! Click to unmark" : "Mark chapter as completed"}
+                        >
+                          <i className={`fas ${isMastered ? 'fa-check-circle' : 'fa-circle-check'} text-[9px]`} />
+                          <span>{isMastered ? 'Completed' : 'Mark As Completed'}</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewingCompletionsModal({
+                              title: `Chapter: ${chapter.name}`,
+                              type: 'Chapter',
+                              students: chapterStudents,
+                            });
+                          }}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full transition flex items-center gap-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200"
+                          title="Click to view students who completed this chapter"
+                        >
+                          <i className="fas fa-user-check text-[9px]" />
+                          <span>{chapterStudents.length} Studied</span>
+                        </button>
+                      )}
 
-                    {isFacultyOrAdmin && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(`Delete chapter "${chapter.name}" and its topics?`)) {
-                            removeChapter(chapter.id);
-                          }
-                        }}
-                        className="text-gray-300 hover:text-red-500 text-xs p-1"
-                        title="Delete chapter"
-                      >
-                        <i className="fas fa-trash" />
-                      </button>
-                    )}
+                      {isFacultyOrAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`Delete chapter "${chapter.name}" and its topics?`)) {
+                              removeChapter(chapter.id);
+                            }
+                          }}
+                          className="text-gray-300 hover:text-red-500 text-xs p-1"
+                          title="Delete chapter"
+                        >
+                          <i className="fas fa-trash" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
                 {/* Topics Panel */}
                 {isExpanded && (
@@ -1162,77 +1183,75 @@ export function CurriculumBrowser({
                         const isTopicDone = isTopicCompleted(topic.id, activeUser?.id);
                         const topicStudents = getTopicCompletions(topic.id);
                         return (
-                        <div
-                          key={topic.id}
-                          onClick={() => handleTopicClick(topic, chapter, idx, tIdx)}
-                          className={`p-2 rounded-lg bg-white border border-gray-100 flex items-center justify-between text-left transition ${
-                            onSelectTopic ? 'hover:border-teal-300 cursor-pointer shadow-2xs' : ''
-                          }`}
-                        >
-                          <div className="flex items-start gap-2 min-w-0 flex-1">
-                            <span className="text-[10px] text-teal-600 font-bold mt-0.5">
-                              {idx + 1}.{tIdx + 1}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-gray-700 leading-snug">{topic.name}</p>
-                              {topic.description && (
-                                <p className="text-[10px] text-gray-400 line-clamp-1">{topic.description}</p>
+                          <div
+                            key={topic.id}
+                            onClick={() => handleTopicClick(topic, chapter, idx, tIdx)}
+                            className={`p-2 rounded-lg bg-white border border-gray-100 flex items-center justify-between text-left transition ${onSelectTopic ? 'hover:border-teal-300 cursor-pointer shadow-2xs' : ''
+                              }`}
+                          >
+                            <div className="flex items-start gap-2 min-w-0 flex-1">
+                              <span className="text-[10px] text-teal-600 font-bold mt-0.5">
+                                {idx + 1}.{tIdx + 1}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold text-gray-700 leading-snug">{topic.name}</p>
+                                {topic.description && (
+                                  <p className="text-[10px] text-gray-400 line-clamp-1">{topic.description}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {!isFacultyOrAdmin ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleTopicCompletion(topic.id, topic.name, chapter.id, chapter.name);
+                                  }}
+                                  className={`text-[9px] font-bold px-2 py-0.5 rounded-md transition flex items-center gap-1 border shadow-2xs ${isTopicDone
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300'
+                                    }`}
+                                  title={isTopicDone ? "Topic completed! Click to unmark" : "Mark this topic as completed"}
+                                >
+                                  <i className={`fas ${isTopicDone ? 'fa-check' : 'fa-circle'} text-[8px]`} />
+                                  <span>{isTopicDone ? 'Completed' : 'Mark As Completed'}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingCompletionsModal({
+                                      title: `Topic: ${topic.name}`,
+                                      type: 'Topic',
+                                      students: topicStudents,
+                                    });
+                                  }}
+                                  className="text-[9px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded flex items-center gap-1"
+                                  title="Click to view students who studied this topic"
+                                >
+                                  <i className="fas fa-user-check text-[8px]" />
+                                  <span>{topicStudents.length} Studied</span>
+                                </button>
+                              )}
+
+                              {isFacultyOrAdmin && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Delete topic "${topic.name}"?`)) {
+                                      removeTopic(topic.id);
+                                    }
+                                  }}
+                                  className="text-gray-300 hover:text-red-500 text-[10px] p-1 ml-1"
+                                  title="Delete topic"
+                                >
+                                  <i className="fas fa-times" />
+                                </button>
                               )}
                             </div>
                           </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                            {!isFacultyOrAdmin ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleTopicCompletion(topic.id, topic.name, chapter.id, chapter.name);
-                                }}
-                                className={`text-[9px] font-bold px-2 py-0.5 rounded-md transition flex items-center gap-1 border shadow-2xs ${
-                                  isTopicDone
-                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
-                                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300'
-                                }`}
-                                title={isTopicDone ? "Topic completed! Click to unmark" : "Mark this topic as completed"}
-                              >
-                                <i className={`fas ${isTopicDone ? 'fa-check' : 'fa-circle'} text-[8px]`} />
-                                <span>{isTopicDone ? 'Completed' : 'Mark As Completed'}</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setViewingCompletionsModal({
-                                    title: `Topic: ${topic.name}`,
-                                    type: 'Topic',
-                                    students: topicStudents,
-                                  });
-                                }}
-                                className="text-[9px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded flex items-center gap-1"
-                                title="Click to view students who studied this topic"
-                              >
-                                <i className="fas fa-user-check text-[8px]" />
-                                <span>{topicStudents.length} Studied</span>
-                              </button>
-                            )}
-
-                            {isFacultyOrAdmin && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (confirm(`Delete topic "${topic.name}"?`)) {
-                                    removeTopic(topic.id);
-                                  }
-                                }}
-                                className="text-gray-300 hover:text-red-500 text-[10px] p-1 ml-1"
-                                title="Delete topic"
-                              >
-                                <i className="fas fa-times" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
+                        );
                       })
                     )}
 
@@ -1467,19 +1486,29 @@ export function CurriculumBrowser({
 
                 {/* Actions Footer */}
                 <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => handleToggleMasterChapter(activeStudyChapter.chapter.id, activeStudyChapter.chapter.name)}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                      isChapterCompleted(activeStudyChapter.chapter.id, activeUser?.id) || chapterMasteredMap[activeStudyChapter.chapter.id]
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                        : 'bg-teal-600 hover:bg-teal-700 text-white'
-                    }`}
-                  >
-                    <i className={`fas ${isChapterCompleted(activeStudyChapter.chapter.id, activeUser?.id) || chapterMasteredMap[activeStudyChapter.chapter.id] ? 'fa-check-circle' : 'fa-award'}`} />
-                    <span>
-                      {isChapterCompleted(activeStudyChapter.chapter.id, activeUser?.id) || chapterMasteredMap[activeStudyChapter.chapter.id] ? 'Chapter Completed (Click to Toggle)' : 'Mark As Completed'}
-                    </span>
-                  </button>
+                  {(() => {
+                    const isAllDone = (activeStudyChapter.chapter.topics || []).length > 0 &&
+                      (activeStudyChapter.chapter.topics || []).every(t => isTopicCompleted(t.id, activeUser?.id) || isTopicCompleted(t.name, activeUser?.id));
+                    const isChapMastered = isChapterCompleted(activeStudyChapter.chapter.id, activeUser?.id) ||
+                      isChapterCompleted(activeStudyChapter.chapter.name, activeUser?.id) ||
+                      chapterMasteredMap[activeStudyChapter.chapter.id] ||
+                      isAllDone;
+
+                    return (
+                      <button
+                        onClick={() => handleToggleMasterChapter(activeStudyChapter.chapter.id, activeStudyChapter.chapter.name)}
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${isChapMastered
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-teal-600 hover:bg-teal-700 text-white'
+                          }`}
+                      >
+                        <i className={`fas ${isChapMastered ? 'fa-check-circle' : 'fa-award'}`} />
+                        <span>
+                          {isChapMastered ? 'Chapter Completed (Click to Toggle)' : 'Mark As Completed'}
+                        </span>
+                      </button>
+                    );
+                  })()}
 
                   <button
                     onClick={handleCloseChapterStudyHub}
@@ -1575,11 +1604,10 @@ export function CurriculumBrowser({
                             setShowUploadForm((prev: boolean) => !prev);
                             setUploadError(null);
                           }}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-2xs ${
-                            showUploadForm
-                              ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                              : 'bg-teal-600 hover:bg-teal-700 text-white'
-                          }`}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-2xs ${showUploadForm
+                            ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                            : 'bg-teal-600 hover:bg-teal-700 text-white'
+                            }`}
                         >
                           <i className={`fas ${showUploadForm ? 'fa-times' : 'fa-plus'} text-[9px]`} />
                           <span>{showUploadForm ? 'Cancel' : 'Upload Material'}</span>
@@ -1631,9 +1659,8 @@ export function CurriculumBrowser({
                       {/* File Dropzone */}
                       <div
                         onClick={() => fileInputRef.current?.click()}
-                        className={`p-3 border-2 border-dashed rounded-xl cursor-pointer text-center transition flex flex-col items-center justify-center gap-1 ${
-                          uploadFile ? 'border-teal-500 bg-white shadow-2xs' : 'border-teal-300 hover:border-teal-500 bg-white/80'
-                        }`}
+                        className={`p-3 border-2 border-dashed rounded-xl cursor-pointer text-center transition flex flex-col items-center justify-center gap-1 ${uploadFile ? 'border-teal-500 bg-white shadow-2xs' : 'border-teal-300 hover:border-teal-500 bg-white/80'
+                          }`}
                       >
                         {uploadFile ? (
                           <div className="w-full flex items-center justify-between gap-2 text-left">
@@ -1863,11 +1890,10 @@ export function CurriculumBrowser({
               <div className="p-3 bg-white border-t border-gray-100 flex items-center justify-between gap-2 shrink-0">
                 <button
                   onClick={() => handleToggleTopicCompletion(activeStudyTopic.topic.id, activeStudyTopic.topic.name, activeStudyTopic.chapter.id, activeStudyTopic.chapter.name)}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs ${
-                    isTopicCompleted(activeStudyTopic.topic.id, activeUser?.id)
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-teal-600 hover:bg-teal-700 text-white'
-                  }`}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs ${isTopicCompleted(activeStudyTopic.topic.id, activeUser?.id)
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : 'bg-teal-600 hover:bg-teal-700 text-white'
+                    }`}
                 >
                   <i className={`fas ${isTopicCompleted(activeStudyTopic.topic.id, activeUser?.id) ? 'fa-check-circle' : 'fa-award'}`} />
                   <span>

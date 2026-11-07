@@ -10,6 +10,7 @@ export function mapDbRoleToAppRole(dbRole?: string | null): AppUserRole {
   const upper = dbRole.toUpperCase();
   if (upper === 'ADMIN') return 'admin';
   if (upper === 'FACULTY') return 'faculty';
+  if (upper === 'CONSULTANT') return 'consultant';
   return 'student';
 }
 
@@ -19,6 +20,7 @@ export function mapDbRoleToAppRole(dbRole?: string | null): AppUserRole {
 export function mapAppRoleToDbRole(appRole: AppUserRole): DbUserRole {
   if (appRole === 'admin') return 'ADMIN';
   if (appRole === 'faculty') return 'FACULTY';
+  if (appRole === 'consultant') return 'CONSULTANT';
   return 'STUDENT';
 }
 
@@ -28,6 +30,8 @@ function getDefaultAvatar(role: AppUserRole): string {
       return '👨‍💼';
     case 'faculty':
       return '👨‍⚕️';
+    case 'consultant':
+      return '💼';
     default:
       return '👩‍🎓';
   }

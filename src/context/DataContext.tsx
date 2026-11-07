@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { format } from 'date-fns';
+import { DEFAULT_CURRICULUM } from '../features/curriculum/curriculumService';
+import {
+  ConsultancyChecklistItem,
+  ConsultancyChecklistSubItem,
+  StudentConsultancyDossier,
+  ChecklistItemStatus,
+  DossierOverallStatus,
+  createDefaultChecklist,
+} from '../features/consultancy/types';
 
 export interface User {
   id: string;
@@ -7,7 +16,7 @@ export interface User {
   email: string;
   phone: string;
   password: string;
-  role: 'admin' | 'faculty' | 'student';
+  role: 'admin' | 'faculty' | 'student' | 'consultant';
   avatar: string;
   department?: string;
   batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)'
@@ -174,14 +183,19 @@ export interface StudentDocument {
   studentId: string;
   studentName: string;
   title: string;
-  category: 'Identity' | 'Academic' | 'Medical' | 'Financial';
-  status: 'Pending' | 'Verified' | 'Rejected';
+  category: 'Identity' | 'Academic' | 'Attestation' | 'Scholarship' | 'Enrolment' | 'Registration' | 'Examination' | 'Medical' | 'Financial';
+  status: 'Pending' | 'Verified' | 'Not Verified' | 'In Review/In Progress' | 'Rejected';
+  stageNumber?: number;
+  stageKey?: string;
   fileUrl?: string;
   fileName?: string;
+  fileSize?: string;
+  submissionSource?: string;
   submittedAt: string;
   verifiedAt?: string;
-  verifiedBy?: string; // 'Admin' | 'Agent'
+  verifiedBy?: string; // 'Admin' | 'Agent' | 'Dr. Marco Rossi (Consultant Agent)'
   remarks?: string;
+  subItems?: { id: string; title: string; status: 'pending' | 'verified' | 'rejected'; notes?: string }[];
 }
 
 export interface CompletedTopicDetail {
@@ -204,6 +218,44 @@ export interface StudentCurriculumProgress {
   lastUpdated: string;
 }
 
+export interface CohortBatch {
+  id: string;
+  name: string;
+  session: string;
+  season?: string;
+  badge?: string;
+  color?: string;
+  tag?: string;
+  description?: string;
+  maxStudents?: number;
+  createdAt?: string;
+}
+
+export const DEFAULT_COHORT_BATCHES: CohortBatch[] = [
+  {
+    id: 'batch-1',
+    name: 'Batch 1 (Dec)',
+    session: 'Winter Session: December – April',
+    season: 'Winter Cohort',
+    badge: 'Winter Session',
+    color: 'teal',
+    tag: 'Dec Intake',
+    maxStudents: 25,
+    description: 'Accelerated winter medical entrance preparation cohort covering all 7 core subjects.',
+  },
+  {
+    id: 'batch-2',
+    name: 'Batch 2 (May/June)',
+    session: 'Summer Session: May – October',
+    season: 'Summer Cohort',
+    badge: 'Summer Session',
+    color: 'purple',
+    tag: 'May/June Intake',
+    maxStudents: 25,
+    description: 'Comprehensive summer medical entrance foundation cohort covering all 7 core subjects.',
+  },
+];
+
 interface DataContextType {
   // Users (Admin Only Management)
   users: User[];
@@ -218,6 +270,9 @@ interface DataContextType {
   addDepartment: (dept: Omit<Department, 'id' | 'createdAt'>, actorRole?: string) => void;
   deleteDepartment: (id: string, actorRole?: string) => void;
   updateDepartment: (id: string, data: Partial<Department>, actorRole?: string) => void;
+  cohortBatches: CohortBatch[];
+  addCohortBatch: (batch: { name: string; session: string; season?: string; description?: string; maxStudents?: number }) => void;
+  deleteCohortBatch: (batchId: string, actorRole?: string) => void;
 
   // Courses
   courses: Course[];
@@ -299,6 +354,22 @@ interface DataContextType {
   getStudentProgress: (studentId?: string) => StudentCurriculumProgress | undefined;
   getChapterCompletions: (chapterId: string) => { studentId: string; studentName: string; studentBatch: string; avatar?: string }[];
   getTopicCompletions: (topicId: string) => { studentId: string; studentName: string; studentBatch: string; avatar?: string }[];
+
+  // Consultancy Dossier & Checklist (Consultant Agent Role)
+  consultancyDossiers: StudentConsultancyDossier[];
+  updateChecklistItemStatus: (
+    studentId: string,
+    itemId: string,
+    status: ChecklistItemStatus,
+    consultantNotes?: string,
+    subItemUpdates?: { id: string; status: 'pending' | 'verified' | 'rejected'; notes?: string }[]
+  ) => void;
+  addConsultancyDossier: (dossier: StudentConsultancyDossier) => void;
+  updateConsultancyDossier: (studentId: string, updates: Partial<StudentConsultancyDossier>) => void;
+  deleteConsultancyDossier: (studentId: string) => void;
+  getStudentDossier: (studentId?: string) => StudentConsultancyDossier | undefined;
+  isConsultancyOptedIn: (studentId?: string) => boolean;
+  setConsultancyOptIn: (studentId: string, optIn: boolean) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -327,74 +398,153 @@ function saveToStorage<T>(key: string, value: T): void {
 
 export const DEFAULT_STUDENT_DOCS: StudentDocument[] = [
   {
-    id: 'sdoc-1',
+    id: 'sdoc-passport',
     studentId: 'u-student-1',
     studentName: 'Mary',
-    title: 'NEET-UG Admit Card & Verification Slip',
-    category: 'Academic',
-    status: 'Verified',
-    submittedAt: '2026-10-10T10:00:00.000Z',
-    verifiedAt: '2026-10-15',
-    verifiedBy: 'Admin',
-    remarks: 'Roll number and photograph authenticated with NTA records.',
-  },
-  {
-    id: 'sdoc-2',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    title: '12th Standard Science Board Marksheet',
-    category: 'Academic',
-    status: 'Verified',
-    submittedAt: '2026-10-11T12:00:00.000Z',
-    verifiedAt: '2026-10-16',
-    verifiedBy: 'Agent',
-    remarks: 'Physics (92), Chemistry (95), Biology (98) verified via automated board API.',
-  },
-  {
-    id: 'sdoc-3',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    title: 'National Identity Proof (Aadhaar / Passport)',
+    stageNumber: 1,
+    stageKey: 'passport',
+    title: '1. Passport (Valid International Bio-data)',
     category: 'Identity',
     status: 'Verified',
-    submittedAt: '2026-10-12T14:30:00.000Z',
-    verifiedAt: '2026-10-17',
-    verifiedBy: 'Admin',
-    remarks: 'Biometric identity match confirmed.',
+    fileName: 'Passport_BioData_Page.pdf',
+    fileSize: '1.8 MB',
+    submittedAt: '2026-10-10T10:00:00.000Z',
+    verifiedAt: '2026-10-12',
+    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
+    remarks: 'Passport verified. Bio-data clear, expires in 2033, valid for full degree duration.',
   },
   {
-    id: 'sdoc-4',
+    id: 'sdoc-12th-moi',
     studentId: 'u-student-1',
     studentName: 'Mary',
-    title: 'Institutional Medical Fitness Certificate',
-    category: 'Medical',
-    status: 'Verified',
-    submittedAt: '2026-10-14T09:15:00.000Z',
-    verifiedAt: '2026-10-18',
-    verifiedBy: 'Agent',
-    remarks: 'Certified by Registered Medical Practitioner.',
-  },
-  {
-    id: 'sdoc-5',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    title: 'Batch 1 (Dec) Registration & Tuition Fee Receipt',
-    category: 'Financial',
-    status: 'Verified',
-    submittedAt: '2026-10-15T16:00:00.000Z',
-    verifiedAt: '2026-10-20',
-    verifiedBy: 'Admin',
-    remarks: 'Tuition and laboratory deposit received in full for Batch 1 (Dec).',
-  },
-  {
-    id: 'sdoc-6',
-    studentId: 'u-student-2',
-    studentName: 'Alex Rivera',
-    title: 'IMAT Exam Registration Slip',
+    stageNumber: 2,
+    stageKey: '12th_moi',
+    title: '2. Class 12th Marksheet, Passing Certs & MOI',
     category: 'Academic',
+    status: 'Verified',
+    fileName: 'Class12_Marksheet_Passing_MOI_Compiled.pdf',
+    fileSize: '3.4 MB',
+    submittedAt: '2026-10-12T11:20:00.000Z',
+    verifiedAt: '2026-10-14',
+    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
+    remarks: 'All 3 academic documents verified. PCB marksheet (94.6%), passing certificate, and MOI valid.',
+    subItems: [
+      { id: 'sub-12th-mark', title: 'Class 12th Marksheet (PCB aggregate & practicals)', status: 'verified', notes: 'Aggregate: 94.6% in PCB' },
+      { id: 'sub-12th-pass', title: 'Class 12th Passing Certificate / Migration', status: 'verified', notes: 'Original certificate verified' },
+      { id: 'sub-12th-moi', title: 'Medium of Instruction (MOI) Certificate in English', status: 'verified', notes: 'Issued by School Principal, 12 years English medium' },
+    ],
+  },
+  {
+    id: 'sdoc-hrd',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    stageNumber: 3,
+    stageKey: 'hrd',
+    title: '3. State HRD Attestation',
+    category: 'Attestation',
+    status: 'Verified',
+    fileName: 'HRD_Attested_Backside_Stamp.pdf',
+    fileSize: '2.1 MB',
+    submittedAt: '2026-10-19T09:15:00.000Z',
+    verifiedAt: '2026-10-20',
+    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
+    remarks: 'Regional state HRD seal confirmed with official countersignature.',
+  },
+  {
+    id: 'sdoc-apostille',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    stageNumber: 4,
+    stageKey: 'apostille',
+    title: '4. Apostille (MEA Hague)',
+    category: 'Attestation',
+    status: 'Verified',
+    fileName: 'MEA_Apostille_Sticker_Certificate.pdf',
+    fileSize: '1.9 MB',
+    submittedAt: '2026-10-25T14:10:00.000Z',
+    verifiedAt: '2026-10-26',
+    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
+    remarks: 'Hague Apostille sticker verified via MEA e-Sanad online QR code.',
+  },
+  {
+    id: 'sdoc-scholarship',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    stageNumber: 5,
+    stageKey: 'scholarship_docs',
+    title: '5. SCHOLARSHIP DOCS (Bank, Special, SDM, Translation & Legalisation)',
+    category: 'Scholarship',
+    status: 'In Review/In Progress',
+    fileName: 'Scholarship_Income_Bank_SDM_Draft.pdf',
+    fileSize: '4.2 MB',
+    submittedAt: '2026-10-29T12:00:00.000Z',
+    verifiedAt: undefined,
+    verifiedBy: undefined,
+    remarks: 'Bank Certificate, Special Certificate, and Notary/SDM/Apostille complete. Italian translation & legalisation pending.',
+    subItems: [
+      { id: 'sub-sch-bank', title: 'Bank Certificate (Balance & 6-month statement)', status: 'verified', notes: 'Closing balance confirmed, official bank seal' },
+      { id: 'sub-sch-special', title: 'Special Certificate (Family Composition & Annual Income)', status: 'verified', notes: 'Family composition & income certificate submitted' },
+      { id: 'sub-sch-notary', title: 'Notary, SDM, Apostille (Sub-Divisional Magistrate & MEA)', status: 'verified', notes: 'SDM attestation and MEA scholarship apostille completed' },
+      { id: 'sub-sch-trans', title: 'Translation & Legalisation (Sworn Italian translation & Consular legalisation)', status: 'pending', notes: 'Sent to Italian sworn translator in Rome. Delivery awaited.' },
+    ],
+  },
+  {
+    id: 'sdoc-pre-enrolment',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    stageNumber: 6,
+    stageKey: 'pre_enrolment',
+    title: '6. Pre registration evaluation & Pre enrolment (Universitaly / CIMEA DOV)',
+    category: 'Enrolment',
+    status: 'In Review/In Progress',
+    fileName: 'Universitaly_PreEnrolment_Summary.pdf',
+    fileSize: '2.5 MB',
+    submittedAt: '2026-11-02T16:30:00.000Z',
+    verifiedAt: undefined,
+    verifiedBy: undefined,
+    remarks: 'Universitaly pre-enrolment submitted. Awaiting CIMEA statement release to complete stage.',
+    subItems: [
+      { id: 'sub-univ-pre', title: 'Universitaly Pre-Enrolment Application Form & Code', status: 'verified', notes: 'Pre-enrolment submitted to Sapienza University of Rome' },
+      { id: 'sub-univ-eval', title: 'Pre-registration Academic Evaluation & Acceptance Letter', status: 'verified', notes: 'Eligibility evaluation approved by university international desk' },
+      { id: 'sub-univ-dov', title: 'CIMEA Statement of Comparability / DOV (Dichiarazione di Valore)', status: 'pending', notes: 'CIMEA DiploME certificate issuance in final verification' },
+    ],
+  },
+  {
+    id: 'sdoc-registration',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    stageNumber: 7,
+    stageKey: 'registration',
+    title: '7. Registration (University Matriculation)',
+    category: 'Registration',
     status: 'Pending',
-    submittedAt: '2026-10-25T11:00:00.000Z',
-    remarks: 'Pending Universitaly portal validation.',
+    fileName: 'Infostud_Registration_Draft.pdf',
+    fileSize: '1.2 MB',
+    submittedAt: '2026-11-04T10:00:00.000Z',
+    verifiedAt: undefined,
+    verifiedBy: undefined,
+    remarks: 'Scheduled following CIMEA release and scholarship voucher allocation.',
+  },
+  {
+    id: 'sdoc-examination',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    stageNumber: 8,
+    stageKey: 'examination',
+    title: '8. EXAMINATION (IMAT Admit Card & Clearance)',
+    category: 'Examination',
+    status: 'Pending',
+    fileName: 'IMAT_Registration_Confirmation.pdf',
+    fileSize: '1.5 MB',
+    submittedAt: '2026-11-05T14:20:00.000Z',
+    verifiedAt: undefined,
+    verifiedBy: undefined,
+    remarks: 'Candidate is actively preparing on the LMS (curriculum completed, 4/4 topics studied in Biology). Test center allocated.',
+    subItems: [
+      { id: 'sub-exam-reg', title: 'IMAT / Medical Entrance Registration Fee Receipt', status: 'verified', notes: 'Exam fee paid, registration confirmed' },
+      { id: 'sub-exam-hall', title: 'Official Examination Admit Card & Roll Number Verification', status: 'pending', notes: 'Admit card will be released 10 days prior to exam' },
+      { id: 'sub-exam-clear', title: 'Examination Day Medical Checklist & Center Clearance', status: 'pending', notes: 'Center: New Delhi / Rome Overseas Testing Center' },
+    ],
   },
 ];
 
@@ -409,17 +559,79 @@ export const DEFAULT_STUDENT_PROGRESS: StudentCurriculumProgress[] = [
     completedTopicDetails: [],
     lastUpdated: new Date().toISOString(),
   },
+];
+
+export const DEFAULT_CONSULTANCY_DOSSIERS: StudentConsultancyDossier[] = [
   {
-    studentId: 'u-student-2',
-    studentName: 'Alex Rivera',
+    studentId: 'u-student-1',
+    studentName: 'Mary',
+    studentEmail: 'mary@edu.in',
     studentBatch: 'Batch 2 (May/June)',
-    avatar: '👨‍🎓',
-    completedChapters: [],
-    completedTopics: [],
-    completedTopicDetails: [],
+    avatar: '👩‍🎓',
+    targetCountry: 'Italy',
+    targetCourse: 'Medicine and Surgery (Single-Cycle Degree / MD)',
+    targetUniversities: [
+      'Sapienza University of Rome (Medicine & Surgery)',
+      'University of Milan (International Medical School - IMS)',
+      'University of Bologna (School of Medicine)',
+    ],
+    consultantId: 'u-consultant-1',
+    consultantName: 'Dr. Marco Rossi (Consultant Agent)',
+    assignedAt: '2026-10-01T09:00:00Z',
+    overallStatus: 'IN_PROGRESS',
+    intake: '2026 / 2027 Academic Intake',
+    priority: 'High',
     lastUpdated: new Date().toISOString(),
+    notes: 'Aspirant has completed Class 12th PCB (94.6%), State HRD attestation and MEA Apostille. Sworn Italian translation and Universitaly pre-enrolment in active review.',
+    checklist: createDefaultChecklist(),
   },
 ];
+
+// Helper to resolve clean human-readable topic title and reject raw UUIDs
+function resolveTopicHumanName(id: string, candidate?: string): string {
+  if (candidate && candidate.trim()) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.trim());
+    if (!isUuid && !candidate.toLowerCase().includes('body fluids')) {
+      return candidate.trim();
+    }
+  }
+  for (const s of DEFAULT_CURRICULUM) {
+    for (const c of s.chapters || []) {
+      const t = (c.topics || []).find((top: any) => top.id === id || (candidate && top.name.toLowerCase() === candidate.toLowerCase()));
+      if (t) return t.name;
+    }
+  }
+  return '';
+}
+
+// Canonical chapter resolver to eliminate duplicate IDs and duplicate names
+export function getCanonicalChapterId(idOrName: string): string {
+  if (!idOrName) return '';
+  const trimmed = idOrName.trim();
+  for (const s of DEFAULT_CURRICULUM) {
+    for (const c of s.chapters || []) {
+      if (c.id === trimmed || c.name.toLowerCase() === trimmed.toLowerCase()) {
+        return c.id;
+      }
+    }
+  }
+  return trimmed;
+}
+
+// Deduplicate completed chapters so 1 physical chapter is counted as exactly 1
+export function deduplicateCompletedChapters(chapters: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  (chapters || []).forEach(ch => {
+    if (!ch || ch.toLowerCase().includes('body fluids')) return;
+    const canonical = getCanonicalChapterId(ch);
+    if (!seen.has(canonical.toLowerCase())) {
+      seen.add(canonical.toLowerCase());
+      result.push(canonical);
+    }
+  });
+  return result;
+}
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>(() => {
@@ -467,24 +679,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
           targetExam: 'NEET-UG',
         },
         {
-          id: 'u-student-2',
-          name: 'Alex Rivera',
-          email: 'alex@medical.lms',
-          phone: '+1 555-0103',
+          id: 'u-consultant-1',
+          name: 'Dr. Marco Rossi',
+          email: 'consultant@italia.medica',
+          phone: '+39 06 6987 1234',
           password: 'password',
-          role: 'student',
-          avatar: '👨‍🎓',
-          department: 'Pre-Clinical Sciences',
-          batch: 'Batch 2 (May/June)',
+          role: 'consultant',
+          avatar: '💼',
+          department: 'Overseas Admissions & Consular Directorate',
+          batch: 'All',
           status: 'active',
           createdAt: new Date().toISOString(),
-          targetExam: 'IMAT (Italy)',
+          targetExam: 'IMAT & Study in Italy Admissions',
         },
       ];
     }
-    return stored.map((u, i) => ({
+    const filtered = (stored || []).filter(u => u.name !== 'Alex Rivera' && u.id !== 'u-student-2' && u.email !== 'alex@medical.lms');
+    if (!filtered.some(u => u.role === 'consultant' || u.id === 'u-consultant-1')) {
+      filtered.push({
+        id: 'u-consultant-1',
+        name: 'Dr. Marco Rossi',
+        email: 'consultant@italia.medica',
+        phone: '+39 06 6987 1234',
+        password: 'password',
+        role: 'consultant',
+        avatar: '💼',
+        department: 'Overseas Admissions & Consular Directorate',
+        batch: 'All',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        targetExam: 'IMAT & Study in Italy Admissions',
+      });
+    }
+    try {
+      localStorage.setItem('sim_users', JSON.stringify(filtered));
+    } catch {}
+    return filtered.map((u) => ({
       ...u,
-      batch: u.batch || (u.role === 'student' ? (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)') : 'All'),
+      batch: u.batch || (u.role === 'student' ? 'Batch 1 (Dec)' : 'All'),
     }));
   });
 
@@ -552,7 +784,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           description: 'Accelerated revision and high-yield question series for May/June batch',
           subjects: ['Biology', 'Chemistry', 'Maths'],
           facultyIds: ['u-faculty-1'],
-          studentIds: ['u-student-2'],
+          studentIds: ['u-student-1'],
           batch: 'Batch 2 (May/June)',
           duration: '6 Months',
           icon: 'fa-stethoscope',
@@ -575,18 +807,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
         },
       ];
     }
-    return stored.map((c, i) => ({
+    return stored.map((c) => ({
       ...c,
-      batch: c.batch || (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)'),
+      studentIds: (c.studentIds || []).filter(id => id !== 'u-student-2'),
+      batch: c.batch || 'Batch 1 (Dec)',
     }));
   });
 
   const [resources, setResources] = useState<Resource[]>(() => {
     const stored = loadFromStorage<Resource[]>('sim_resources', []);
-    return stored.map((r, i) => ({
-      ...r,
-      batch: r.batch || (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)'),
-    }));
+    const deduplicated: Resource[] = [];
+    for (const r of stored) {
+      const rTitle = (r.title || '').trim().toLowerCase();
+      const rFile = (r.fileName || r.storagePath || '').replace(/^.*[\\\/]/, '').replace(/^\d+_/, '').trim().toLowerCase();
+      const match = deduplicated.find(d => {
+        if (d.id === r.id) return true;
+        if (d.storagePath && r.storagePath && d.storagePath === r.storagePath) return true;
+        const dTitle = (d.title || '').trim().toLowerCase();
+        const dFile = (d.fileName || d.storagePath || '').replace(/^.*[\\\/]/, '').replace(/^\d+_/, '').trim().toLowerCase();
+        return dTitle === rTitle && (dFile === rFile || d.fileName === r.fileName);
+      });
+      if (match) {
+        if ((!match.subject || match.subject === 'General') && r.subject && r.subject !== 'General') {
+          match.subject = r.subject;
+        }
+        if (!match.readingContent && r.readingContent) {
+          match.readingContent = r.readingContent;
+        }
+      } else {
+        deduplicated.push({
+          ...r,
+          batch: r.batch === 'Batch 1 (Dec)' && (r.uploaderName || r.uploaderId) ? 'All' : (r.batch || 'All'),
+        });
+      }
+    }
+    try {
+      localStorage.setItem('sim_resources', JSON.stringify(deduplicated));
+    } catch {}
+    return deduplicated;
   });
 
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => loadFromStorage('sim_announcements', []));
@@ -724,52 +982,152 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const [notifications, setNotifications] = useState<Notification[]>(() => loadFromStorage('sim_notifications', []));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => loadFromStorage('sim_audit', []));
-  const [studentDocuments, setStudentDocuments] = useState<StudentDocument[]>(() =>
-    loadFromStorage('sim_student_documents', DEFAULT_STUDENT_DOCS)
-  );
+  const [studentDocuments, setStudentDocuments] = useState<StudentDocument[]>(() => {
+    const stored = loadFromStorage<StudentDocument[]>('sim_student_documents', DEFAULT_STUDENT_DOCS);
+    const filtered = (stored || []).filter(d => d.studentId !== 'u-student-2' && d.studentName !== 'Alex Rivera');
+    // If stored contains the old 5 prototype documents (e.g. NEET-UG, sdoc-1, or count != 8), upgrade to the 8 official consultancy documents
+    const hasOld5Docs = filtered.length !== 8 || filtered.some(d => d.id === 'sdoc-1' || d.title?.toLowerCase().includes('neet-ug') || Boolean(d.submissionSource));
+    if (hasOld5Docs) {
+      saveToStorage('sim_student_documents', DEFAULT_STUDENT_DOCS);
+      return DEFAULT_STUDENT_DOCS;
+    }
+    return filtered;
+  });
+
+  const [cohortBatches, setCohortBatches] = useState<CohortBatch[]>(() => {
+    try {
+      const stored = localStorage.getItem('sim_cohort_batches');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      const legacyAdmin = localStorage.getItem('sim_admin_batches');
+      if (legacyAdmin) {
+        const parsed = JSON.parse(legacyAdmin);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const merged = [...DEFAULT_COHORT_BATCHES];
+          parsed.forEach((cb: any) => {
+            if (!merged.some(b => b.name.toLowerCase() === cb.name.toLowerCase())) {
+              merged.push({
+                id: cb.id || Date.now().toString(36),
+                name: cb.name,
+                session: cb.session || 'Academic Cohort Session',
+                season: 'Academic Cohort',
+                badge: 'Active Cohort',
+                color: 'blue',
+                tag: cb.name,
+                description: `Academic entrance cohort for ${cb.name} covering all core subjects.`,
+              });
+            }
+          });
+          return merged;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cohort batches:', e);
+    }
+    return DEFAULT_COHORT_BATCHES;
+  });
+
+  const addCohortBatch = (batch: { name: string; session: string; season?: string; description?: string; maxStudents?: number }) => {
+    const newBatch: CohortBatch = {
+      id: Date.now().toString(36),
+      name: batch.name.trim(),
+      session: batch.session.trim() || 'Academic Cohort Session',
+      season: batch.season || 'Academic Cohort',
+      badge: 'Active Cohort',
+      color: 'blue',
+      tag: batch.name.trim(),
+      maxStudents: batch.maxStudents && batch.maxStudents > 0 ? batch.maxStudents : 25,
+      description: batch.description || `Academic entrance cohort for ${batch.name.trim()} covering all core subjects.`,
+    };
+    setCohortBatches(prev => {
+      const updated = [...prev, newBatch];
+      try {
+        localStorage.setItem('sim_cohort_batches', JSON.stringify(updated));
+        const customOnly = updated.filter(b => b.id !== 'batch-1' && b.id !== 'batch-2');
+        localStorage.setItem('sim_admin_batches', JSON.stringify(customOnly));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const deleteCohortBatch = (batchId: string, actorRole?: string) => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can delete batches.');
+      return;
+    }
+    setCohortBatches(prev => {
+      const toDelete = prev.find(b => b.id === batchId || b.name === batchId);
+      const updated = prev.filter(b => b.id !== batchId && b.name !== batchId);
+      try {
+        localStorage.setItem('sim_cohort_batches', JSON.stringify(updated));
+        const customOnly = updated.filter(b => b.id !== 'batch-1' && b.id !== 'batch-2');
+        localStorage.setItem('sim_admin_batches', JSON.stringify(customOnly));
+      } catch {}
+      if (toDelete) {
+        addAuditLog({
+          action: 'Batch Deleted',
+          userId: 'admin',
+          userName: 'Administrator',
+          details: `Admin deleted cohort batch: ${toDelete.name}`
+        });
+      }
+      return updated;
+    });
+  };
+
   const [studentProgressList, setStudentProgressList] = useState<StudentCurriculumProgress[]>(() => {
     const raw = loadFromStorage('sim_student_progress', DEFAULT_STUDENT_PROGRESS);
-    return (raw || []).map((p: StudentCurriculumProgress) => {
+    const cleaned = (raw || [])
+      .filter((p: StudentCurriculumProgress) => p.studentId !== 'u-student-2' && p.studentName !== 'Alex Rivera')
+      .map((p: StudentCurriculumProgress) => {
       const details = p.completedTopicDetails || [];
       const validDetails: CompletedTopicDetail[] = [];
       const validTopics: string[] = [];
 
       details.forEach((d) => {
         if (!d.id) return;
-        // Purge dummy mock IDs and raw UUID strings stored as names
-        if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') return;
-        const isRawUuid = d.name && d.name.includes('-') && d.name.length > 25;
-        if (isRawUuid) return;
+        // Purge defaulted "Body Fluids and Circulation" and legacy dummy mock IDs
+        if (d.name && d.name.toLowerCase().includes('body fluids')) return;
+        if (d.id && d.id.toLowerCase().includes('body-fluids')) return;
+        if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') {
+          if (!d.name || d.name === d.id || d.name.toLowerCase().includes('body fluids')) return;
+        }
+        const resolved = resolveTopicHumanName(d.id, d.name);
+        if (!resolved || resolved.toLowerCase().includes('body fluids')) return;
         if (!validTopics.includes(d.id)) {
           validTopics.push(d.id);
           validDetails.push({
             ...d,
-            name: d.name || 'Core Topic',
+            name: resolved,
           });
         }
       });
 
-      // Also reconcile any completedTopics that match validDetails
-      (p.completedTopics || []).forEach((t: string) => {
-        if (t === 'top-bio-101' || t === 'top-bio-102' || t === 'top-bio-201') return;
-        if (t.includes('-') && t.length > 25 && !validDetails.some(d => d.id === t)) {
-          // Orphaned raw UUID with no detail entry - purge it
-          return;
-        }
-        const matchingDetail = validDetails.find(d => d.id === t || (d.name && d.name.toLowerCase() === t.toLowerCase()));
-        if (matchingDetail) {
-          if (!validTopics.includes(matchingDetail.id)) {
-            validTopics.push(matchingDetail.id);
-          }
-        }
-      });
+      // Deduplicate completedChapters to purge any defaulted Body Fluids and duplicates
+      const validChapters = deduplicateCompletedChapters(p.completedChapters || []);
 
       return {
         ...p,
+        completedChapters: validChapters,
         completedTopics: validTopics,
         completedTopicDetails: validDetails,
       };
     });
+
+    try {
+      localStorage.setItem('sim_student_progress', JSON.stringify(cleaned));
+    } catch {}
+    return cleaned;
+  });
+
+  const [consultancyDossiers, setConsultancyDossiers] = useState<StudentConsultancyDossier[]>(() => {
+    return loadFromStorage<StudentConsultancyDossier[]>('sim_consultancy_dossiers', DEFAULT_CONSULTANCY_DOSSIERS);
+  });
+
+  const [consultancyOptInMap, setConsultancyOptInMap] = useState<Record<string, boolean>>(() => {
+    return loadFromStorage<Record<string, boolean>>('sim_consultancy_opt_in', { 'u-student-1': true });
   });
 
   // Persist to localStorage
@@ -785,6 +1143,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveToStorage('sim_audit', auditLogs); }, [auditLogs]);
   useEffect(() => { saveToStorage('sim_student_documents', studentDocuments); }, [studentDocuments]);
   useEffect(() => { saveToStorage('sim_student_progress', studentProgressList); }, [studentProgressList]);
+  useEffect(() => { saveToStorage('sim_consultancy_dossiers', consultancyDossiers); }, [consultancyDossiers]);
+  useEffect(() => { saveToStorage('sim_consultancy_opt_in', consultancyOptInMap); }, [consultancyOptInMap]);
 
   // Users (Admin Only)
   const addUser = (user: Omit<User, 'id' | 'createdAt'>, actorRole?: string) => {
@@ -898,10 +1258,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  // Resources (ONLY Admin Can Add / Delete)
+  // Resources (Admin and Faculty Can Add)
   const addResource = (resource: Omit<Resource, 'id' | 'date'> & { id?: string }, actorRole?: string) => {
-    if (actorRole && actorRole !== 'admin') {
-      console.warn('[DataContext] Security: ONLY Admin can add resources.');
+    if (actorRole && actorRole !== 'admin' && actorRole !== 'faculty') {
+      console.warn('[DataContext] Security: ONLY Admin and Faculty can add resources.');
       return;
     }
     const resourceId = resource.id || generateId();
@@ -909,13 +1269,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
       ...resource,
       id: resourceId,
       date: new Date().toISOString().split('T')[0],
-      batch: resource.batch || 'Batch 1 (Dec)',
+      batch: resource.batch || 'All',
     };
     setResources(prev => {
-      if (prev.some(r => r.id === resourceId)) {
-        return prev.map(r => r.id === resourceId ? newResource : r);
+      const rTitle = (newResource.title || '').trim().toLowerCase();
+      const rFile = (newResource.fileName || newResource.storagePath || '').replace(/^.*[\\\/]/, '').replace(/^\d+_/, '').trim().toLowerCase();
+      const existingIdx = prev.findIndex(d => {
+        if (d.id === resourceId) return true;
+        if (d.storagePath && newResource.storagePath && d.storagePath === newResource.storagePath) return true;
+        const dTitle = (d.title || '').trim().toLowerCase();
+        const dFile = (d.fileName || d.storagePath || '').replace(/^.*[\\\/]/, '').replace(/^\d+_/, '').trim().toLowerCase();
+        return dTitle === rTitle && (dFile === rFile || d.fileName === newResource.fileName);
+      });
+      if (existingIdx !== -1) {
+        const copy = [...prev];
+        copy[existingIdx] = { ...copy[existingIdx], ...newResource };
+        return copy;
       }
-      return [...prev, newResource];
+      return [newResource, ...prev];
     });
     addAuditLog({ action: 'Resource Uploaded', userId: resource.uploaderId, userName: resource.uploaderName, details: `Uploaded: ${resource.title}` });
   };
@@ -1189,38 +1560,97 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const toggleChapterCompletion = (chapterId: string, studentId?: string, studentName?: string, studentBatch?: string, chapterName?: string): boolean => {
     const sId = studentId || 'u-student-1';
     let isNowCompleted = false;
+    const canonicalId = getCanonicalChapterId(chapterId) || chapterId;
     const cName = chapterName || '';
+
+    // Find all topics belonging to this chapter across curriculum
+    let targetTopics: { id: string; name: string; chapterId: string; chapterName: string; subjectId?: string; subjectName?: string }[] = [];
+    for (const s of DEFAULT_CURRICULUM) {
+      for (const c of s.chapters || []) {
+        if (
+          c.id === canonicalId ||
+          c.id === chapterId ||
+          (cName && c.name.toLowerCase() === cName.toLowerCase()) ||
+          c.name.toLowerCase() === canonicalId.toLowerCase()
+        ) {
+          targetTopics = (c.topics || []).map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            chapterId: c.id,
+            chapterName: c.name,
+            subjectId: s.id,
+            subjectName: s.name,
+          }));
+          break;
+        }
+      }
+      if (targetTopics.length > 0) break;
+    }
+
     setStudentProgressList(prev => {
       const existing = prev.find(p => p.studentId === sId);
       if (existing) {
-        const isCompleted = existing.completedChapters.includes(chapterId) || (cName ? existing.completedChapters.includes(cName) : false);
+        const canonicalList = deduplicateCompletedChapters(existing.completedChapters || []);
+        const isCompleted = canonicalList.includes(canonicalId) ||
+          (cName ? canonicalList.includes(getCanonicalChapterId(cName)) : false);
         isNowCompleted = !isCompleted;
         let nextChapters: string[];
+        let nextTopics = [...(existing.completedTopics || [])];
+        let nextDetails = [...(existing.completedTopicDetails || [])];
+
         if (isCompleted) {
-          nextChapters = existing.completedChapters.filter(id => id !== chapterId && id !== cName);
+          // Unmarking chapter -> remove chapter and unmark its topics
+          nextChapters = canonicalList.filter(id => id !== canonicalId && (!cName || id !== getCanonicalChapterId(cName)));
+          const topicIdsToRemove = new Set(targetTopics.map(t => t.id));
+          const topicNamesToRemove = new Set(targetTopics.map(t => t.name.toLowerCase()));
+          nextTopics = nextTopics.filter(id => !topicIdsToRemove.has(id));
+          nextDetails = nextDetails.filter(d => !topicIdsToRemove.has(d.id) && !topicNamesToRemove.has((d.name || '').toLowerCase()));
         } else {
-          nextChapters = [...existing.completedChapters, chapterId];
-          if (cName && !nextChapters.includes(cName)) {
-            nextChapters.push(cName);
-          }
+          // Marking chapter completed -> AUTOMATICALLY MARK WHOLE TOPICS AS COMPLETED!
+          nextChapters = [...canonicalList, canonicalId];
+          targetTopics.forEach(t => {
+            if (!nextTopics.includes(t.id)) {
+              nextTopics.push(t.id);
+            }
+            const alreadyInDetails = nextDetails.some(d => d.id === t.id || (d.name && d.name.toLowerCase() === t.name.toLowerCase()));
+            if (!alreadyInDetails) {
+              nextDetails.push({
+                id: t.id,
+                name: t.name,
+                chapterId: t.chapterId,
+                chapterName: t.chapterName,
+                subjectId: t.subjectId,
+                subjectName: t.subjectName,
+              });
+            }
+          });
         }
         return prev.map(p => p.studentId === sId ? {
           ...p,
           completedChapters: nextChapters,
+          completedTopics: nextTopics,
+          completedTopicDetails: nextDetails,
           lastUpdated: new Date().toISOString(),
         } : p);
       } else {
         isNowCompleted = true;
-        const initialChapters = [chapterId];
-        if (cName && !initialChapters.includes(cName)) {
-          initialChapters.push(cName);
-        }
+        const initialChapters = [canonicalId];
+        const initialTopics = targetTopics.map(t => t.id);
+        const initialDetails: CompletedTopicDetail[] = targetTopics.map(t => ({
+          id: t.id,
+          name: t.name,
+          chapterId: t.chapterId,
+          chapterName: t.chapterName,
+          subjectId: t.subjectId,
+          subjectName: t.subjectName,
+        }));
         const newRecord: StudentCurriculumProgress = {
           studentId: sId,
           studentName: studentName || 'Student',
           studentBatch: studentBatch || 'Batch 1 (Dec)',
           completedChapters: initialChapters,
-          completedTopics: [],
+          completedTopics: initialTopics,
+          completedTopicDetails: initialDetails,
           lastUpdated: new Date().toISOString(),
         };
         return [...prev, newRecord];
@@ -1228,10 +1658,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
 
     addAuditLog({
-      action: isNowCompleted ? 'Chapter Marked Completed' : 'Chapter Marked Incomplete',
+      action: isNowCompleted ? 'Chapter & All Topics Marked Completed' : 'Chapter Marked Incomplete',
       userId: sId,
       userName: studentName || 'Student',
-      details: `Student toggled chapter ${cName || chapterId}`
+      details: `Student toggled chapter ${cName || chapterId} (${targetTopics.length} topics updated)`
     });
     return isNowCompleted;
   };
@@ -1262,7 +1692,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           nextDetails = (existing.completedTopicDetails || []).filter(d => d.id !== topicId && (!tName || d.name?.toLowerCase() !== tName.toLowerCase()));
           nextTopics = nextDetails.map(d => d.id);
         } else {
-          const cleanName = tName && (!tName.includes('-') || tName.length <= 25) ? tName : 'Core Topic';
+          const cleanName = resolveTopicHumanName(topicId, tName);
           const detailEntry: CompletedTopicDetail = {
             id: topicId,
             name: cleanName,
@@ -1278,15 +1708,48 @@ export function DataProvider({ children }: { children: ReactNode }) {
           nextTopics = nextDetails.map(d => d.id);
         }
 
+        // Check if all topics of this chapter are completed
+        let chapId = topicMeta?.chapterId;
+        let chapTopics: { id: string; name: string }[] = [];
+        for (const s of DEFAULT_CURRICULUM) {
+          for (const c of s.chapters || []) {
+            if (chapId ? (c.id === chapId || c.name.toLowerCase() === (topicMeta?.chapterName || '').toLowerCase()) : (c.topics || []).some((t: any) => t.id === topicId || (tName && t.name.toLowerCase() === tName.toLowerCase()))) {
+              chapId = c.id;
+              chapTopics = (c.topics || []).map((t: any) => ({ id: t.id, name: t.name }));
+              break;
+            }
+          }
+          if (chapId && chapTopics.length > 0) break;
+        }
+
+        let nextChapters = deduplicateCompletedChapters(existing.completedChapters || []);
+        if (chapId && chapTopics.length > 0) {
+          const allTopicsDone = chapTopics.every(t =>
+            nextTopics.includes(t.id) ||
+            nextDetails.some(d => d.id === t.id || (d.name && d.name.toLowerCase() === t.name.toLowerCase()))
+          );
+          const canonicalChap = getCanonicalChapterId(chapId);
+          if (allTopicsDone) {
+            // DIRECTLY MARK CHAPTER AS COMPLETED
+            if (!nextChapters.includes(canonicalChap)) {
+              nextChapters.push(canonicalChap);
+            }
+          } else {
+            // UNMARK CHAPTER IF NOT ALL TOPICS COMPLETED
+            nextChapters = nextChapters.filter(id => id !== canonicalChap && id !== chapId && id !== topicMeta?.chapterName);
+          }
+        }
+
         return prev.map(p => p.studentId === sId ? {
           ...p,
+          completedChapters: nextChapters,
           completedTopics: nextTopics,
           completedTopicDetails: nextDetails,
           lastUpdated: new Date().toISOString(),
         } : p);
       } else {
         isNowCompleted = true;
-        const cleanName = tName && (!tName.includes('-') || tName.length <= 25) ? tName : 'Core Topic';
+        const cleanName = resolveTopicHumanName(topicId, tName);
         const initialDetails: CompletedTopicDetail[] = [{
           id: topicId,
           name: cleanName,
@@ -1319,15 +1782,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const isChapterCompleted = (chapterIdOrName: string, studentId?: string): boolean => {
     if (!chapterIdOrName) return false;
+    if (chapterIdOrName.toLowerCase().includes('body fluids')) return false;
     const sId = studentId || 'u-student-1';
     const rec = studentProgressList.find(p => p.studentId === sId);
     if (!rec) return false;
-    if (rec.completedChapters.includes(chapterIdOrName)) return true;
-    return rec.completedChapters.some(c => c.toLowerCase() === chapterIdOrName.toLowerCase());
+    const targetCanon = getCanonicalChapterId(chapterIdOrName).toLowerCase();
+    const targetLower = chapterIdOrName.toLowerCase();
+    return (rec.completedChapters || []).some(c => {
+      const cLower = c.toLowerCase();
+      const cCanon = getCanonicalChapterId(c).toLowerCase();
+      return cLower === targetLower || cCanon === targetCanon || cLower === targetCanon || cCanon === targetLower;
+    });
   };
 
   const isTopicCompleted = (topicIdOrName: string, studentId?: string): boolean => {
     if (!topicIdOrName) return false;
+    if (topicIdOrName.toLowerCase().includes('body fluids')) return false;
     const sId = studentId || 'u-student-1';
     const rec = studentProgressList.find(p => p.studentId === sId);
     if (!rec) return false;
@@ -1355,10 +1825,205 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .map(p => ({ studentId: p.studentId, studentName: p.studentName, studentBatch: p.studentBatch, avatar: p.avatar }));
   };
 
+  // Consultancy Management Methods
+  const addConsultancyDossier = (dossier: StudentConsultancyDossier) => {
+    setConsultancyDossiers(prev => [
+      ...prev.filter(d => d.studentId !== dossier.studentId),
+      dossier
+    ]);
+    // Also ensure the 8 documents for this student exist in studentDocuments
+    setStudentDocuments(prev => {
+      const existingForStudent = prev.filter(d => d.studentId === dossier.studentId);
+      if (existingForStudent.length >= 8) return prev;
+      const studentDocs: StudentDocument[] = dossier.checklist.map(item => ({
+        id: `sdoc-${dossier.studentId}-${item.key}`,
+        studentId: dossier.studentId,
+        studentName: dossier.studentName,
+        stageNumber: item.stageNumber,
+        stageKey: item.key,
+        title: `${item.stageNumber}. ${item.title}`,
+        category: item.category,
+        status: item.status === 'verified' ? 'Verified' : 'Not Verified',
+        fileName: item.uploadedFile?.fileName || `${item.key}.pdf`,
+        fileSize: item.uploadedFile?.fileSize || '2.0 MB',
+        submissionSource: `Submitted via Student Mail (${dossier.studentEmail})`,
+        submittedAt: item.uploadedFile?.uploadedAt || new Date().toISOString(),
+        verifiedAt: item.verifiedAt ? item.verifiedAt.split('T')[0] : undefined,
+        verifiedBy: item.verifiedBy,
+        remarks: item.consultantNotes,
+      }));
+      return [...prev.filter(d => d.studentId !== dossier.studentId), ...studentDocs];
+    });
+    addAuditLog({
+      action: 'Consultancy Dossier Created',
+      userId: dossier.consultantId || 'system',
+      userName: dossier.consultantName || 'Consultant Agent',
+      details: `Created study abroad admissions dossier for ${dossier.studentName} (${dossier.targetCountry})`
+    });
+  };
+
+  const updateConsultancyDossier = (studentId: string, updates: Partial<StudentConsultancyDossier>) => {
+    setConsultancyDossiers(prev => prev.map(d => {
+      if (d.studentId === studentId) {
+        return {
+          ...d,
+          ...updates,
+          lastUpdated: new Date().toISOString()
+        };
+      }
+      return d;
+    }));
+  };
+
+  const deleteConsultancyDossier = (studentId: string) => {
+    setConsultancyDossiers(prev => prev.filter(d => d.studentId !== studentId));
+    addAuditLog({
+      action: 'Consultancy Dossier Removed',
+      userId: 'system',
+      userName: 'Consultant Agent',
+      details: `Removed consultancy dossier for student ID ${studentId}`
+    });
+  };
+
+  const getStudentDossier = (studentId?: string): StudentConsultancyDossier | undefined => {
+    const sId = studentId || 'u-student-1';
+    return consultancyDossiers.find(d => d.studentId === sId);
+  };
+
+  const isConsultancyOptedIn = (studentId?: string): boolean => {
+    const sId = studentId || 'u-student-1';
+    return consultancyOptInMap[sId] !== false;
+  };
+
+  const setConsultancyOptIn = (studentId: string, optIn: boolean) => {
+    setConsultancyOptInMap(prev => ({ ...prev, [studentId]: optIn }));
+    addAuditLog({
+      action: optIn ? 'Consultancy Assistance Opted In' : 'Consultancy Assistance Opted Out',
+      userId: studentId,
+      userName: studentId,
+      details: `Student ${studentId} updated consultancy assistance preference to ${optIn ? 'Opted In' : 'Opted Out'}`
+    });
+  };
+
+  const updateChecklistItemStatus = (
+    studentId: string,
+    itemId: string,
+    status: ChecklistItemStatus,
+    consultantNotes?: string,
+    subItemUpdates?: { id: string; status: 'pending' | 'verified' | 'rejected'; notes?: string }[]
+  ) => {
+    setConsultancyDossiers(prev => prev.map(dossier => {
+      if (dossier.studentId !== studentId) return dossier;
+
+      const updatedChecklist = dossier.checklist.map(item => {
+        if (item.id !== itemId && item.key !== itemId) return item;
+
+        let updatedSubItems = item.subItems;
+        if (subItemUpdates && updatedSubItems) {
+          updatedSubItems = updatedSubItems.map(sub => {
+            const match = subItemUpdates.find(u => u.id === sub.id);
+            if (match) {
+              return {
+                ...sub,
+                status: match.status,
+                notes: match.notes !== undefined ? match.notes : sub.notes
+              };
+            }
+            return sub;
+          });
+        }
+
+        const isVerified = status === 'verified';
+        return {
+          ...item,
+          status,
+          consultantNotes: consultantNotes !== undefined ? consultantNotes : item.consultantNotes,
+          verifiedBy: isVerified ? (dossier.consultantName || 'Consultant Agent') : item.verifiedBy,
+          verifiedAt: isVerified ? new Date().toISOString() : (status === 'pending' ? undefined : item.verifiedAt),
+          subItems: updatedSubItems
+        };
+      });
+
+      // Recalculate overall status
+      const allVerified = updatedChecklist.every(i => i.status === 'verified');
+      const verifiedCount = updatedChecklist.filter(i => i.status === 'verified').length;
+
+      let overallStatus: DossierOverallStatus = dossier.overallStatus;
+      if (allVerified) {
+        overallStatus = 'COMPLETED';
+      } else if (verifiedCount >= 7) {
+        overallStatus = 'VISA_READY';
+      } else if (verifiedCount >= 6) {
+        overallStatus = 'PRE_ENROLLED';
+      } else if (verifiedCount >= 5) {
+        overallStatus = 'SCHOLARSHIP_READY';
+      } else if (verifiedCount >= 4) {
+        overallStatus = 'APOSTILLED';
+      } else if (verifiedCount >= 3) {
+        overallStatus = 'DOCS_VERIFIED';
+      } else {
+        overallStatus = 'IN_PROGRESS';
+      }
+
+      return {
+        ...dossier,
+        checklist: updatedChecklist,
+        overallStatus,
+        lastUpdated: new Date().toISOString()
+      };
+    }));
+
+    // Synchronize with studentDocuments so Student Dashboard reflects Verified / Not Verified immediately
+    setStudentDocuments(prev => {
+      const keyWithoutChk = itemId.replace('chk-', '').toLowerCase();
+      let docStatus: StudentDocument['status'] = 'Pending';
+      if (status === 'verified') {
+        docStatus = 'Verified';
+      } else if (status === 'rejected') {
+        docStatus = 'Not Verified';
+      } else if (status === 'in_progress' || status === 'submitted') {
+        docStatus = 'In Review/In Progress';
+      } else {
+        docStatus = 'Pending';
+      }
+      const isVerified = docStatus === 'Verified';
+
+      return prev.map(doc => {
+        const isStudentMatch = doc.studentId === studentId || doc.studentId === 'u-student-1';
+        if (!isStudentMatch) return doc;
+
+        const isStageMatch =
+          doc.stageKey?.toLowerCase() === keyWithoutChk ||
+          doc.id === `sdoc-${keyWithoutChk}` ||
+          doc.id === itemId ||
+          doc.stageNumber === Number(itemId) ||
+          (doc.title && doc.title.toLowerCase().includes(keyWithoutChk.replace(/_/g, ' ')));
+
+        if (!isStageMatch) return doc;
+
+        return {
+          ...doc,
+          status: docStatus,
+          verifiedBy: isVerified ? 'Dr. Marco Rossi (Consultant Agent)' : undefined,
+          verifiedAt: isVerified ? new Date().toISOString().split('T')[0] : undefined,
+          remarks: consultantNotes !== undefined ? consultantNotes : doc.remarks,
+        };
+      });
+    });
+
+    addAuditLog({
+      action: 'Checklist Item Updated',
+      userId: 'consultant',
+      userName: 'Consultant Agent',
+      details: `Updated stage ${itemId} status to ${status} for student ID ${studentId}`
+    });
+  };
+
   return (
     <DataContext.Provider value={{
       users, addUser, updateUser, deleteUser, getUserById, getUsersByRole,
       departments, addDepartment, deleteDepartment, updateDepartment,
+      cohortBatches, addCohortBatch, deleteCohortBatch,
       courses, addCourse, deleteCourse, updateCourse, enrollStudents, unenrollStudent,
       resources, addResource, deleteResource, updateResource,
       announcements, addAnnouncement, deleteAnnouncement, updateAnnouncement,
@@ -1376,6 +2041,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       getStudentProgress,
       getChapterCompletions,
       getTopicCompletions,
+      consultancyDossiers,
+      updateChecklistItemStatus,
+      addConsultancyDossier,
+      updateConsultancyDossier,
+      deleteConsultancyDossier,
+      getStudentDossier,
+      isConsultancyOptedIn,
+      setConsultancyOptIn,
     }}>
       {children}
     </DataContext.Provider>

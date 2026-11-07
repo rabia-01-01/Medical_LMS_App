@@ -7,6 +7,7 @@ import { StudentHome, StudentCourses, StudentResources, StudentCommunity, Studen
 import { QuizList, QuizDetail, ActiveQuiz, QuizResults } from './screens/QuizScreens';
 import { FacultyDashboard, FacultyCourses, UploadResource, CreateQuiz, FacultySubmissions, FacultyNotifications, FacultyProfile, FacultyAnnouncements, FacultyCommunity, FacultyResources } from './screens/FacultyScreens';
 import { AdminDashboard, AdminUsers, AdminDepartments, AdminCourses, AdminResources, AdminNotifications, AuditLogs, AdminSettings, AdminCommunity, AdminAnnouncements, AddUser, SendAnnouncement, SendNotification } from './screens/AdminScreens';
+import { ConsultantDashboard, ConsultantProfile } from './screens/ConsultantScreens';
 import { ResourceViewer, CourseDetail } from './screens/ResourceScreens';
 import { FullscreenControl, DisplayMode } from './components/FullscreenControl';
 import { SecurityShield } from './components/SecurityShield';
@@ -36,6 +37,13 @@ const adminNavItems = [
   { id: 'settings', icon: 'fa-cog', label: 'Settings' },
 ];
 
+const consultantNavItems = [
+  { id: 'dashboard', icon: 'fa-tasks', label: 'Pipeline' },
+  { id: 'community', icon: 'fa-comments', label: 'Channel' },
+  { id: 'notifications', icon: 'fa-bell', label: 'Alerts' },
+  { id: 'profile', icon: 'fa-user-tie', label: 'Profile' },
+];
+
 function AppContent() {
   const { user, isAuthenticated, isLoading, isViewingAs, viewingAsUser, stopViewingAs } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
@@ -50,14 +58,14 @@ function AppContent() {
   };
 
   const [currentScreen, setCurrentScreen] = useState(() => {
-    return user?.role === 'admin' || user?.role === 'faculty' ? 'dashboard' : 'home';
+    return user?.role === 'admin' || user?.role === 'faculty' || user?.role === 'consultant' ? 'dashboard' : 'home';
   });
   const [screenData, setScreenData] = useState<any>(null);
   const [screenHistory, setScreenHistory] = useState<string[]>([]);
 
   // Automatically reset to role-specific entry screen upon authentication or role switch
   React.useEffect(() => {
-    if (user?.role === 'admin' || user?.role === 'faculty') {
+    if (user?.role === 'admin' || user?.role === 'faculty' || user?.role === 'consultant') {
       setCurrentScreen('dashboard');
     } else {
       setCurrentScreen('home');
@@ -86,7 +94,7 @@ function AppContent() {
       setCurrentScreen(prev);
       setScreenData(null);
     } else {
-      const defaultScreen = user?.role === 'admin' ? 'dashboard' : user?.role === 'faculty' ? 'dashboard' : 'home';
+      const defaultScreen = user?.role === 'admin' || user?.role === 'faculty' || user?.role === 'consultant' ? 'dashboard' : 'home';
       setCurrentScreen(defaultScreen);
     }
   }, [screenHistory, user]);
@@ -104,7 +112,13 @@ function AppContent() {
   if (showSplash || isLoading) return <SplashScreen onComplete={() => setShowSplash(false)} />;
   if (!isAuthenticated) return <LoginScreen />;
 
-  const navItems = user?.role === 'admin' ? adminNavItems : user?.role === 'faculty' ? facultyNavItems : studentNavItems;
+  const navItems = user?.role === 'admin'
+    ? adminNavItems
+    : user?.role === 'faculty'
+    ? facultyNavItems
+    : user?.role === 'consultant'
+    ? consultantNavItems
+    : studentNavItems;
   const isTabScreen = navItems.some(item => item.id === currentScreen);
   const showBottomNav = isTabScreen;
 
@@ -162,6 +176,7 @@ function AppContent() {
         case 'resource-view': return <ResourceViewer onBack={handleBack} resource={screenData} />;
         case 'course-detail': return <CourseDetail onBack={handleBack} course={screenData} onNavigate={handleNavigate} />;
         case 'faculty-resources': return <FacultyResources onBack={handleBack} onNavigate={handleNavigate} />;
+        case 'departments': return <AdminDepartments onBack={handleBack} />;
         default: return <FacultyDashboard onNavigate={handleNavigate} />;
       }
     }
@@ -193,6 +208,19 @@ function AppContent() {
       }
     }
 
+    // Consultant Agent screens
+    if (user?.role === 'consultant') {
+      switch (currentScreen) {
+        case 'dashboard': return <ConsultantDashboard onNavigate={handleNavigate} onBack={handleBack} />;
+        case 'profile': return <ConsultantProfile onNavigate={handleNavigate} />;
+        case 'community': return <FacultyCommunity onBack={handleBack} />;
+        case 'announcements': return <AnnouncementsScreen onBack={handleBack} />;
+        case 'notifications': return <FacultyNotifications onBack={handleBack} />;
+        case 'help': return <HelpScreen onBack={handleBack} />;
+        default: return <ConsultantDashboard onNavigate={handleNavigate} onBack={handleBack} />;
+      }
+    }
+
     return null;
   };
 
@@ -207,7 +235,7 @@ function AppContent() {
         <SecurityShield>
           {ViewingAsBanner}
           <div className="screen-content">{renderScreen()}</div>
-          {user?.role === 'student' && currentScreen !== 'community' && currentScreen !== 'announcements' && currentScreen !== 'active-quiz' && currentScreen !== 'quiz-results' && currentScreen !== 'quiz-detail' && <StudentAIChatbot />}
+          {user?.role === 'student' && currentScreen !== 'community' && currentScreen !== 'announcements' && currentScreen !== 'active-quiz' && currentScreen !== 'quiz-results' && currentScreen !== 'quiz-detail' && currentScreen !== 'departments' && <StudentAIChatbot />}
           {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
         </SecurityShield>
       </div>

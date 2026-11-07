@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { useData, User } from '../context/DataContext';
+import { useData, User, deduplicateCompletedChapters } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { signUpUser } from '../features/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { CurriculumBrowser } from '../features/curriculum';
-import { useResources, resourceService } from '../features/resources';
+import { useResources, resourceService, deduplicateAndMergeResources } from '../features/resources';
 import { useAdmin, adminService } from '../features/admin';
 import { useAssessments } from '../features/assessments';
 import { AdminAIMCQGenerator } from '../components/AdminAIMCQGenerator';
@@ -16,9 +16,9 @@ import { StudentStudyProgressModal } from '../components/StudentStudyProgressMod
 export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
   const [showAIMCQModal, setShowAIMCQModal] = useState(false);
-  const [selectedBatchFilter, setSelectedBatchFilter] = useState<'All' | 'Batch 1 (Dec)' | 'Batch 2 (May/June)'>('All');
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('All');
   const [inspectingStudent, setInspectingStudent] = useState<{ id: string; name: string; email?: string; batch?: string; avatar?: string } | null>(null);
-  const { users, departments, courses, resources, quizzes, announcements, auditLogs, getStudentProgress } = useData();
+  const { users, departments, courses, resources, quizzes, announcements, auditLogs, getStudentProgress, cohortBatches } = useData();
   const enrolledStudents = useMemo(() => users.filter(u => u.role === 'student'), [users]);
   const { metrics, loading: metricsLoading, refreshMetrics, exportAuditLogs } = useAdmin();
   const { assessments } = useAssessments();
@@ -200,12 +200,12 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           </div>
 
           {/* Batch Filter */}
-          <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
-            {(['All', 'Batch 1 (Dec)', 'Batch 2 (May/June)'] as const).map(b => (
+          <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl overflow-x-auto no-scrollbar">
+            {(['All', ...(cohortBatches || []).map(b => b.name)]).map(b => (
               <button
                 key={b}
                 onClick={() => setSelectedBatchFilter(b)}
-                className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition ${
+                className={`flex-1 py-1 px-2.5 rounded-lg text-[10px] font-bold transition whitespace-nowrap ${
                   selectedBatchFilter === b
                     ? 'bg-white text-teal-700 shadow-2xs'
                     : 'text-gray-500 hover:text-gray-700'
@@ -219,11 +219,16 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           {/* Student Progress Cards */}
           <div className="space-y-2">
             {enrolledStudents
-              .filter(st => selectedBatchFilter === 'All' || st.batch === selectedBatchFilter)
+              .filter(st => {
+                if (selectedBatchFilter === 'All') return true;
+                if (selectedBatchFilter === 'Batch 1 (Dec)') return st.batch === 'Batch 1 (Dec)' || !st.batch || st.batch.includes('1');
+                if (selectedBatchFilter === 'Batch 2 (May/June)') return st.batch === 'Batch 2 (May/June)' || st.batch?.includes('2');
+                return st.batch === selectedBatchFilter;
+              })
               .map(student => {
                 const prog = getStudentProgress(student.id);
-                const chaps = prog?.completedChapters?.length || 0;
-                const topics = prog?.completedTopics?.length || 0;
+                const chaps = deduplicateCompletedChapters(prog?.completedChapters || []).length;
+                const topics = (prog?.completedTopicDetails || []).filter(d => d.name && !d.name.toLowerCase().includes('body fluids') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.name.trim())).length || (prog?.completedTopics || []).filter(t => !t.toLowerCase().includes('body fluids') && !t.includes('-')).length;
 
                 return (
                   <div
@@ -677,33 +682,26 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
 
 // ==================== ADMIN BATCHES (ONLY BATCHES IN BATCHES TAB) ====================
 export function AdminDepartments({ onBack }: { onBack: () => void }) {
-  const { users, courses } = useData();
+  const { users, cohortBatches, addCohortBatch, deleteCohortBatch } = useData();
   const [selectedBatchModal, setSelectedBatchModal] = useState<{ batch: string; deptName: string; subjects: string[] } | null>(null);
   const [batchTab, setBatchTab] = useState<'students' | 'courses'>('students');
   const [showForm, setShowForm] = useState(false);
   const [batchName, setBatchName] = useState('');
   const [batchSession, setBatchSession] = useState('');
-  const [customBatches, setCustomBatches] = useState<{ id: string; name: string; session: string }[]>(() => {
-    try {
-      const s = localStorage.getItem('sim_admin_batches');
-      return s ? JSON.parse(s) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [batchMaxStudents, setBatchMaxStudents] = useState<number | string>(25);
 
   const handleAddBatch = () => {
     if (!batchName.trim()) return;
-    const newB = {
-      id: Date.now().toString(36),
+    const maxVal = Number(batchMaxStudents);
+    addCohortBatch({
       name: batchName.trim(),
       session: batchSession.trim() || 'Custom Academic Session',
-    };
-    const updated = [...customBatches, newB];
-    setCustomBatches(updated);
-    try { localStorage.setItem('sim_admin_batches', JSON.stringify(updated)); } catch {}
+      season: 'Academic Cohort',
+      maxStudents: maxVal > 0 ? maxVal : 25,
+    });
     setBatchName('');
     setBatchSession('');
+    setBatchMaxStudents(25);
     setShowForm(false);
   };
 
@@ -765,6 +763,23 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
               placeholder="Session Timeline (e.g., Sept – Feb • Autumn Intake)"
               className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
             />
+            <div>
+              <label className="text-[11px] font-bold text-gray-700 block mb-1">
+                Batch Enrollment Capacity (Max Students)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="500"
+                value={batchMaxStudents}
+                onChange={(e) => setBatchMaxStudents(e.target.value)}
+                placeholder="Maximum students (e.g., 25)"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                New students cannot enroll into this batch once the capacity limit is reached.
+              </p>
+            </div>
             <button onClick={handleAddBatch} className="btn-primary w-full py-2">
               Add Batch Cohort
             </button>
@@ -773,8 +788,10 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
 
         {/* Batches Overview Cards */}
         <div className="grid grid-cols-1 gap-3">
-          {defaultBatches.map((b) => {
-            const enrolled = (users || []).filter(u => u.role === 'student' && (u.batch === b.name || (b.name.includes('1') ? (u.batch?.includes('1') || !u.batch) : u.batch?.includes('2'))));
+          {cohortBatches.map((b) => {
+            const enrolled = (users || []).filter(u => u.role === 'student' && (u.batch === b.name || (b.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : b.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false)));
+            const color = b.color || (b.name.includes('1') ? 'teal' : b.name.includes('2') ? 'purple' : 'blue');
+            const badge = b.badge || (b.name.includes('1') ? 'Winter Session' : b.name.includes('2') ? 'Summer Session' : 'Active Cohort');
 
             return (
               <div
@@ -784,7 +801,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
                     <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                      b.color === 'teal' ? 'bg-teal-50 text-teal-600 border border-teal-200' : 'bg-purple-50 text-purple-600 border border-purple-200'
+                      color === 'teal' ? 'bg-teal-50 text-teal-600 border border-teal-200' : color === 'purple' ? 'bg-purple-50 text-purple-600 border border-purple-200' : 'bg-blue-50 text-blue-600 border border-blue-200'
                     }`}>
                       <i className="fas fa-layer-group text-lg" />
                     </div>
@@ -792,74 +809,72 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-extrabold text-gray-900">{b.name}</h3>
                         <span className={`badge text-[9px] font-bold py-0.5 px-2 rounded-full ${
-                          b.color === 'teal' ? 'bg-teal-600 text-white' : 'bg-purple-600 text-white'
+                          color === 'teal' ? 'bg-teal-600 text-white' : color === 'purple' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
                         }`}>
-                          {b.badge}
+                          {badge}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">{b.session}</p>
                     </div>
                   </div>
+
+                  {/* Delete Batch Button for Admin */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to delete "${b.name}"? This action cannot be undone.`)) {
+                        deleteCohortBatch(b.id, 'admin');
+                      }
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                    title={`Delete batch ${b.name}`}
+                  >
+                    <i className="fas fa-trash-alt text-xs" />
+                  </button>
                 </div>
 
                 {/* Batch Metrics & Student Avatars */}
-                <div className="p-2.5 bg-slate-50 rounded-xl flex items-center justify-between border border-gray-100">
-                  <div className="flex items-center gap-2">
-                    <div className="flex -space-x-1.5 overflow-hidden">
-                      {enrolled.slice(0, 3).map((stu, sIdx) => (
-                        <div key={stu.id || sIdx} className="inline-block w-6 h-6 rounded-full ring-2 ring-white bg-teal-100 text-teal-800 text-[10px] font-bold flex items-center justify-center">
-                          {stu.avatar || stu.name.charAt(0)}
+                {(() => {
+                  const maxCap = b.maxStudents || 25;
+                  const isBatchFull = enrolled.length >= maxCap;
+                  return (
+                    <div className="p-2.5 bg-slate-50 rounded-xl flex items-center justify-between border border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <div className="flex -space-x-1.5 overflow-hidden">
+                          {enrolled.slice(0, 3).map((stu, sIdx) => (
+                            <div key={stu.id || sIdx} className="inline-block w-6 h-6 rounded-full ring-2 ring-white bg-teal-100 text-teal-800 text-[10px] font-bold flex items-center justify-center">
+                              {stu.avatar || stu.name.charAt(0)}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                    <span className="text-xs font-bold text-gray-800">
-                      {b.studentsCount} Students Joined
-                    </span>
-                  </div>
+                        <span className="text-xs font-bold text-gray-800">
+                          {enrolled.length} / {maxCap} Students Joined
+                        </span>
+                        {isBatchFull && (
+                          <span className="badge bg-rose-100 text-rose-700 border border-rose-200 text-[9px] font-bold py-0.5 px-2 rounded-full">
+                            Batch Full
+                          </span>
+                        )}
+                      </div>
 
-                  <span className="text-[10px] font-semibold text-gray-500">
-                    7 Core Subjects
-                  </span>
-                </div>
+                      <span className="text-[10px] font-semibold text-gray-500">
+                        7 Core Subjects
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Action button */}
                 <button
                   type="button"
                   onClick={() => setSelectedBatchModal({ batch: b.name, deptName: `${b.name} Cohort`, subjects: CORE_CURRICULUM_SUBJECTS.map(s => s.name) })}
                   className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs ${
-                    b.color === 'teal'
+                    color === 'teal'
                       ? 'bg-teal-600 hover:bg-teal-700 text-white'
-                      : 'bg-purple-600 hover:bg-purple-700 text-white'
+                      : color === 'purple'
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
                   }`}
-                >
-                  <i className="fas fa-users text-xs" />
-                  <span>Inspect Joined Students & Courses</span>
-                </button>
-              </div>
-            );
-          })}
-
-          {/* Any Custom Batches */}
-          {customBatches.map((cb) => {
-            const count = (users || []).filter(u => u.role === 'student' && u.batch === cb.name).length;
-            return (
-              <div key={cb.id} className="card space-y-3 border border-gray-200 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <i className="fas fa-layer-group text-sm" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-900">{cb.name}</h3>
-                      <p className="text-xs text-gray-500">{cb.session}</p>
-                    </div>
-                  </div>
-                  <span className="badge badge-teal text-[9px] font-bold">{count} Students</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedBatchModal({ batch: cb.name, deptName: `${cb.name} Cohort`, subjects: CORE_CURRICULUM_SUBJECTS.map(s => s.name) })}
-                  className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
                 >
                   <i className="fas fa-users text-xs" />
                   <span>Inspect Joined Students & Courses</span>
@@ -1089,6 +1104,7 @@ export function AdminCourses({ onBack, onNavigate }: { onBack: () => void; onNav
         <CurriculumBrowser 
           key={selectedSubjectId}
           initialSubjectId={selectedSubjectId}
+          hideSubjectTabs={true}
           canManage={true} 
           onNavigateToResource={(r) => onNavigate ? onNavigate('resource-view', r) : undefined} 
         />
@@ -1108,41 +1124,7 @@ export function AdminResources({ onBack, onNavigate }: { onBack: () => void; onN
 
   // Merge cloud resources with local DataContext resources
   const allResources = useMemo(() => {
-    const list: any[] = [];
-    const seen = new Set<string>();
-
-    cloudResources.forEach((cr) => {
-      seen.add(cr.id);
-      list.push({
-        id: cr.id,
-        title: cr.title,
-        type: cr.resource_type === 'NOTE' ? 'Notes' : cr.resource_type === 'VIDEO' ? 'Video' : cr.resource_type === 'PYQ' ? 'PYQ' : cr.resource_type === 'DPP' ? 'Assignment' : 'PDF',
-        subject: cr.subjectName || 'General',
-        courseId: cr.subject_id,
-        uploaderId: cr.created_by,
-        uploaderName: cr.creatorName || 'Faculty',
-        date: cr.created_at?.split('T')[0] || 'Recent',
-        size: cr.sizeFormatted || 'Cloud',
-        status: cr.status === 'PUBLISHED' ? 'published' : 'draft',
-        examCategory: 'Medical',
-        fileName: cr.file?.file_name || 'document.pdf',
-        storagePath: cr.file?.storage_path,
-        signedUrl: cr.signedUrl,
-        fileData: cr.fileData,
-        isCloud: !!cr.file?.storage_path,
-      });
-    });
-
-    localResources.forEach((lr) => {
-      if (!seen.has(lr.id)) {
-        list.push({
-          ...lr,
-          isCloud: !!lr.storagePath,
-        });
-      }
-    });
-
-    return list;
+    return deduplicateAndMergeResources(cloudResources, localResources);
   }, [cloudResources, localResources]);
 
   const cloudCount = allResources.filter(r => r.isCloud).length;

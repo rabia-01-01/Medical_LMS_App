@@ -51,6 +51,8 @@ export interface CreateResourceInput {
   subjectId: string;
   chapterId?: string | null;
   topicId?: string | null;
+  subjectName?: string | null;
+  chapterName?: string | null;
   status?: ContentStatus;
   file: File | Blob;
   fileName?: string;

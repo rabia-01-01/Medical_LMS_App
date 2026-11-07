@@ -1,6 +1,6 @@
 import type { UserRole as DbUserRole } from '../../types/database';
 
-export type AppUserRole = 'admin' | 'faculty' | 'student';
+export type AppUserRole = 'admin' | 'faculty' | 'student' | 'consultant';
 
 export interface AuthUser {
   id: string;

@@ -537,6 +537,31 @@ export async function getFullCurriculum(): Promise<SubjectWithChapters[]> {
         topics: allTopics.filter((t) => t.chapter_id === ch.id),
       }));
 
+      // Ensure all standard default chapters and topics for this subject are merged
+      const defSubj = DEFAULT_CURRICULUM.find(
+        (s) => s.code.toUpperCase() === subj.code?.toUpperCase() || s.id === subj.id
+      );
+      if (defSubj) {
+        defSubj.chapters.forEach((defChap) => {
+          const matchChap = chaptersWithTopics.find(
+            (c) => c.name.toLowerCase() === defChap.name.toLowerCase() || c.id === defChap.id
+          );
+          if (!matchChap) {
+            chaptersWithTopics.push(defChap);
+          } else {
+            defChap.topics.forEach((defTop) => {
+              if (
+                !matchChap.topics.some(
+                  (t) => t.name.toLowerCase() === defTop.name.toLowerCase() || t.id === defTop.id
+                )
+              ) {
+                matchChap.topics.push(defTop);
+              }
+            });
+          }
+        });
+      }
+
       return {
         ...subj,
         chapters: chaptersWithTopics,

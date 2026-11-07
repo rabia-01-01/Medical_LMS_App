@@ -121,10 +121,41 @@ const SEED_RESOURCES: ResourceWithFile[] = [
 ];
 
 // Offline Local Cache Helpers
+function deduplicateFileList(items: ResourceWithFile[]): ResourceWithFile[] {
+  const result: ResourceWithFile[] = [];
+  for (const item of items) {
+    const rawTitle = (item.title || '').trim().toLowerCase();
+    const rawFile = (item.file?.file_name || item.file?.storage_path || '').replace(/^.*[\\\/]/, '').replace(/^\d+_/, '').trim().toLowerCase();
+    const match = result.find(d => {
+      if (d.id === item.id) return true;
+      if (d.file?.storage_path && item.file?.storage_path && d.file.storage_path === item.file.storage_path) return true;
+      const dTitle = (d.title || '').trim().toLowerCase();
+      const dFile = (d.file?.file_name || d.file?.storage_path || '').replace(/^.*[\\\/]/, '').replace(/^\d+_/, '').trim().toLowerCase();
+      return dTitle === rawTitle && (dFile === rawFile || d.file?.file_name === item.file?.file_name);
+    });
+    if (match) {
+      if ((!match.subjectName || match.subjectName === 'General') && item.subjectName && item.subjectName !== 'General') {
+        match.subjectName = item.subjectName;
+      }
+      if (!match.readingContent && item.readingContent) {
+        match.readingContent = item.readingContent;
+      }
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 function loadLocalResources(): ResourceWithFile[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return deduplicateFileList(parsed);
+      }
+    }
   } catch (err) {
     console.error('[resourceService] Failed to load local resources:', err);
   }
@@ -133,7 +164,8 @@ function loadLocalResources(): ResourceWithFile[] {
 
 function saveLocalResources(items: ResourceWithFile[]) {
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+    const deduped = deduplicateFileList(items);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(deduped));
   } catch (err) {
     console.error('[resourceService] Failed to save local resources:', err);
   }
@@ -383,6 +415,8 @@ export async function createResource(
         },
         signedUrl,
         creatorName,
+        subjectName: input.subjectName || (resRow as any)?.subjectName || undefined,
+        chapterName: input.chapterName || (resRow as any)?.chapterName || undefined,
         sizeFormatted: formatFileSize(fileSize),
         fileData: input.base64Data,
         readingContent: input.readingContent,
@@ -407,6 +441,8 @@ export async function createResource(
     subject_id: input.subjectId,
     chapter_id: input.chapterId || null,
     topic_id: input.topicId || null,
+    subjectName: input.subjectName || undefined,
+    chapterName: input.chapterName || null,
     created_by: createdByProfileId,
     status: input.status || 'PUBLISHED',
     created_at: new Date().toISOString(),

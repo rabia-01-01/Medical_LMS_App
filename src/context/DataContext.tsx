@@ -8,6 +8,7 @@ import {
   ChecklistItemStatus,
   DossierOverallStatus,
   createDefaultChecklist,
+  createNewApplicantChecklist,
 } from '../features/consultancy/types';
 
 export interface User {
@@ -226,6 +227,7 @@ export interface CohortBatch {
   badge?: string;
   color?: string;
   tag?: string;
+  targetCourse?: string; // Target user / Target course (e.g. NEET-UG Aspirants, IMAT Aspirants)
   description?: string;
   maxStudents?: number;
   createdAt?: string;
@@ -240,6 +242,7 @@ export const DEFAULT_COHORT_BATCHES: CohortBatch[] = [
     badge: 'Winter Session',
     color: 'teal',
     tag: 'Dec Intake',
+    targetCourse: 'NEET-UG & IMAT Aspirants',
     maxStudents: 25,
     description: 'Accelerated winter medical entrance preparation cohort covering all 7 core subjects.',
   },
@@ -251,6 +254,7 @@ export const DEFAULT_COHORT_BATCHES: CohortBatch[] = [
     badge: 'Summer Session',
     color: 'purple',
     tag: 'May/June Intake',
+    targetCourse: 'Target NEET Super-Sprint & IMAT Aspirants',
     maxStudents: 25,
     description: 'Comprehensive summer medical entrance foundation cohort covering all 7 core subjects.',
   },
@@ -271,7 +275,7 @@ interface DataContextType {
   deleteDepartment: (id: string, actorRole?: string) => void;
   updateDepartment: (id: string, data: Partial<Department>, actorRole?: string) => void;
   cohortBatches: CohortBatch[];
-  addCohortBatch: (batch: { name: string; session: string; season?: string; description?: string; maxStudents?: number }) => void;
+  addCohortBatch: (batch: { name: string; session: string; season?: string; targetCourse?: string; description?: string; maxStudents?: number }) => void;
   deleteCohortBatch: (batchId: string, actorRole?: string) => void;
 
   // Courses
@@ -587,17 +591,37 @@ export const DEFAULT_CONSULTANCY_DOSSIERS: StudentConsultancyDossier[] = [
   },
 ];
 
-// Helper to resolve clean human-readable topic title and reject raw UUIDs
-function resolveTopicHumanName(id: string, candidate?: string): string {
-  if (candidate && candidate.trim()) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.trim());
-    if (!isUuid && !candidate.toLowerCase().includes('body fluids')) {
-      return candidate.trim();
+// Helper to verify if topic actually exists in the active 3-tier curriculum
+export function isTopicInCurrentCurriculum(id: string, name?: string): boolean {
+  if (!id && !name) return false;
+  const tName = (name || '').trim().toLowerCase();
+  const tId = (id || '').trim().toLowerCase();
+  if (tName.includes('body fluids') || tName.includes('molecular basis of inheritance')) return false;
+  if (tId.includes('body-fluids') || tId === 'top-bio-204') return false;
+
+  for (const s of DEFAULT_CURRICULUM) {
+    for (const c of s.chapters || []) {
+      const match = (c.topics || []).some(
+        (t) => t.id === id || (tName && t.name.toLowerCase() === tName)
+      );
+      if (match) return true;
     }
+  }
+  return false;
+}
+
+// Helper to resolve clean human-readable topic title and reject deprecated / removed topics
+function resolveTopicHumanName(id: string, candidate?: string): string {
+  const trimmed = (candidate || '').trim();
+  if (trimmed.toLowerCase().includes('body fluids') || trimmed.toLowerCase().includes('molecular basis of inheritance')) {
+    return '';
+  }
+  if (id === 'top-bio-204' || id.toLowerCase().includes('body-fluids')) {
+    return '';
   }
   for (const s of DEFAULT_CURRICULUM) {
     for (const c of s.chapters || []) {
-      const t = (c.topics || []).find((top: any) => top.id === id || (candidate && top.name.toLowerCase() === candidate.toLowerCase()));
+      const t = (c.topics || []).find((top: any) => top.id === id || (trimmed && top.name.toLowerCase() === trimmed.toLowerCase()));
       if (t) return t.name;
     }
   }
@@ -985,13 +1009,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [studentDocuments, setStudentDocuments] = useState<StudentDocument[]>(() => {
     const stored = loadFromStorage<StudentDocument[]>('sim_student_documents', DEFAULT_STUDENT_DOCS);
     const filtered = (stored || []).filter(d => d.studentId !== 'u-student-2' && d.studentName !== 'Alex Rivera');
-    // If stored contains the old 5 prototype documents (e.g. NEET-UG, sdoc-1, or count != 8), upgrade to the 8 official consultancy documents
-    const hasOld5Docs = filtered.length !== 8 || filtered.some(d => d.id === 'sdoc-1' || d.title?.toLowerCase().includes('neet-ug') || Boolean(d.submissionSource));
-    if (hasOld5Docs) {
+    
+    // Deduplicate by stage number (1 through 8) per student to guarantee exactly 8 stages without duplication
+    const stageMap = new Map<string, StudentDocument>();
+    filtered.forEach(d => {
+      const studentKey = d.studentId || 'u-student-1';
+      const stageKey = d.stageNumber ? `stage-${d.stageNumber}` : (d.stageKey || d.title);
+      const compositeKey = `${studentKey}-${stageKey}`;
+      if (!stageMap.has(compositeKey)) {
+        stageMap.set(compositeKey, d);
+      }
+    });
+
+    const deduplicated = Array.from(stageMap.values());
+    if (deduplicated.length < 8) {
       saveToStorage('sim_student_documents', DEFAULT_STUDENT_DOCS);
       return DEFAULT_STUDENT_DOCS;
     }
-    return filtered;
+    saveToStorage('sim_student_documents', deduplicated);
+    return deduplicated;
   });
 
   const [cohortBatches, setCohortBatches] = useState<CohortBatch[]>(() => {
@@ -1016,6 +1052,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 badge: 'Active Cohort',
                 color: 'blue',
                 tag: cb.name,
+                targetCourse: cb.targetCourse || 'NEET & IMAT Aspirants',
                 description: `Academic entrance cohort for ${cb.name} covering all core subjects.`,
               });
             }
@@ -1029,7 +1066,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return DEFAULT_COHORT_BATCHES;
   });
 
-  const addCohortBatch = (batch: { name: string; session: string; season?: string; description?: string; maxStudents?: number }) => {
+  const addCohortBatch = (batch: { name: string; session: string; season?: string; targetCourse?: string; description?: string; maxStudents?: number }) => {
     const newBatch: CohortBatch = {
       id: Date.now().toString(36),
       name: batch.name.trim(),
@@ -1038,6 +1075,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       badge: 'Active Cohort',
       color: 'blue',
       tag: batch.name.trim(),
+      targetCourse: batch.targetCourse?.trim() || 'NEET & IMAT Aspirants',
       maxStudents: batch.maxStudents && batch.maxStudents > 0 ? batch.maxStudents : 25,
       description: batch.description || `Academic entrance cohort for ${batch.name.trim()} covering all core subjects.`,
     };
@@ -1088,14 +1126,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       details.forEach((d) => {
         if (!d.id) return;
-        // Purge defaulted "Body Fluids and Circulation" and legacy dummy mock IDs
-        if (d.name && d.name.toLowerCase().includes('body fluids')) return;
-        if (d.id && d.id.toLowerCase().includes('body-fluids')) return;
-        if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') {
-          if (!d.name || d.name === d.id || d.name.toLowerCase().includes('body fluids')) return;
-        }
+        // Purge defaulted "Body Fluids", "Molecular Basis of Inheritance", and legacy mock IDs
+        if (!isTopicInCurrentCurriculum(d.id, d.name)) return;
         const resolved = resolveTopicHumanName(d.id, d.name);
-        if (!resolved || resolved.toLowerCase().includes('body fluids')) return;
+        if (!resolved) return;
         if (!validTopics.includes(d.id)) {
           validTopics.push(d.id);
           validDetails.push({
@@ -1105,7 +1139,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      // Deduplicate completedChapters to purge any defaulted Body Fluids and duplicates
+      // Filter raw completedTopics strings as well
+      const validTopicStrings = (p.completedTopics || []).filter(tId => isTopicInCurrentCurriculum(tId));
+      validTopicStrings.forEach(tId => {
+        if (!validTopics.includes(tId)) {
+          const resolved = resolveTopicHumanName(tId);
+          if (resolved) {
+            validTopics.push(tId);
+            validDetails.push({
+              id: tId,
+              name: resolved,
+            });
+          }
+        }
+      });
+
+      // Deduplicate completedChapters
       const validChapters = deduplicateCompletedChapters(p.completedChapters || []);
 
       return {
@@ -1797,12 +1846,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const isTopicCompleted = (topicIdOrName: string, studentId?: string): boolean => {
     if (!topicIdOrName) return false;
-    if (topicIdOrName.toLowerCase().includes('body fluids')) return false;
+    const lower = topicIdOrName.toLowerCase();
+    if (lower.includes('body fluids') || lower.includes('molecular basis of inheritance') || lower === 'top-bio-204') return false;
+    if (!isTopicInCurrentCurriculum(topicIdOrName, topicIdOrName)) return false;
     const sId = studentId || 'u-student-1';
     const rec = studentProgressList.find(p => p.studentId === sId);
     if (!rec) return false;
     if (rec.completedTopics.includes(topicIdOrName)) return true;
-    if (rec.completedTopicDetails?.some(d => d.id === topicIdOrName || (d.name && d.name.toLowerCase() === topicIdOrName.toLowerCase()))) {
+    if (rec.completedTopicDetails?.some(d => d.id === topicIdOrName || (d.name && d.name.toLowerCase() === lower))) {
       return true;
     }
     return false;
@@ -1820,6 +1871,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const getTopicCompletions = (topicId: string) => {
+    if (!topicId || topicId === 'top-bio-204' || topicId.toLowerCase().includes('molecular basis of inheritance')) return [];
+    if (!isTopicInCurrentCurriculum(topicId)) return [];
     return studentProgressList
       .filter(p => p.completedTopics.includes(topicId) || p.completedTopics.some(t => t.toLowerCase() === topicId.toLowerCase()) || p.completedTopicDetails?.some(d => d.id === topicId || d.name?.toLowerCase() === topicId.toLowerCase()))
       .map(p => ({ studentId: p.studentId, studentName: p.studentName, studentBatch: p.studentBatch, avatar: p.avatar }));
@@ -1833,8 +1886,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     ]);
     // Also ensure the 8 documents for this student exist in studentDocuments
     setStudentDocuments(prev => {
-      const existingForStudent = prev.filter(d => d.studentId === dossier.studentId);
-      if (existingForStudent.length >= 8) return prev;
       const studentDocs: StudentDocument[] = dossier.checklist.map(item => ({
         id: `sdoc-${dossier.studentId}-${item.key}`,
         studentId: dossier.studentId,
@@ -1843,7 +1894,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         stageKey: item.key,
         title: `${item.stageNumber}. ${item.title}`,
         category: item.category,
-        status: item.status === 'verified' ? 'Verified' : 'Not Verified',
+        status: item.status === 'verified'
+          ? 'Verified'
+          : item.status === 'rejected'
+            ? 'Not Verified'
+            : item.status === 'pending'
+              ? 'Pending'
+              : 'In Review/In Progress',
         fileName: item.uploadedFile?.fileName || `${item.key}.pdf`,
         fileSize: item.uploadedFile?.fileSize || '2.0 MB',
         submissionSource: `Submitted via Student Mail (${dossier.studentEmail})`,
@@ -1877,11 +1934,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const deleteConsultancyDossier = (studentId: string) => {
     setConsultancyDossiers(prev => prev.filter(d => d.studentId !== studentId));
+    setConsultancyOptInMap(prev => ({ ...prev, [studentId]: false }));
+    setStudentDocuments(prev => prev.filter(d => d.studentId !== studentId));
     addAuditLog({
       action: 'Consultancy Dossier Removed',
       userId: 'system',
       userName: 'Consultant Agent',
-      details: `Removed consultancy dossier for student ID ${studentId}`
+      details: `Removed consultancy facility & verification dossier for student ID ${studentId}`
     });
   };
 
@@ -1892,17 +1951,103 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const isConsultancyOptedIn = (studentId?: string): boolean => {
     const sId = studentId || 'u-student-1';
-    return consultancyOptInMap[sId] !== false;
+    if (consultancyOptInMap[sId] !== undefined) {
+      return consultancyOptInMap[sId];
+    }
+    return consultancyDossiers.some(d => d.studentId === sId);
   };
 
   const setConsultancyOptIn = (studentId: string, optIn: boolean) => {
     setConsultancyOptInMap(prev => ({ ...prev, [studentId]: optIn }));
-    addAuditLog({
-      action: optIn ? 'Consultancy Assistance Opted In' : 'Consultancy Assistance Opted Out',
-      userId: studentId,
-      userName: studentId,
-      details: `Student ${studentId} updated consultancy assistance preference to ${optIn ? 'Opted In' : 'Opted Out'}`
-    });
+
+    if (optIn) {
+      const studentUser = users.find(u => u.id === studentId);
+      const studentName = studentUser?.name || 'Mary';
+      const studentEmail = studentUser?.email || 'mary@medical.lms';
+      const studentBatch = studentUser?.batch || 'Batch 1 (Dec)';
+
+      // 1. Ensure consultancy dossier exists
+      setConsultancyDossiers(prev => {
+        const existing = prev.find(d => d.studentId === studentId);
+        if (existing) return prev;
+
+        const newDossier: StudentConsultancyDossier = {
+          studentId,
+          studentName,
+          studentEmail,
+          studentBatch,
+          avatar: studentUser?.avatar || '👩‍🎓',
+          targetCountry: 'Italy',
+          targetCourse: 'Medicine and Surgery (Single-Cycle Degree / MD)',
+          targetUniversities: [
+            'Sapienza University of Rome (Medicine & Surgery)',
+            'University of Milan (International Medical School - IMS)',
+            'University of Bologna (School of Medicine)'
+          ],
+          consultantId: 'u-consultant-1',
+          consultantName: 'Dr. Marco Rossi (Consultant Agent)',
+          assignedAt: new Date().toISOString(),
+          overallStatus: 'IN_PROGRESS',
+          intake: '2026 / 2027 Academic Intake',
+          priority: 'High',
+          lastUpdated: new Date().toISOString(),
+          notes: 'Aspirant opted in for Study Abroad Consular Assistance. Verification pipeline initiated.',
+          checklist: createNewApplicantChecklist(),
+        };
+        return [newDossier, ...prev];
+      });
+
+      // 2. Ensure student documents for all 8 stages exist for this student (all starting in In Review status)
+      setStudentDocuments(prev => {
+        const hasDocs = prev.some(d => d.studentId === studentId);
+        if (hasDocs) return prev;
+
+        const seededDocs: StudentDocument[] = createNewApplicantChecklist().map(item => ({
+          id: `sdoc-${studentId}-${item.key}`,
+          studentId,
+          studentName,
+          stageNumber: item.stageNumber,
+          stageKey: item.key,
+          title: `${item.stageNumber}. ${item.title}`,
+          category: item.category,
+          status: 'In Review/In Progress',
+          fileName: `${item.key}.pdf`,
+          fileSize: '2.0 MB',
+          submissionSource: `Submitted via Student Mail (${studentEmail})`,
+          submittedAt: new Date().toISOString(),
+          remarks: item.consultantNotes,
+        }));
+        return [...prev.filter(d => d.studentId !== studentId), ...seededDocs];
+      });
+
+      // 3. Dispatch notification to Consultant Agent
+      const now = new Date();
+      const notifTime = format(now, 'dd MMM, hh:mm a');
+      const consultantNotif: Notification = {
+        id: generateId(),
+        title: 'New Consultancy Facility Request',
+        message: `${studentName} (${studentBatch}) has opted in for Study Abroad Consultancy Assistance. Review and allow/activate consultancy facility.`,
+        time: notifTime,
+        read: false,
+        type: 'enrollment',
+        targetRole: 'consultant',
+      };
+      setNotifications(prev => [consultantNotif, ...prev]);
+
+      addAuditLog({
+        action: 'Consultancy Assistance Requested',
+        userId: studentId,
+        userName: studentName,
+        details: `Student ${studentName} (${studentId}) opted in. Notification dispatched to Consultant Agent.`
+      });
+    } else {
+      addAuditLog({
+        action: 'Consultancy Assistance Opted Out',
+        userId: studentId,
+        userName: studentId,
+        details: `Student ${studentId} updated consultancy assistance preference to Opted Out`
+      });
+    }
   };
 
   const updateChecklistItemStatus = (

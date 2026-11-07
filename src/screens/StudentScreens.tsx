@@ -13,7 +13,7 @@ import { StudentConsultancyRoadmapModal, DocumentAttachmentPreviewModal } from '
 // ==================== HOME SCREEN ====================
 export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
-  const { courses, announcements, communityMessages, quizzes, departments, notifications, getStudentProgress, getStudentDossier, isConsultancyOptedIn, setConsultancyOptIn } = useData();
+  const { courses, announcements, communityMessages, quizzes, departments, notifications, getStudentProgress, getStudentDossier, isConsultancyOptedIn, setConsultancyOptIn, studentDocuments } = useData();
   const { assessments } = useAssessments();
   const studentBatch = user?.batch || 'Batch 1 (Dec)';
   const myCourses = courses.filter(c => (!c.batch || c.batch === 'All' || c.batch === studentBatch) && c.studentIds.includes(user?.id || ''));
@@ -175,6 +175,36 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
                 </p>
               </div>
             </div>
+
+            {/* Status Breakdown Grid for Student */}
+            {(() => {
+              const relevantDocs = studentDocuments?.filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') || [];
+              const vCount = relevantDocs.filter(d => d.status === 'Verified').length;
+              const rCount = relevantDocs.filter(d => d.status === 'In Review/In Progress').length;
+              const nvCount = relevantDocs.filter(d => d.status === 'Not Verified' || d.status === 'Rejected').length;
+              const pCount = relevantDocs.filter(d => !d.status || d.status === 'Pending').length;
+
+              return (
+                <div className="grid grid-cols-4 gap-1.5 mb-2.5">
+                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                    <span className="block text-emerald-300 font-black text-xs">{vCount}</span>
+                    <span className="text-[9px] text-teal-200">Verified</span>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                    <span className="block text-amber-300 font-black text-xs">{rCount}</span>
+                    <span className="text-[9px] text-amber-200">In Review</span>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                    <span className="block text-rose-300 font-black text-xs">{nvCount}</span>
+                    <span className="text-[9px] text-rose-200">Not Verified</span>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                    <span className="block text-slate-300 font-black text-xs">{pCount}</span>
+                    <span className="text-[9px] text-slate-300">Pending</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <button
               onClick={() => setShowRoadmapModal(true)}
@@ -993,47 +1023,93 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
             <button
               type="button"
               onClick={() => setConsultancyOptIn(user?.id || 'u-student-1', !isOptedIn)}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs active:scale-95 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs active:scale-95 ${
                 isOptedIn
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                  : 'bg-teal-600 hover:bg-teal-700 text-white'
               }`}
             >
-              <i className={`fas ${isOptedIn ? 'fa-check-circle' : 'fa-circle'}`} />
-              <span>{isOptedIn ? 'Opted In' : 'Not Opted'}</span>
+              <i className={`fas ${isOptedIn ? 'fa-check-circle' : 'fa-plus-circle'}`} />
+              <span>{isOptedIn ? 'Opted In' : 'Opt In'}</span>
             </button>
           </div>
           <p className="text-[11px] text-gray-600">
             {isOptedIn
-              ? '✅ You have opted in for expert Consultancy Assistance with assigned Consultant Agent Dr. Marco Rossi.'
-              : 'ℹ️ You are currently preparing independently. Click "Not Opted" above anytime to opt in for full consular assistance.'}
+              ? '✅ You have opted in for expert Consultancy Assistance with assigned Consultant Agent Dr. Marco Rossi. Detailed document dashboard is active below.'
+              : 'ℹ️ Status: Not Opted. Click "Opt In" above to request the facility. A notification will be dispatched to the Consultant Agent and your document verification dashboard will open.'}
           </p>
         </div>
 
-        {/* Student Verified Documentation List (Official 8 Stages from Consultant Agent) */}
-        <div className="card p-4 space-y-3 border border-slate-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-sm shadow-2xs">
-                <i className="fas fa-file-shield" />
-              </span>
-              <div>
-                <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
-                  My Verification Documents
-                </h3>
-                <p className="text-[10px] text-gray-500">
-                  8 Official Consular & Admissions Legalisation Documents
-                </p>
+        {/* Student Verified Documentation List (Official 8 Stages from Consultant Agent) - Shown ONLY when Opted In and Active */}
+        {isOptedIn && myDossier && (
+          <div className="card p-4 space-y-3 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-sm shadow-2xs">
+                  <i className="fas fa-file-shield" />
+                </span>
+                <div>
+                  <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    My Verification Documents
+                  </h3>
+                  <p className="text-[10px] text-gray-500">
+                    8 Official Consular & Admissions Legalisation Documents
+                  </p>
+                </div>
               </div>
+              <span className="badge badge-teal text-[10px] py-0.5 px-2.5 font-bold">
+                {studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} / 8 Verified
+              </span>
             </div>
-            <span className="badge badge-teal text-[10px] py-0.5 px-2.5 font-bold">
-              {studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} / 8 Verified
-            </span>
-          </div>
 
-          <p className="text-[10px] text-gray-400">
-            Read-only verification status managed strictly by Academy Admin and AI Agent (Consultant Agent Dr. Marco Rossi).
-          </p>
+            {/* Status Breakdown Grid (Verified, In Review, Not Verified, Pending) */}
+            {(() => {
+              const relevantDocs = studentDocuments.filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1');
+              const verifiedDocsCount = relevantDocs.filter(d => d.status === 'Verified').length;
+              const inProgressDocsCount = relevantDocs.filter(d => d.status === 'In Review/In Progress').length;
+              const notVerifiedDocsCount = relevantDocs.filter(d => d.status === 'Not Verified' || d.status === 'Rejected').length;
+              const pendingDocsCount = relevantDocs.filter(d => !d.status || d.status === 'Pending').length;
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+                    <div className="flex items-center justify-center gap-1 text-emerald-700 font-black text-sm">
+                      <i className="fas fa-check-circle text-xs" />
+                      <span>{verifiedDocsCount}</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide mt-0.5">Verified</p>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-center">
+                    <div className="flex items-center justify-center gap-1 text-amber-700 font-black text-sm">
+                      <i className="fas fa-hourglass-half text-xs" />
+                      <span>{inProgressDocsCount}</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wide mt-0.5">In Review</p>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-center">
+                    <div className="flex items-center justify-center gap-1 text-rose-700 font-black text-sm">
+                      <i className="fas fa-times-circle text-xs" />
+                      <span>{notVerifiedDocsCount}</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-rose-800 uppercase tracking-wide mt-0.5">Not Verified</p>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                    <div className="flex items-center justify-center gap-1 text-slate-700 font-black text-sm">
+                      <i className="fas fa-clock text-xs" />
+                      <span>{pendingDocsCount}</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-800 uppercase tracking-wide mt-0.5">Pending</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <p className="text-[10px] text-gray-400">
+              Read-only verification status managed strictly by Academy Admin and AI Agent (Consultant Agent Dr. Marco Rossi).
+            </p>
 
           <div className="space-y-2 pt-1">
             {studentDocuments
@@ -1209,6 +1285,7 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
             </button>
           )}
         </div>
+        )}
 
         <div className="card p-0 overflow-hidden">
           {[

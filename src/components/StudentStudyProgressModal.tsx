@@ -83,7 +83,8 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
       }
 
       chapTopics.forEach((top, tIdx) => {
-        if (top.name && top.name.toLowerCase().includes('body fluids')) return;
+        if (top.name && (top.name.toLowerCase().includes('body fluids') || top.name.toLowerCase().includes('molecular basis of inheritance'))) return;
+        if (top.id === 'top-bio-204') return;
         const isDone = isTopicCompleted(top.id, student.id);
         if (isDone) {
           studiedTopicsList.push({
@@ -101,11 +102,11 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
     });
   });
 
-  // Reconcile with completedTopicDetails if any verified topic was marked
+  // Reconcile with completedTopicDetails ONLY if the topic is currently available in the curriculum
   (progress?.completedTopicDetails || []).forEach((d) => {
     if (!d.id) return;
-    if (d.name && d.name.toLowerCase().includes('body fluids')) return;
-    if (d.id && d.id.toLowerCase().includes('body-fluids')) return;
+    if (d.name && (d.name.toLowerCase().includes('body fluids') || d.name.toLowerCase().includes('molecular basis of inheritance'))) return;
+    if (d.id && (d.id.toLowerCase().includes('body-fluids') || d.id === 'top-bio-204')) return;
     if (d.id === 'top-bio-101' || d.id === 'top-bio-102' || d.id === 'top-bio-201') {
       if (!d.name || d.name === d.id) return;
     }
@@ -120,6 +121,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
     let sName = d.subjectName;
     let sId = d.subjectId;
     let sCode = 'BIO';
+    let foundInCurriculum = false;
 
     const searchable = [...effectiveCurriculum, ...DEFAULT_CURRICULUM];
     for (const sub of searchable) {
@@ -134,14 +136,16 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
           sName = sub.name;
           sId = sub.id;
           sCode = sub.code;
+          foundInCurriculum = true;
           break;
         }
       }
-      if (cleanName && !isUuid) break;
+      if (foundInCurriculum) break;
     }
 
-    // If still a UUID or empty or body fluids, do not include ghost entry
-    if (!cleanName || isUuid || cleanName.toLowerCase().includes('body fluids')) return;
+    // Show ONLY topics that are available right now in the current curriculum
+    if (!foundInCurriculum) return;
+    if (!cleanName || isUuid || cleanName.toLowerCase().includes('body fluids') || cleanName.toLowerCase().includes('molecular basis of inheritance')) return;
 
     studiedTopicsList.push({
       id: d.id,
@@ -149,7 +153,7 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
       subjectId: sId || 'subj-biology',
       subjectName: sName || 'Biology',
       subjectCode: sCode || 'BIO',
-      chapterName: chName || 'Human Physiology',
+      chapterName: chName || 'The Chemistry of Living Things, Cell Biology & Bioenergetics',
       chapterNumber: 1,
       topicNumber: studiedTopicsList.length + 1,
     });

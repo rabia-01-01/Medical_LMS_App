@@ -7,6 +7,7 @@ import {
   ChecklistItemStatus,
   DossierOverallStatus,
   createDefaultChecklist,
+  createNewApplicantChecklist,
 } from '../features/consultancy/types';
 
 // ============================================================================
@@ -81,7 +82,7 @@ export function ConsultantDashboard({
   onBack?: () => void;
 }) {
   const { user } = useAuth();
-  const { consultancyDossiers, cohortBatches, deleteConsultancyDossier } = useData();
+  const { consultancyDossiers, cohortBatches, deleteConsultancyDossier, notifications, markNotificationRead } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('All');
@@ -92,6 +93,16 @@ export function ConsultantDashboard({
   const [showPrintReport, setShowPrintReport] = useState<StudentConsultancyDossier | null>(null);
   const [selectedStageForInspection, setSelectedStageForInspection] = useState<number | null>(null);
   const [showStageInspectionModal, setShowStageInspectionModal] = useState(false);
+
+  const consultantNotifs = useMemo(() => {
+    return (notifications || []).filter(
+      (n) => n.targetRole === 'consultant' || n.targetRole === 'all'
+    );
+  }, [notifications]);
+
+  const unreadConsultantNotifs = useMemo(() => {
+    return consultantNotifs.filter((n) => !n.read);
+  }, [consultantNotifs]);
 
   const handleOpenStage = (stageNum: number) => {
     setSelectedStageForInspection(stageNum);
@@ -172,6 +183,19 @@ export function ConsultantDashboard({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              onClick={() => onNavigate('notifications')}
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white text-base relative transition active:scale-95"
+              title="Alerts & Student Requests"
+            >
+              <i className="fas fa-bell text-sm" />
+              {unreadConsultantNotifs.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center shadow-xs">
+                  {unreadConsultantNotifs.length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setShowAddApplicantModal(true)}
               className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
               title="Add New Study Abroad Candidate"
@@ -217,6 +241,38 @@ export function ConsultantDashboard({
 
       {/* Main Content Area */}
       <div className="p-4 space-y-4">
+        {/* Pending Student Opt-In Request Alert Banner */}
+        {unreadConsultantNotifs.length > 0 && (
+          <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-300 rounded-2xl p-3.5 shadow-sm space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0 mt-0.5">
+                  <i className="fas fa-user-plus" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800">
+                      New Student Opt-In Request
+                    </span>
+                    <span className="badge badge-teal text-[9px] py-0 px-1.5 font-bold">Action Needed</span>
+                  </div>
+                  <h4 className="text-xs font-bold text-gray-900 mt-0.5">{unreadConsultantNotifs[0].title}</h4>
+                  <p className="text-[11px] text-gray-700 mt-0.5 leading-relaxed">{unreadConsultantNotifs[0].message}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => markNotificationRead(unreadConsultantNotifs[0].id)}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl shrink-0 transition shadow-xs flex items-center gap-1.5"
+                title="Acknowledge and allow consultancy facility"
+              >
+                <i className="fas fa-check text-[10px]" />
+                <span>Allow Facility</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Exact Handwritten 8-Stage Pipeline Interactive Roadmap */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-2">
@@ -459,24 +515,16 @@ export function ConsultantDashboard({
                   <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100 flex-wrap">
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setShowPrintReport(dossier)}
-                        className="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs font-semibold flex items-center gap-1.5 transition"
-                      >
-                        <i className="fas fa-print text-gray-400 text-[11px]" />
-                        Print Dossier
-                      </button>
-
-                      <button
                         type="button"
                         onClick={() => {
                           if (window.confirm(`Delete ${dossier.studentName}'s consultancy dossier from the active admissions pipeline? This action cannot be undone.`)) {
                             deleteConsultancyDossier(dossier.studentId);
                           }
                         }}
-                        className="px-2.5 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold flex items-center gap-1 transition"
+                        className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs"
                         title="Delete candidate whose consultancy is done"
                       >
-                        <i className="fas fa-trash-alt text-[10px]" />
+                        <i className="fas fa-trash-alt text-[11px]" />
                         <span>Delete Candidate</span>
                       </button>
                     </div>
@@ -988,36 +1036,6 @@ export function ConsultantStageInspectionModal({
                     </span>
                   </div>
 
-                  {/* Official Attached Document File */}
-                  <div className="p-2.5 bg-slate-50 rounded-xl border border-gray-200 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
-                        <i className="fas fa-file-pdf text-sm text-red-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-800 text-xs truncate">{fileName}</p>
-                        <p className="text-[10px] text-gray-400">PDF • {fileSize} • Uploaded {submittedDate}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPreviewDoc({
-                          fileName,
-                          fileSize,
-                          stageTitle: currentMeta.title,
-                          studentName: dossier.studentName,
-                          submittedAt: stageItem?.uploadedFile?.uploadedAt,
-                        })
-                      }
-                      className="px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-[10px] transition shrink-0 flex items-center gap-1 border border-teal-200"
-                    >
-                      <i className="fas fa-eye" />
-                      <span>View Attachment</span>
-                    </button>
-                  </div>
-
                   {/* Sub-items Checklist Toggles (if any) */}
                   {stageItem?.subItems && stageItem.subItems.length > 0 && (
                     <div className="space-y-1.5 pt-1 border-t border-gray-100">
@@ -1056,36 +1074,6 @@ export function ConsultantStageInspectionModal({
                       </div>
                     </div>
                   )}
-
-                  {/* Attestation Notes Input */}
-                  <div className="space-y-1 pt-1">
-                    <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">
-                      Consultant Verification Remarks / Feedback:
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={currentNote}
-                        onChange={(e) =>
-                          setNotesState({
-                            ...notesState,
-                            [noteKey]: e.target.value,
-                          })
-                        }
-                        placeholder="e.g. Bio-data verified, valid till 2033; or translation required..."
-                        className="flex-1 p-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-teal-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleUpdateCandidateStage(dossier.studentId, currentMeta.key, isVerified ? 'verified' : 'rejected', currentNote)
-                        }
-                        className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold"
-                      >
-                        Save Note
-                      </button>
-                    </div>
-                  </div>
 
                   {/* Direct Action Buttons for Consultant: 4 Markers */}
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100 flex-wrap gap-2">
@@ -1393,37 +1381,6 @@ export function ConsultantChecklistInspectorModal({
               </div>
             </div>
 
-            {/* Official Attached Document File */}
-            <div className="p-3 bg-slate-50 rounded-2xl border border-gray-200 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
-                  <i className="fas fa-file-pdf text-red-500 text-sm" />
-                </div>
-                <div className="min-w-0">
-                  <span className="font-semibold text-gray-800 text-xs truncate block">
-                    {activeItem.uploadedFile?.fileName || `${activeItem.key}_Document.pdf`}
-                  </span>
-                  <span className="text-[10px] text-gray-400">
-                    PDF • {activeItem.uploadedFile?.fileSize || '2.0 MB'} • Uploaded {activeItem.uploadedFile?.uploadedAt ? new Date(activeItem.uploadedFile.uploadedAt).toLocaleDateString() : 'Official Attachment'}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewDoc({
-                  fileName: activeItem.uploadedFile?.fileName || `${activeItem.key}_Document.pdf`,
-                  fileSize: activeItem.uploadedFile?.fileSize || '2.0 MB',
-                  stageTitle: activeItem.title,
-                  studentName: dossier.studentName,
-                  submittedAt: activeItem.uploadedFile?.uploadedAt || ''
-                })}
-                className="px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-[10px] transition shrink-0 border border-teal-200 flex items-center gap-1"
-              >
-                <i className="fas fa-eye" />
-                <span>View Attachment</span>
-              </button>
-            </div>
-
             {/* Stage Description from Handwritten Checklist */}
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-700">
               <p className="font-semibold text-gray-800 mb-0.5">Mandatory Consular Specification:</p>
@@ -1673,7 +1630,7 @@ export function NewConsultancyApplicantModal({ onClose }: { onClose: () => void 
       intake: '2026 / 2027 Academic Intake',
       lastUpdated: new Date().toISOString(),
       notes: notes || 'Enrolled in study abroad admissions pipeline.',
-      checklist: createDefaultChecklist(),
+      checklist: createNewApplicantChecklist(),
     };
 
     addConsultancyDossier(newDossier);

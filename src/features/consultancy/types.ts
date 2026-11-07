@@ -239,3 +239,23 @@ export function createDefaultChecklist(): ConsultancyChecklistItem[] {
   ];
 }
 
+/**
+ * Creates an initial 8-stage admissions checklist for newly enrolled applicants.
+ * All 8 stages start strictly in 'in_progress' (In Review) status until verified by Consultant Agent.
+ */
+export function createNewApplicantChecklist(): ConsultancyChecklistItem[] {
+  return createDefaultChecklist().map((item) => ({
+    ...item,
+    status: 'in_progress' as ChecklistItemStatus,
+    verifiedBy: undefined,
+    verifiedAt: undefined,
+    consultantNotes: 'Applicant enrolled. Documents in review by Consultant Agent.',
+    subItems: item.subItems?.map((sub) => ({
+      ...sub,
+      status: 'pending' as const,
+      notes: 'Pending consultant review and verification',
+    })),
+  }));
+}
+
+

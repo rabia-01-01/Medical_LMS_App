@@ -38,6 +38,7 @@ function mapLegacyQuizToAssessment(q: any): AssessmentWithQuestions {
       updated_at: new Date().toISOString(),
       imageUrl: item.imageUrl || item.image_url || null,
       image_url: item.imageUrl || item.image_url || null,
+      passage: item.passage || null,
       options: opts,
     };
   });

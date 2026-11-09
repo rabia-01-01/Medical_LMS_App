@@ -23,7 +23,7 @@ const studentNavItems = [
 
 const facultyNavItems = [
   { id: 'dashboard', icon: 'fa-tachometer-alt', label: 'Home' },
-  { id: 'courses', icon: 'fa-book', label: 'Courses' },
+  { id: 'courses', icon: 'fa-layer-group', label: 'Curriculum' },
   { id: 'upload', icon: 'fa-cloud-upload-alt', label: 'Upload' },
   { id: 'create-quiz', icon: 'fa-clipboard-list', label: 'Quiz' },
   { id: 'profile', icon: 'fa-user', label: 'Profile' },

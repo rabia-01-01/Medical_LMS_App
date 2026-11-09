@@ -8,6 +8,7 @@ import { getQuestionsFromBank } from '../data/imatQuestionBank';
 interface GeneratedMCQ {
   id: number;
   question: string;
+  passage?: string;
   imageUrl?: string;
   options: string[];
   correctAnswer: number;
@@ -24,31 +25,9 @@ const AI_GENERATE_ENDPOINT = '/api/ai/generate';
 
 const MAX_QUESTIONS = 100;
 
-function createSampleDiagram(chapterName: string): string {
-  const safeChapter = chapterName
-    .slice(0, 22)
-    .replace(/[<>&"']/g, '');
-
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="340" height="160" viewBox="0 0 340 160">
-      <rect width="340" height="160" fill="#0f172a" rx="12"/>
-      <circle cx="90" cy="72" r="34" fill="#0d9488" opacity="0.9"/>
-      <circle cx="170" cy="72" r="34" fill="#3b82f6" opacity="0.9"/>
-      <circle cx="250" cy="72" r="34" fill="#8b5cf6" opacity="0.9"/>
-      <text x="170" y="125" fill="#ffffff" font-family="sans-serif" font-size="12" text-anchor="middle">
-        ${safeChapter}
-      </text>
-    </svg>
-  `;
-
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
 function normalizeQuestions(
   rawQuestions: unknown,
   questionCount: number,
-  includeDiagramQuestion: boolean,
-  chapterName: string,
 ): GeneratedMCQ[] {
   if (!Array.isArray(rawQuestions) || rawQuestions.length !== questionCount) {
     throw new Error(
@@ -92,10 +71,7 @@ function normalizeQuestions(
     return {
       id: index + 1,
       question: item.question.trim(),
-      imageUrl:
-        index === 0 && includeDiagramQuestion
-          ? createSampleDiagram(chapterName)
-          : undefined,
+      passage: typeof item.passage === 'string' && item.passage.trim() ? item.passage.trim() : undefined,
       options,
       correctAnswer: item.correctAnswer,
       marks: Number.isFinite(item.marks) ? item.marks : 4,
@@ -139,7 +115,6 @@ export function AdminAIMCQGenerator({
   const topics = activeChapter?.topics || [];
 
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
-  const [includeDiagramQuestion, setIncludeDiagramQuestion] = useState(true);
   const [targetBatch, setTargetBatch] = useState<TargetBatch>('Batch 1 (Dec)');
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [generating, setGenerating] = useState(false);
@@ -195,7 +170,7 @@ export function AdminAIMCQGenerator({
         chapterName,
         topicName,
         questionCount,
-        includeDiagramQuestion
+        false
       );
 
       if (bankQuestions && bankQuestions.length > 0) {
@@ -236,8 +211,6 @@ export function AdminAIMCQGenerator({
       const formatted = normalizeQuestions(
         data.questions,
         questionCount,
-        includeDiagramQuestion,
-        chapterName,
       );
 
       setGeneratedQuestions(formatted);
@@ -245,14 +218,11 @@ export function AdminAIMCQGenerator({
       setGeneratingStatus('');
     } catch (error) {
       console.warn('AI MCQ generation backend offline, falling back to high-yield clinical question bank:', error);
-      // Fallback high-yield clinical questions bank
+      // Fallback high-yield clinical questions bank (text-only format)
       const baseFallback = [
         {
           id: 1,
-          question: includeDiagramQuestion
-            ? `Refer to the diagnostic figure below regarding ${chapterName} (${topicName}). Based on the physiological pathway, which clinical statement accurately identifies Option A as the primary mechanism?`
-            : `In the study of ${chapterName} — ${topicName} (${subjectName}), which physiological principle governs homeostatic regulation under acute clinical stress?`,
-          imageUrl: includeDiagramQuestion ? createSampleDiagram(chapterName) : undefined,
+          question: `In the study of ${chapterName} — ${topicName} (${subjectName}), which physiological principle governs homeostatic regulation under acute clinical stress?`,
           options: [
             `Option A: Primary depolarizing influx driven by voltage-gated channels (Correct clinical pearl)`,
             `Option B: Decreased ventricular end-diastolic compliance causing secondary pulmonary congestion`,
@@ -263,7 +233,7 @@ export function AdminAIMCQGenerator({
           correctAnswer: 0,
           marks: 4,
           negativeMarks: 1,
-          explanation: `Clinical High-Yield Pearl: Option A is the correct answer. The diagnostic diagram demonstrates rapid upstroke depolarization during phase 0, mediated by fast voltage-gated sodium channels.`,
+          explanation: `Clinical High-Yield Pearl: Option A is the correct answer. The diagnostic physiological pathway demonstrates rapid upstroke depolarization during phase 0, mediated by fast voltage-gated sodium channels.`,
         },
         {
           id: 2,
@@ -518,7 +488,7 @@ export function AdminAIMCQGenerator({
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 pt-1">
+        <div className="pt-1">
           <div>
             <label
               htmlFor="mcq-batch"
@@ -536,23 +506,6 @@ export function AdminAIMCQGenerator({
                 <option key={b.name} value={b.name}>{b.name}</option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <span className="text-[11px] font-bold text-gray-700 block mb-1">
-              Visual Diagram
-            </span>
-            <label className="flex items-center gap-2 px-2.5 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer transition min-h-[37px]">
-              <input
-                type="checkbox"
-                checked={includeDiagramQuestion}
-                onChange={(event) => setIncludeDiagramQuestion(event.target.checked)}
-                className="w-4 h-4 text-teal-600 rounded shrink-0"
-              />
-              <span className="text-xs font-semibold text-gray-700 truncate">
-                Include illustrative diagram
-              </span>
-            </label>
           </div>
         </div>
 
@@ -674,22 +627,33 @@ export function AdminAIMCQGenerator({
                   </span>
                 </div>
 
-                <p className="text-xs font-semibold text-gray-800 leading-relaxed">
-                  {question.question}
-                </p>
-
-                {question.imageUrl && (
-                  <div className="my-2 p-2 bg-slate-50 border border-slate-200 rounded-lg text-center">
-                    <img
-                      src={question.imageUrl}
-                      alt="Illustrative chapter diagram"
-                      className="max-h-28 mx-auto rounded object-contain"
-                    />
-                    <span className="text-[9px] text-teal-700 font-semibold block mt-1">
-                      Illustrative diagram — not an AI-generated scientific figure
-                    </span>
-                  </div>
-                )}
+                {(() => {
+                  let displayStem = question.question;
+                  let displayPassage = question.passage;
+                  if (displayStem.includes('[READING PASSAGE]') && displayStem.includes('[QUESTION]')) {
+                    const parts = displayStem.split('[QUESTION]');
+                    displayStem = (parts[1] || '').trim();
+                    if (!displayPassage) {
+                      displayPassage = parts[0].replace('[READING PASSAGE]', '').trim();
+                    }
+                  }
+                  return (
+                    <>
+                      {displayPassage && (
+                        <div className="p-3 bg-amber-50/90 border-l-4 border-amber-500 rounded-r-xl text-xs text-slate-800 leading-relaxed shadow-2xs mb-2">
+                          <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-amber-800 mb-1">
+                            <i className="fas fa-book-reader text-amber-600" />
+                            <span>Reading Passage</span>
+                          </div>
+                          <p className="italic font-normal text-slate-700">{displayPassage}</p>
+                        </div>
+                      )}
+                      <p className="text-xs font-semibold text-gray-800 leading-relaxed whitespace-pre-line">
+                        {displayStem}
+                      </p>
+                    </>
+                  );
+                })()}
 
                 <div className="space-y-1.5 pt-1">
                   {question.options.map((option, optionIndex) => (

@@ -385,9 +385,33 @@ export function AssessmentRunner({
             </div>
           </div>
 
-          <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-line">
-            {currentQ.question_text}
-          </p>
+          {(() => {
+            let displayStem = currentQ.question_text;
+            let displayPassage = (currentQ as any).passage;
+            if (displayStem.includes('[READING PASSAGE]') && displayStem.includes('[QUESTION]')) {
+              const parts = displayStem.split('[QUESTION]');
+              displayStem = (parts[1] || '').trim();
+              if (!displayPassage) {
+                displayPassage = parts[0].replace('[READING PASSAGE]', '').trim();
+              }
+            }
+            return (
+              <>
+                {displayPassage && (
+                  <div className="mb-3 p-3.5 bg-amber-50/90 border-l-4 border-amber-500 rounded-r-xl text-xs text-slate-800 leading-relaxed shadow-2xs">
+                    <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-amber-800 mb-1.5">
+                      <i className="fas fa-book-reader text-amber-600" />
+                      <span>Reading Passage</span>
+                    </div>
+                    <p className="italic font-normal text-slate-700">{displayPassage}</p>
+                  </div>
+                )}
+                <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-line">
+                  {displayStem}
+                </p>
+              </>
+            );
+          })()}
 
           {/* Question Diagram / Image */}
           {((currentQ as any).imageUrl || (currentQ as any).image_url) && (

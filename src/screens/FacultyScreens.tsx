@@ -46,8 +46,8 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div onClick={() => onNavigate('courses')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
-            <p className="text-teal-300 text-lg font-bold">{courses.length}</p>
-            <p className="text-gray-300 text-[10px]">Courses ({assignedCourses.length} assigned)</p>
+            <p className="text-teal-300 text-lg font-bold">7 Subjects</p>
+            <p className="text-gray-300 text-[10px]">Manage Curriculum</p>
           </div>
           <div onClick={() => onNavigate('faculty-resources')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
             <p className="text-teal-300 text-lg font-bold">{myResources.length}</p>
@@ -225,47 +225,24 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
           />
         )}
 
-        {/* Assigned and Admin Uploaded Courses */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h2 className="text-gray-800 font-bold text-sm">Courses ({courses.length})</h2>
-              <p className="text-[10px] text-gray-400">Assigned courses & courses uploaded by Admin</p>
+        {/* Manage Curriculum Access */}
+        <div className="card bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <i className="fas fa-layer-group text-base" />
             </div>
-            <button onClick={() => onNavigate('courses')} className="text-teal-600 text-xs font-medium hover:underline">View All</button>
+            <div>
+              <h2 className="text-xs font-bold text-gray-900">Official Academic Curriculum</h2>
+              <p className="text-[10px] text-gray-500">7 Core Subjects • Chapters & Topics Hierarchy</p>
+            </div>
           </div>
-          {courses.length === 0 ? (
-            <div className="card text-center py-4"><p className="text-xs text-gray-500">No courses available yet</p></div>
-          ) : (
-            courses.slice(0, 4).map((course) => {
-              const isAssigned = (course.facultyIds || []).includes(user?.id || '');
-              return (
-                <div 
-                  key={course.id} 
-                  onClick={() => onNavigate('course-detail', course)} 
-                  className="card flex items-center gap-3 mb-2 cursor-pointer hover:border-teal-300 active:bg-gray-50 transition"
-                >
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: course.color + '20' }}>
-                    <i className={`fas ${course.icon}`} style={{ color: course.color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{course.name}</p>
-                      {isAssigned ? (
-                        <span className="badge badge-teal text-[9px] py-0 px-1.5 flex-shrink-0">Assigned</span>
-                      ) : (
-                        <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[9px] py-0 px-1.5 flex-shrink-0 flex items-center gap-0.5">
-                          <i className="fas fa-user-shield text-[8px]" /> Admin Course
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500">{course.studentIds.length} students enrolled • {course.category}</p>
-                  </div>
-                  <i className="fas fa-chevron-right text-gray-300 text-xs" />
-                </div>
-              );
-            })
-          )}
+          <button 
+            onClick={() => onNavigate('courses')} 
+            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shrink-0 shadow-xs flex items-center gap-1"
+          >
+            <span>Manage Curriculum</span>
+            <i className="fas fa-chevron-right text-[10px]" />
+          </button>
         </div>
 
         <div>
@@ -306,152 +283,26 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
   );
 }
 
-// ==================== FACULTY COURSES ====================
+// ==================== FACULTY COURSES / MANAGE CURRICULUM ====================
 export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
-  const { user } = useAuth();
-  const { courses } = useData();
-  const [viewMode, setViewMode] = useState<'courses' | 'curriculum'>(() => {
-    const savedTopic = typeof window !== 'undefined' ? sessionStorage.getItem('lms_curriculum_active_topic') : null;
-    return savedTopic ? 'curriculum' : 'courses';
-  });
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'assigned' | 'admin'>('all');
-  const [enrollingCourse, setEnrollingCourse] = useState<Course | null>(null);
-
-  const assignedCourses = useMemo(() => courses.filter(c => (c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
-  const adminCourses = useMemo(() => courses.filter(c => !(c.facultyIds || []).includes(user?.id || '')), [courses, user?.id]);
-
-  const displayedCourses = useMemo(() => {
-    if (scopeFilter === 'assigned') return assignedCourses;
-    if (scopeFilter === 'admin') return adminCourses;
-    return courses;
-  }, [courses, assignedCourses, adminCourses, scopeFilter]);
-
   return (
     <div>
       <Header 
-        title={viewMode === 'courses' ? 'Faculty Courses' : 'Academic Curriculum'} 
-        subtitle={viewMode === 'courses' ? `${courses.length} courses (${assignedCourses.length} assigned • ${adminCourses.length} admin)` : 'Subjects, Chapters & Topics'} 
+        title="Academic Curriculum" 
+        subtitle="Manage Subjects, Chapters & Topics" 
       />
 
-      {/* Primary Tab Switcher */}
+      {/* Primary Tab Switcher: Manage Curriculum Only */}
       <div className="flex bg-gray-100 p-1 rounded-xl mx-4 mb-3">
-        <button
-          onClick={() => setViewMode('courses')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-            viewMode === 'courses' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <i className="fas fa-book-medical text-[11px]" />
-          <span>Courses ({courses.length})</span>
-        </button>
-        <button
-          onClick={() => setViewMode('curriculum')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-            viewMode === 'curriculum' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
+        <div className="flex-1 py-1.5 rounded-lg text-xs font-semibold bg-white text-teal-700 shadow-xs flex items-center justify-center gap-1.5">
           <i className="fas fa-layer-group text-[11px]" />
           <span>Manage Curriculum</span>
-        </button>
-      </div>
-
-      {viewMode === 'curriculum' ? (
-        <div className="px-4 pb-4">
-          <CurriculumBrowser canManage={true} onNavigateToResource={(r) => onNavigate('resource-view', r)} />
         </div>
-      ) : (
-        <div className="p-4 space-y-3">
-          {/* Scope Filter: All vs Assigned vs Admin-uploaded */}
-          <div className="flex gap-2 mb-2">
-            <button
-              onClick={() => setScopeFilter('all')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition border ${
-                scopeFilter === 'all'
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
-                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              All Courses ({courses.length})
-            </button>
-            <button
-              onClick={() => setScopeFilter('assigned')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition border ${
-                scopeFilter === 'assigned'
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
-                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              My Assigned ({assignedCourses.length})
-            </button>
-            <button
-              onClick={() => setScopeFilter('admin')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition border ${
-                scopeFilter === 'admin'
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
-                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              Admin Uploaded ({adminCourses.length})
-            </button>
-          </div>
-
-          {displayedCourses.length === 0 ? (
-            <EmptyState icon="fa-book" title="No Courses" message="No courses found in this category" />
-          ) : (
-          displayedCourses.map((course) => {
-            const isAssigned = (course.facultyIds || []).includes(user?.id || '');
-            return (
-            <div key={course.id} className="card">
-              <div className="flex items-start gap-3">
-                <div 
-                  onClick={() => onNavigate('course-detail', course)} 
-                  className="w-12 h-12 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0" 
-                  style={{ backgroundColor: course.color + '20' }}
-                >
-                  <i className={`fas ${course.icon} text-lg`} style={{ color: course.color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div onClick={() => onNavigate('course-detail', course)} className="cursor-pointer">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <p className="text-sm font-bold text-gray-800 hover:text-teal-600 transition truncate">{course.name}</p>
-                      {isAssigned ? (
-                        <span className="badge badge-teal text-[9px] py-0 px-1.5 flex-shrink-0">Assigned</span>
-                      ) : (
-                        <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[9px] py-0 px-1.5 flex-shrink-0 flex items-center gap-0.5">
-                          <i className="fas fa-shield-alt text-[8px]" /> Admin Uploaded
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{course.description}</p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">
-                        <i className="fas fa-users mr-1" />{course.studentIds.length} students enrolled
-                      </span>
-                      <span className="text-[10px] text-gray-400">
-                        {course.category} • {course.duration}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
-                    
-                    
-                    <button onClick={() => onNavigate('create-quiz')} className="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5">
-                      <i className="fas fa-clipboard-list text-[10px]" />
-                      <span>Quiz</span>
-                    </button>
-                    <button onClick={() => onNavigate('course-detail', course)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 ml-auto">
-                      <span>Details</span>
-                      <i className="fas fa-chevron-right text-[10px]" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            );
-          })
-        )}
       </div>
-      )}
+
+      <div className="px-4 pb-4">
+        <CurriculumBrowser canManage={true} onNavigateToResource={(r) => onNavigate('resource-view', r)} />
+      </div>
     </div>
   );
 }
@@ -887,8 +738,8 @@ export function FacultyProfile({ onNavigate }: { onNavigate: (screen: string) =>
       <div className="p-4 space-y-3">
         <div className="grid grid-cols-3 gap-3">
           <div onClick={() => onNavigate('courses')} className="card text-center cursor-pointer hover:border-teal-300 transition">
-            <p className="text-lg font-bold text-teal-600">{myCourses.length}</p>
-            <p className="text-[10px] text-gray-500">Courses</p>
+            <p className="text-lg font-bold text-teal-600">7</p>
+            <p className="text-[10px] text-gray-500">Curriculum</p>
           </div>
           <div onClick={() => onNavigate('faculty-resources')} className="card text-center cursor-pointer hover:border-teal-300 transition">
             <p className="text-lg font-bold text-teal-600">{resources.filter(r => r.uploaderId === user?.id).length}</p>
@@ -903,7 +754,7 @@ export function FacultyProfile({ onNavigate }: { onNavigate: (screen: string) =>
           {[
             { icon: 'fa-folder', label: 'My Resources', screen: 'faculty-resources' },
             { icon: 'fa-cloud-upload-alt', label: 'Upload Resource', screen: 'upload' },
-            { icon: 'fa-book', label: 'My Courses & Enrollment', screen: 'courses' },
+            { icon: 'fa-layer-group', label: 'Manage Curriculum', screen: 'courses' },
             { icon: 'fa-clipboard-list', label: 'Create Quiz', screen: 'create-quiz' },
             { icon: 'fa-list-alt', label: 'My Quizzes', screen: 'submissions' },
             { icon: 'fa-bullhorn', label: 'Announcements', screen: 'announcements' },

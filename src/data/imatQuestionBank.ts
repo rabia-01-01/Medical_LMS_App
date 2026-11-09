@@ -20,6 +20,7 @@ export interface IMATBankQuestion {
 export interface GeneratedMCQ {
   id: number;
   question: string;
+  passage?: string;
   imageUrl?: string;
   options: string[];
   correctAnswer: number;
@@ -34,7 +35,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 1:** *Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.*",
+    "passage": "Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.",
     "question": "What is the central idea of the passage?",
     "options": [
       {
@@ -63,7 +64,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 1:** *Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.*",
+    "passage": "Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.",
     "question": "In the passage, “inactivated” most nearly means:",
     "options": [
       {
@@ -92,7 +93,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 1:** *Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.*",
+    "passage": "Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.",
     "question": "Which statement is supported by the passage?",
     "options": [
       {
@@ -121,7 +122,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 1:** *Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.*",
+    "passage": "Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.",
     "question": "The phrase “its strength” refers to the strength of:",
     "options": [
       {
@@ -150,7 +151,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 1:** *Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.*",
+    "passage": "Vaccination trains the immune system to recognize a pathogen without requiring a person to experience the full disease. A vaccine may contain an inactivated pathogen, a harmless component of it, or instructions that enable cells to produce a target antigen. After vaccination, immune cells can form memory responses. Protection is not always immediate, and its strength can vary with the vaccine and the individual.",
     "question": "Which conclusion is most reasonable?",
     "options": [
       {
@@ -179,7 +180,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.",
     "question": "Which factor is identified as one way trees reduce heat?",
     "options": [
       {
@@ -208,7 +209,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.",
     "question": "The passage suggests that tree benefits may be unequal because:",
     "options": [
       {
@@ -237,7 +238,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.",
     "question": "Which programme is most consistent with the passage?",
     "options": [
       {
@@ -266,7 +267,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.",
     "question": "“Transpiration” in this context is most closely related to:",
     "options": [
       {
@@ -295,7 +296,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.",
     "question": "What is the author’s main purpose?",
     "options": [
       {
@@ -324,7 +325,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "Choose the sentence with correct subject–verb agreement.",
     "options": [
       {
@@ -353,7 +354,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "Choose the best connector: “The sample was small; ___, the result should be interpreted cautiously.”",
     "options": [
       {
@@ -382,7 +383,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "Which word is closest in meaning to “infer”?",
     "options": [
       {
@@ -411,7 +412,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "Which word is the opposite of “scarce”?",
     "options": [
       {
@@ -440,7 +441,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "Choose the grammatically correct sentence.",
     "options": [
       {
@@ -469,7 +470,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "In an argument, a “premise” is:",
     "options": [
       {
@@ -498,7 +499,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "Which sentence is most concise and clear?",
     "options": [
       {
@@ -527,7 +528,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "Reading Skills and General Knowledge",
     "chapter": "Reading comprehension and language skills",
     "topic": "",
-    "passage": "**Passage 2:** *Urban trees can reduce heat exposure by shading streets and releasing water vapour through transpiration. Their benefits are not distributed equally: neighbourhoods with fewer trees may experience higher surface temperatures. Planting programmes are most effective when they select suitable species, provide long-term maintenance, and involve residents in decisions.*",
+    "passage": "",
     "question": "A text’s “coherence” refers mainly to:",
     "options": [
       {
@@ -8734,7 +8735,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 1**",
+    "passage": "Researchers studying sleep and memory asked two groups of students to learn the same list of words. One group slept for eight hours, while the other remained awake for most of the night. The next morning, the first group remembered more words on average. The researchers concluded that adequate sleep may support memory consolidation. They cautioned, however, that the study did not establish whether sleep alone explains differences in academic performance.",
     "question": "What is the central claim of the passage?",
     "options": [
       {
@@ -8763,7 +8764,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 1**",
+    "passage": "Researchers studying sleep and memory asked two groups of students to learn the same list of words. One group slept for eight hours, while the other remained awake for most of the night. The next morning, the first group remembered more words on average. The researchers concluded that adequate sleep may support memory consolidation. They cautioned, however, that the study did not establish whether sleep alone explains differences in academic performance.",
     "question": "Which statement is directly supported by the passage?",
     "options": [
       {
@@ -8792,7 +8793,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 1**",
+    "passage": "Researchers studying sleep and memory asked two groups of students to learn the same list of words. One group slept for eight hours, while the other remained awake for most of the night. The next morning, the first group remembered more words on average. The researchers concluded that adequate sleep may support memory consolidation. They cautioned, however, that the study did not establish whether sleep alone explains differences in academic performance.",
     "question": "Why did the researchers include a caution about academic performance?",
     "options": [
       {
@@ -8821,7 +8822,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 1**",
+    "passage": "Researchers studying sleep and memory asked two groups of students to learn the same list of words. One group slept for eight hours, while the other remained awake for most of the night. The next morning, the first group remembered more words on average. The researchers concluded that adequate sleep may support memory consolidation. They cautioned, however, that the study did not establish whether sleep alone explains differences in academic performance.",
     "question": "In the passage, “memory consolidation” most nearly refers to:",
     "options": [
       {
@@ -8850,7 +8851,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 2**",
+    "passage": "Antibiotics are effective against susceptible bacteria, but they do not treat viral infections such as the common cold. When antibiotics are used unnecessarily, bacteria that can survive exposure may become more common. This process contributes to antimicrobial resistance. Public-health specialists therefore recommend using antibiotics only when clinically appropriate and following a qualified professional's instructions.",
     "question": "What is the thesis of the passage?",
     "options": [
       {
@@ -8879,7 +8880,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 2**",
+    "passage": "Antibiotics are effective against susceptible bacteria, but they do not treat viral infections such as the common cold. When antibiotics are used unnecessarily, bacteria that can survive exposure may become more common. This process contributes to antimicrobial resistance. Public-health specialists therefore recommend using antibiotics only when clinically appropriate and following a qualified professional's instructions.",
     "question": "Which inference is most reasonable?",
     "options": [
       {
@@ -8908,7 +8909,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 2**",
+    "passage": "Antibiotics are effective against susceptible bacteria, but they do not treat viral infections such as the common cold. When antibiotics are used unnecessarily, bacteria that can survive exposure may become more common. This process contributes to antimicrobial resistance. Public-health specialists therefore recommend using antibiotics only when clinically appropriate and following a qualified professional's instructions.",
     "question": "The word “susceptible” in the passage means:",
     "options": [
       {
@@ -8937,7 +8938,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Scientific Text Analysis, Inferences & Thesis Extraction",
-    "passage": "**Passage 2**",
+    "passage": "Antibiotics are effective against susceptible bacteria, but they do not treat viral infections such as the common cold. When antibiotics are used unnecessarily, bacteria that can survive exposure may become more common. This process contributes to antimicrobial resistance. Public-health specialists therefore recommend using antibiotics only when clinically appropriate and following a qualified professional's instructions.",
     "question": "Which statement is NOT supported by the passage?",
     "options": [
       {
@@ -8966,7 +8967,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Textual Cohesion, Coherence & Rhetorical Devices",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "Choose the best connector: “The sample size was small; _____, the findings should be interpreted cautiously.”",
     "options": [
       {
@@ -8995,7 +8996,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Textual Cohesion, Coherence & Rhetorical Devices",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "Which sentence best completes the paragraph?",
     "options": [
       {
@@ -9024,7 +9025,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Textual Cohesion, Coherence & Rhetorical Devices",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "Identify the rhetorical device in: “The laboratory was a beehive of activity.”",
     "options": [
       {
@@ -9053,7 +9054,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Textual Cohesion, Coherence & Rhetorical Devices",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "Which option creates the clearest logical sequence?",
     "options": [
       {
@@ -9082,7 +9083,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Textual Cohesion, Coherence & Rhetorical Devices",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "Choose the best transition: “The treatment reduced fever in most participants. _____, it did not significantly change the duration of the illness.”",
     "options": [
       {
@@ -9111,7 +9112,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Textual Cohesion, Coherence & Rhetorical Devices",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "Which sentence contains an unclear pronoun reference?",
     "options": [
       {
@@ -9140,7 +9141,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Textual Cohesion, Coherence & Rhetorical Devices",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "What is the primary purpose of a rhetorical question in a scientific article?",
     "options": [
       {
@@ -9169,7 +9170,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Contextual Vocabulary in Medical & Biological Passages",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "In a medical passage, “benign” most commonly means:",
     "options": [
       {
@@ -9198,7 +9199,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Contextual Vocabulary in Medical & Biological Passages",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "If a study describes a result as “preliminary,” the result is:",
     "options": [
       {
@@ -9227,7 +9228,7 @@ export const IMAT_QUESTION_BANK: IMATBankQuestion[] = [
     "subject": "English",
     "chapter": "Medical & Scientific Reading Comprehension (18 Questions)",
     "topic": "Contextual Vocabulary in Medical & Biological Passages",
-    "passage": "**Passage 2**",
+    "passage": "",
     "question": "In the sentence “The drug alleviated the symptoms,” “alleviated” means:",
     "options": [
       {
@@ -10205,24 +10206,18 @@ export function normalizeSubjectKey(name: string): string {
 export function getQuestionsFromBank(
   subjectName: string,
   chapterName: string,
-  topicName: string,
+  topicName?: string,
   count: number = 5,
   includeDiagramQuestion: boolean = false
 ): GeneratedMCQ[] {
-  const normSubj = normalizeSubjectKey(subjectName);
-  const subjPool = IMAT_QUESTION_BANK.filter(
-    (q) => normalizeSubjectKey(q.subject) === normSubj
-  );
+  const normSubject = normalizeSubjectKey(subjectName);
+  const pool = IMAT_QUESTION_BANK.filter((q) => q.subject === normSubject);
 
-  // If subject not directly matched, search with broad term
-  const effectivePool = subjPool.length > 0 ? subjPool : IMAT_QUESTION_BANK;
+  const effectivePool = pool.length > 0 ? pool : IMAT_QUESTION_BANK;
 
-  // Score questions based on chapter and topic keyword relevance
-  const chLower = (chapterName || '').toLowerCase();
-  const topLower = (topicName || '').toLowerCase();
-
-  const chKeywords = chLower.split(/[^a-zA-Z0-9]+/).filter((w) => w.length > 3);
-  const topKeywords = topLower.split(/[^a-zA-Z0-9]+/).filter((w) => w.length > 3);
+  // Rank questions matching the requested chapter and topic
+  const chLower = (chapterName || '').toLowerCase().trim();
+  const topLower = (topicName || '').toLowerCase().trim();
 
   const scored = effectivePool.map((q) => {
     let score = 0;
@@ -10233,22 +10228,15 @@ export function getQuestionsFromBank(
     if (q.chapter && q.chapter.toLowerCase().includes(chLower)) score += 10;
 
     // Direct topic match
-    if (q.topic && topLower.includes(q.topic.toLowerCase())) score += 15;
-    if (q.topic && q.topic.toLowerCase().includes(topLower)) score += 15;
-
-    // Keyword matches
-    for (const kw of chKeywords) {
-      if (qText.includes(kw)) score += 2;
-    }
-    for (const kw of topKeywords) {
-      if (qText.includes(kw)) score += 3;
+    if (topLower && topLower !== 'all topics in this chapter') {
+      if (q.topic && q.topic.toLowerCase().includes(topLower)) score += 8;
+      if (qText.includes(topLower)) score += 5;
     }
 
     return { q, score };
   });
 
-  // Sort by highest score first, then by qNum
-  scored.sort((a, b) => b.score - a.score || a.q.qNum - b.q.qNum);
+  scored.sort((a, b) => b.score - a.score);
 
   const selected: IMATBankQuestion[] = [];
   const selectedIds = new Set<number>();
@@ -10274,7 +10262,6 @@ export function getQuestionsFromBank(
 
   // Format into standard GeneratedMCQ with 5 options (A, B, C, D, E)
   return selected.slice(0, count).map((item, index) => {
-    const letters = ['A', 'B', 'C', 'D', 'E'];
     const letterToIdx: Record<string, number> = { A: 0, B: 1, C: 2, D: 3, E: 4 };
 
     // Format options A-D from the question bank
@@ -10290,16 +10277,17 @@ export function getQuestionsFromBank(
 
     const correctIdx = letterToIdx[item.answerLetter] ?? 0;
 
-    // Include passage text in question if applicable
+    // Include passage clearly in the question stem when question is based on a passage
     let finalQuestion = item.question;
-    if (item.passage && !finalQuestion.includes('Passage')) {
-      finalQuestion = `${item.passage}\n\n${item.question}`;
+    const cleanPassage = item.passage ? item.passage.trim() : '';
+    if (cleanPassage) {
+      finalQuestion = `[READING PASSAGE]\n${cleanPassage}\n\n[QUESTION]\n${item.question}`;
     }
 
     return {
       id: index + 1,
       question: finalQuestion,
-      imageUrl: index === 0 && includeDiagramQuestion ? createSampleSvgDiagram(chapterName) : undefined,
+      passage: cleanPassage || undefined,
       options: formattedOptions,
       correctAnswer: correctIdx,
       marks: 4,
@@ -10307,20 +10295,4 @@ export function getQuestionsFromBank(
       explanation: item.explanation || `Correct answer is Option ${item.answerLetter}.`,
     };
   });
-}
-
-function createSampleSvgDiagram(chapterName: string): string {
-  const safeChapter = chapterName.slice(0, 24).replace(/[<>&"']/g, '');
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="340" height="160" viewBox="0 0 340 160">
-      <rect width="340" height="160" fill="#0f172a" rx="12"/>
-      <circle cx="90" cy="72" r="34" fill="#0d9488" opacity="0.9"/>
-      <circle cx="170" cy="72" r="34" fill="#3b82f6" opacity="0.9"/>
-      <circle cx="250" cy="72" r="34" fill="#8b5cf6" opacity="0.9"/>
-      <text x="170" y="125" fill="#ffffff" font-family="sans-serif" font-size="12" text-anchor="middle">
-        ${safeChapter}
-      </text>
-    </svg>
-  `;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }

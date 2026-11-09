@@ -33,7 +33,7 @@ export function StudentAIChatbot() {
     { label: 'Registration Docs', topic: 'registration', q: 'What is my document verification and registration status?' },
     { label: 'Fee Payment', topic: 'payment', q: 'How do I complete fee payment and get my payment receipt?' },
     { label: 'Batch Enrollment', topic: 'enrollment', q: `What courses are accessible in my batch (${myBatch})?` },
-    { label: 'Quiz Guidelines', topic: 'quiz', q: 'What are the scoring, negative marking, and diagram question rules?' },
+    { label: 'Quiz Guidelines', topic: 'quiz', q: 'What are the scoring, negative marking, and quiz assessment rules?' },
   ];
 
   const handleSend = (textToSend?: string) => {
@@ -65,9 +65,9 @@ export function StudentAIChatbot() {
       } else if (lower.includes('batch') || lower.includes('enroll') || lower.includes('access') || lower.includes('course')) {
         detectedTopic = 'enrollment';
         reply = `🎓 **Batch-Wise Access Control:**\n\n• **Your Cohort:** ${myBatch}\n• **Strict Batch Security:** Students of Batch 1 (Dec) cannot access Batch 2 (May/June) learning modules, ensuring syllabus pacing integrity.\n• You have access to all 7 core subjects: **Biology, Chemistry, Physics, Maths, Logical Reasoning, English, and GK** for your designated batch.`;
-      } else if (lower.includes('quiz') || lower.includes('exam') || lower.includes('test') || lower.includes('mark') || lower.includes('option a') || lower.includes('diagram')) {
+      } else if (lower.includes('quiz') || lower.includes('exam') || lower.includes('test') || lower.includes('mark') || lower.includes('option a') || lower.includes('question')) {
         detectedTopic = 'quiz';
-        reply = `📝 **Assessments & Quiz Protocols:**\n\n• **Marking Scheme:** Standard MCQs award **+4 marks** for correct responses and **-1 mark** for incorrect answers.\n• **Image / Diagram Questions:** High-yield clinical diagram questions feature visual stems. When Option A is designated in an image drill, Option A is saved as the verified answer.\n• **Single Attempt Rule:** You must complete or return to assessments before starting new attempts.\n• **Timer:** Auto-submits upon countdown expiration.`;
+        reply = `📝 **Assessments & Quiz Protocols:**\n\n• **Marking Scheme:** Standard MCQs award **+4 marks** for correct responses and **-1 mark** for incorrect answers.\n• **Text-Only Question Format:** All practice questions and drills are presented exclusively in text format with 5 multiple-choice options (A, B, C, D, E).\n• **Single Attempt Rule:** You must complete or return to assessments before starting new attempts.\n• **Timer:** Auto-submits upon countdown expiration.`;
       } else {
         reply = `I understand your question about "${text}". As your AI Assistant, I can confirm your active enrollment in **${myBatch}**. All 7 subjects (Biology, Chemistry, Physics, Maths, Logical Reasoning, English, GK) are synced. Please feel free to select one of the quick topics below or ask about registration, payments, or quizzes!`;
       }

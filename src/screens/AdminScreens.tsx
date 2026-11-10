@@ -34,9 +34,9 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
       <div className="gradient-header pb-6">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="flex items-center gap-1.5 mb-0.5">
+            <div className="flex items-center gap-1.5 mb-0.5" data-phase="Phase 8 Admin">
               <span className="badge bg-teal-400/20 text-teal-200 border border-teal-400/30 text-[9px] py-0 px-1.5">
-                Phase 8 Admin
+                Admin
               </span>
               <p className="text-teal-200 text-xs font-medium">Operational Control Center</p>
             </div>

@@ -25,6 +25,13 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
   const myDossier = getStudentDossier ? getStudentDossier(user?.id) : undefined;
   const isOptedIn = typeof isConsultancyOptedIn === 'function' ? isConsultancyOptedIn(user?.id) : true;
   const [showRoadmapModal, setShowRoadmapModal] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{
+    fileName: string;
+    fileSize: string;
+    stageTitle: string;
+    studentName: string;
+    submittedAt?: string;
+  } | null>(null);
 
   const totalAssessmentsCount = useMemo(() => {
     const seen = new Set(assessments.map(a => a.id));
@@ -136,84 +143,347 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
 
         {/* Study Abroad & Consular Admissions Dossier (Handwritten 8-Stage Checklist) */}
         {isOptedIn && myDossier ? (
-          <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-[#0f2b46] rounded-2xl p-4 text-white shadow-md relative overflow-hidden border border-teal-500/30">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-lg shadow-inner">
-                  🇮🇹
-                </span>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300">Study Abroad Dossier</span>
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-teal-400 text-teal-950">
-                      {myDossier.overallStatus.replace('_', ' ')}
-                    </span>
+          <>
+            <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-[#0f2b46] rounded-2xl p-4 text-white shadow-md relative overflow-hidden border border-teal-500/30">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-lg shadow-inner">
+                    🇮🇹
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300">Study Abroad Consultancy Assistance</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-teal-400 text-teal-950">
+                        Opted In
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-white mt-0.5">{myDossier.targetCountry} — {myDossier.targetCourse}</h3>
                   </div>
-                  <h3 className="text-sm font-bold text-white mt-0.5">{myDossier.targetCountry} — {myDossier.targetCourse}</h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setConsultancyOptIn(user?.id || 'u-student-1', false)}
+                  className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/10 hover:bg-rose-500/40 text-teal-200 hover:text-white transition"
+                  title="Opt out of consultancy assistance"
+                >
+                  Opt Out
+                </button>
+              </div>
+
+              <div className="bg-white/10 rounded-xl p-2.5 my-2.5 backdrop-blur-xs flex items-center justify-between text-xs">
+                <div>
+                  <p className="text-[10px] text-teal-200">Consultant Agent:</p>
+                  <p className="font-semibold text-white text-[11px]">{myDossier.consultantName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-teal-200">Legalisation Pipeline:</p>
+                  <p className="font-black text-emerald-300 text-[11px]">
+                    {myDossier.checklist.filter(i => i.status === 'verified').length} / 8 Stages Cleared
+                  </p>
                 </div>
               </div>
 
+              {/* Status Breakdown Grid for Student (Directly matching canonical 8 stages) */}
+              {(() => {
+                const checklist = myDossier?.checklist || [];
+                const vCount = checklist.filter(i => i.status === 'verified').length;
+                const rCount = checklist.filter(i => i.status === 'in_progress').length;
+                const nvCount = checklist.filter(i => i.status === 'rejected').length;
+                const pCount = checklist.filter(i => !i.status || i.status === 'pending' || i.status === 'submitted').length;
+
+                return (
+                  <div className="grid grid-cols-4 gap-1.5 mb-2.5">
+                    <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                      <span className="block text-emerald-300 font-black text-xs">{vCount}</span>
+                      <span className="text-[9px] text-teal-200">Verified</span>
+                    </div>
+                    <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                      <span className="block text-amber-300 font-black text-xs">{rCount}</span>
+                      <span className="text-[9px] text-amber-200">In Review</span>
+                    </div>
+                    <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                      <span className="block text-rose-300 font-black text-xs">{nvCount}</span>
+                      <span className="text-[9px] text-rose-200">Not Verified</span>
+                    </div>
+                    <div className="bg-white/10 rounded-xl p-1.5 text-center">
+                      <span className="block text-slate-300 font-black text-xs">{pCount}</span>
+                      <span className="text-[9px] text-slate-300">Pending</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <button
-                type="button"
-                onClick={() => setConsultancyOptIn(user?.id || 'u-student-1', false)}
-                className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/10 hover:bg-rose-500/40 text-teal-200 hover:text-white transition"
-                title="Opt out of consultancy assistance"
+                onClick={() => setShowRoadmapModal(true)}
+                className="w-full py-2 bg-gradient-to-r from-teal-400 to-emerald-400 text-teal-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition cursor-pointer"
               >
-                Opt Out
+                <i className="fas fa-clipboard-check text-[11px]" />
+                View 8-Stage Admissions & Consular Checklist
               </button>
             </div>
 
-            <div className="bg-white/10 rounded-xl p-2.5 my-2.5 backdrop-blur-xs flex items-center justify-between text-xs">
-              <div>
-                <p className="text-[10px] text-teal-200">Consultant Agent:</p>
-                <p className="font-semibold text-white text-[11px]">{myDossier.consultantName}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-teal-200">Legalisation Pipeline:</p>
-                <p className="font-black text-emerald-300 text-[11px]">
-                  {myDossier.checklist.filter(i => i.status === 'verified').length} / 8 Stages Cleared
-                </p>
-              </div>
-            </div>
-
-            {/* Status Breakdown Grid for Student (Directly matching canonical 8 stages) */}
-            {(() => {
-              const checklist = myDossier?.checklist || [];
-              const vCount = checklist.filter(i => i.status === 'verified').length;
-              const rCount = checklist.filter(i => i.status === 'in_progress').length;
-              const nvCount = checklist.filter(i => i.status === 'rejected').length;
-              const pCount = checklist.filter(i => !i.status || i.status === 'pending' || i.status === 'submitted').length;
-
-              return (
-                <div className="grid grid-cols-4 gap-1.5 mb-2.5">
-                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
-                    <span className="block text-emerald-300 font-black text-xs">{vCount}</span>
-                    <span className="text-[9px] text-teal-200">Verified</span>
-                  </div>
-                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
-                    <span className="block text-amber-300 font-black text-xs">{rCount}</span>
-                    <span className="text-[9px] text-amber-200">In Review</span>
-                  </div>
-                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
-                    <span className="block text-rose-300 font-black text-xs">{nvCount}</span>
-                    <span className="text-[9px] text-rose-200">Not Verified</span>
-                  </div>
-                  <div className="bg-white/10 rounded-xl p-1.5 text-center">
-                    <span className="block text-slate-300 font-black text-xs">{pCount}</span>
-                    <span className="text-[9px] text-slate-300">Pending</span>
+            {/* Student Verified Documentation List (Official 8 Stages from Consultant Agent) */}
+            <div className="card p-4 space-y-3 border border-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-sm shadow-2xs">
+                    <i className="fas fa-file-shield" />
+                  </span>
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
+                      My Verification Documents
+                    </h3>
+                    <p className="text-[10px] text-gray-500">
+                      8 Official Consular & Admissions Legalisation Documents
+                    </p>
                   </div>
                 </div>
-              );
-            })()}
+                <span className="badge badge-teal text-[10px] py-0.5 px-2.5 font-bold">
+                  {myDossier?.checklist ? myDossier.checklist.filter(i => i.status === 'verified').length : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} / 8 Verified
+                </span>
+              </div>
 
-            <button
-              onClick={() => setShowRoadmapModal(true)}
-              className="w-full py-2 bg-gradient-to-r from-teal-400 to-emerald-400 text-teal-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition cursor-pointer"
-            >
-              <i className="fas fa-clipboard-check text-[11px]" />
-              View 8-Stage Admissions & Consular Checklist
-            </button>
-          </div>
+              {/* Status Breakdown Grid (Verified, In Review, Not Verified, Pending) */}
+              {(() => {
+                const checklist = myDossier?.checklist;
+                const verifiedDocsCount = checklist
+                  ? checklist.filter(i => i.status === 'verified').length
+                  : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length;
+                const inProgressDocsCount = checklist
+                  ? checklist.filter(i => i.status === 'in_progress').length
+                  : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'In Review/In Progress').length;
+                const notVerifiedDocsCount = checklist
+                  ? checklist.filter(i => i.status === 'rejected').length
+                  : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && (d.status === 'Not Verified' || d.status === 'Rejected')).length;
+                const pendingDocsCount = checklist
+                  ? checklist.filter(i => !i.status || i.status === 'pending' || i.status === 'submitted').length
+                  : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && (!d.status || d.status === 'Pending')).length;
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+                      <div className="flex items-center justify-center gap-1 text-emerald-700 font-black text-sm">
+                        <i className="fas fa-check-circle text-xs" />
+                        <span>{verifiedDocsCount}</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide mt-0.5">Verified</p>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-center">
+                      <div className="flex items-center justify-center gap-1 text-amber-700 font-black text-sm">
+                        <i className="fas fa-hourglass-half text-xs" />
+                        <span>{inProgressDocsCount}</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wide mt-0.5">In Review</p>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-center">
+                      <div className="flex items-center justify-center gap-1 text-rose-700 font-black text-sm">
+                        <i className="fas fa-times-circle text-xs" />
+                        <span>{notVerifiedDocsCount}</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-rose-800 uppercase tracking-wide mt-0.5">Not Verified</p>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                      <div className="flex items-center justify-center gap-1 text-slate-700 font-black text-sm">
+                        <i className="fas fa-clock text-xs" />
+                        <span>{pendingDocsCount}</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-800 uppercase tracking-wide mt-0.5">Pending</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <p className="text-[10px] text-gray-400">
+                Read-only verification status managed strictly by Academy Admin and AI Agent (Consultant Agent Dr. Marco Rossi).
+              </p>
+
+              <div className="space-y-2 pt-1">
+                {(() => {
+                  const rawDocs = studentDocuments.filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1');
+                  const seenStages = new Set<string>();
+                  const dedupedDocs = rawDocs.filter(d => {
+                    const key = String(d.stageNumber || d.stageKey || d.id.replace(/^sdoc-[^-]+-/, ''));
+                    if (seenStages.has(key)) return false;
+                    seenStages.add(key);
+                    return true;
+                  });
+                  return dedupedDocs.map((doc) => {
+                    const isVerified = doc.status === 'Verified';
+                    const isRejected = doc.status === 'Not Verified' || doc.status === 'Rejected';
+                    const isInProgress = doc.status === 'In Review/In Progress';
+
+                    const markerLabel = isVerified
+                      ? 'Verified'
+                      : isRejected
+                      ? 'Not Verified'
+                      : isInProgress
+                      ? 'In Review/In Progress'
+                      : 'Pending';
+
+                    const badgeClass = isVerified
+                      ? 'badge-green'
+                      : isRejected
+                      ? 'badge-red'
+                      : isInProgress
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : 'bg-gray-100 text-gray-700 border border-gray-300';
+
+                    const badgeIcon = isVerified
+                      ? 'fa-check-circle'
+                      : isRejected
+                      ? 'fa-times-circle'
+                      : isInProgress
+                      ? 'fa-hourglass-half'
+                      : 'fa-clock';
+
+                    return (
+                      <div
+                        key={doc.id}
+                        className={`p-3 rounded-2xl border transition ${
+                          isVerified
+                            ? 'bg-emerald-50/50 border-emerald-200'
+                            : isRejected
+                            ? 'bg-rose-50/40 border-rose-200'
+                            : isInProgress
+                            ? 'bg-amber-50/40 border-amber-200'
+                            : 'bg-gray-50/80 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-xs font-bold text-gray-900 truncate">{doc.title}</p>
+                              <span
+                                className={`badge text-[9px] font-bold py-0.5 px-2 flex items-center gap-1 ${badgeClass}`}
+                              >
+                                <i className={`fas ${badgeIcon}`} />
+                                {markerLabel}
+                              </span>
+                            </div>
+
+                            {/* Submission file details */}
+                            {doc.fileName && (
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mb-1">
+                                <span className="flex items-center gap-1 text-gray-700 font-medium">
+                                  <i className="fas fa-paperclip text-[9px] text-teal-600" />
+                                  {doc.fileName} {doc.fileSize ? `(${doc.fileSize})` : ''}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Verification officer */}
+                            <p className="text-[10px] text-gray-400">
+                              Category: <span className="text-gray-600 font-semibold">{doc.category}</span> •{' '}
+                              {isVerified ? (
+                                <span className="text-emerald-700 font-semibold">
+                                  Verified by {doc.verifiedBy || 'Dr. Marco Rossi (Consultant Agent)'}{' '}
+                                  {doc.verifiedAt ? `on ${doc.verifiedAt}` : ''}
+                                </span>
+                              ) : isRejected ? (
+                                <span className="text-rose-700 font-semibold">
+                                  Not Verified — Action Required
+                                </span>
+                              ) : isInProgress ? (
+                                <span className="text-amber-700 font-semibold">
+                                  In Review/In Progress by Consultant Agent
+                                </span>
+                              ) : (
+                                <span className="text-gray-500 font-semibold">
+                                  Pending Consultant Agent Verification
+                                </span>
+                              )}
+                            </p>
+
+                            {/* Sub-items if any */}
+                            {doc.subItems && doc.subItems.length > 0 && (
+                              <div className="mt-2 space-y-1 pt-1.5 border-t border-gray-100">
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                                  Checklist Sub-Items:
+                                </p>
+                                {doc.subItems.map((sub) => (
+                                  <div key={sub.id} className="flex items-center justify-between text-[10px] text-gray-700">
+                                    <span className="flex items-center gap-1.5">
+                                      <i className={`fas ${sub.status === 'verified' ? 'fa-check text-emerald-600' : 'fa-clock text-amber-500'} text-[8px]`} />
+                                      {sub.title}
+                                    </span>
+                                    <span className={`text-[9px] font-bold ${sub.status === 'verified' ? 'text-emerald-700' : 'text-gray-500'}`}>
+                                      {sub.status === 'verified' ? 'Verified' : 'Pending'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Remarks */}
+                            {doc.remarks && (
+                              <p className="text-[10px] text-teal-800 bg-teal-50/80 p-1.5 rounded-lg mt-1.5 border border-teal-200/60 font-medium">
+                                <span className="font-bold text-teal-900">Consultant Remarks:</span> {doc.remarks}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="shrink-0 flex flex-col items-center gap-1">
+                            <div
+                              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shadow-2xs ${
+                                isVerified
+                                  ? 'bg-emerald-600 text-white'
+                                  : isRejected
+                                  ? 'bg-red-100 text-red-600'
+                                  : isInProgress
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-gray-200 text-gray-500'
+                              }`}
+                            >
+                              <i className={`fas ${
+                                isVerified
+                                  ? 'fa-check'
+                                  : isRejected
+                                  ? 'fa-times'
+                                  : isInProgress
+                                  ? 'fa-hourglass-half'
+                                  : 'fa-clock'
+                              }`} />
+                            </div>
+                            {doc.fileName && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDoc({
+                                  fileName: doc.fileName || 'Document.pdf',
+                                  fileSize: doc.fileSize || '1.8 MB',
+                                  stageTitle: doc.title,
+                                  studentName: user?.name || 'Mary',
+                                  submittedAt: doc.submittedAt,
+                                })}
+                                className="text-[9px] font-bold text-teal-600 hover:text-teal-800 hover:underline pt-0.5"
+                              >
+                                Preview
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* CTA to open full roadmap modal */}
+              {myDossier && (
+                <button
+                  type="button"
+                  onClick={() => setShowRoadmapModal(true)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 text-xs font-bold flex items-center justify-center gap-2 transition"
+                >
+                  <i className="fas fa-route text-teal-600" />
+                  View Full 8-Stage Consular Admissions Roadmap
+                </button>
+              )}
+            </div>
+          </>
         ) : (
           <div className="rounded-2xl p-3.5 bg-gradient-to-r from-teal-900 via-teal-800 to-[#0f2b46] text-white shadow-md border border-teal-500/30 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -371,6 +641,13 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
         <StudentConsultancyRoadmapModal
           dossier={myDossier}
           onClose={() => setShowRoadmapModal(false)}
+        />
+      )}
+
+      {previewDoc && (
+        <DocumentAttachmentPreviewModal
+          doc={previewDoc}
+          onClose={() => setPreviewDoc(null)}
         />
       )}
     </div>
@@ -739,20 +1016,10 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
 // ==================== PROFILE SCREEN ====================
 export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user, logout } = useAuth();
-  const { courses, quizzes, studentDocuments, getStudentDossier, isConsultancyOptedIn, setConsultancyOptIn } = useData();
+  const { courses, quizzes } = useData();
   const { assessments } = useAssessments();
   const { analytics, loading: analyticsLoading } = useStudentAnalytics(user?.id);
   const myCourses = courses.filter(c => c.studentIds.includes(user?.id || ''));
-  const myDossier = getStudentDossier ? getStudentDossier(user?.id) : undefined;
-  const isOptedIn = typeof isConsultancyOptedIn === 'function' ? isConsultancyOptedIn(user?.id) : true;
-  const [showRoadmapModal, setShowRoadmapModal] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<{
-    fileName: string;
-    fileSize: string;
-    stageTitle: string;
-    studentName: string;
-    submittedAt?: string;
-  } | null>(null);
 
   const totalAssessmentsCount = useMemo(() => {
     const seen = new Set(assessments.map(a => a.id));
@@ -808,306 +1075,9 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
           </div>
         </div>
 
-
-        {/* Consultancy Assistance Opt-In / Opt-Out Choice */}
-        <div className="card space-y-2.5 border border-teal-200/80 bg-gradient-to-r from-teal-50/70 to-slate-50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center text-sm shadow-2xs">
-                <i className="fas fa-passport" />
-              </span>
-              <div>
-                <h3 className="text-xs font-bold text-gray-900">Study Abroad Consultancy Assistance</h3>
-                <p className="text-[10px] text-gray-500">Official HRD, Apostille & Italian admissions pipeline</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setConsultancyOptIn(user?.id || 'u-student-1', !isOptedIn)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs active:scale-95 ${
-                isOptedIn
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-teal-600 hover:bg-teal-700 text-white'
-              }`}
-            >
-              <i className={`fas ${isOptedIn ? 'fa-check-circle' : 'fa-plus-circle'}`} />
-              <span>{isOptedIn ? 'Opted In' : 'Opt In'}</span>
-            </button>
-          </div>
-          <p className="text-[11px] text-gray-600">
-            {isOptedIn
-              ? '✅ You have opted in for expert Consultancy Assistance with assigned Consultant Agent Dr. Marco Rossi. Detailed document dashboard is active below.'
-              : 'ℹ️ Status: Not Opted. Click "Opt In" above to request the facility. A notification will be dispatched to the Consultant Agent and your document verification dashboard will open.'}
-          </p>
-        </div>
-
-        {/* Student Verified Documentation List (Official 8 Stages from Consultant Agent) - Shown ONLY when Opted In and Active */}
-        {isOptedIn && myDossier && (
-          <div className="card p-4 space-y-3 border border-slate-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-sm shadow-2xs">
-                  <i className="fas fa-file-shield" />
-                </span>
-                <div>
-                  <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    My Verification Documents
-                  </h3>
-                  <p className="text-[10px] text-gray-500">
-                    8 Official Consular & Admissions Legalisation Documents
-                  </p>
-                </div>
-              </div>
-              <span className="badge badge-teal text-[10px] py-0.5 px-2.5 font-bold">
-                {myDossier?.checklist ? myDossier.checklist.filter(i => i.status === 'verified').length : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length} / 8 Verified
-              </span>
-            </div>
-
-            {/* Status Breakdown Grid (Verified, In Review, Not Verified, Pending) */}
-            {(() => {
-              const checklist = myDossier?.checklist;
-              const verifiedDocsCount = checklist
-                ? checklist.filter(i => i.status === 'verified').length
-                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'Verified').length;
-              const inProgressDocsCount = checklist
-                ? checklist.filter(i => i.status === 'in_progress').length
-                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && d.status === 'In Review/In Progress').length;
-              const notVerifiedDocsCount = checklist
-                ? checklist.filter(i => i.status === 'rejected').length
-                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && (d.status === 'Not Verified' || d.status === 'Rejected')).length;
-              const pendingDocsCount = checklist
-                ? checklist.filter(i => !i.status || i.status === 'pending' || i.status === 'submitted').length
-                : studentDocuments.filter(d => (d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1') && (!d.status || d.status === 'Pending')).length;
-
-              return (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
-                    <div className="flex items-center justify-center gap-1 text-emerald-700 font-black text-sm">
-                      <i className="fas fa-check-circle text-xs" />
-                      <span>{verifiedDocsCount}</span>
-                    </div>
-                    <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide mt-0.5">Verified</p>
-                  </div>
-
-                  <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-center">
-                    <div className="flex items-center justify-center gap-1 text-amber-700 font-black text-sm">
-                      <i className="fas fa-hourglass-half text-xs" />
-                      <span>{inProgressDocsCount}</span>
-                    </div>
-                    <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wide mt-0.5">In Review</p>
-                  </div>
-
-                  <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-center">
-                    <div className="flex items-center justify-center gap-1 text-rose-700 font-black text-sm">
-                      <i className="fas fa-times-circle text-xs" />
-                      <span>{notVerifiedDocsCount}</span>
-                    </div>
-                    <p className="text-[10px] font-bold text-rose-800 uppercase tracking-wide mt-0.5">Not Verified</p>
-                  </div>
-
-                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-center">
-                    <div className="flex items-center justify-center gap-1 text-slate-700 font-black text-sm">
-                      <i className="fas fa-clock text-xs" />
-                      <span>{pendingDocsCount}</span>
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-800 uppercase tracking-wide mt-0.5">Pending</p>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <p className="text-[10px] text-gray-400">
-              Read-only verification status managed strictly by Academy Admin and AI Agent (Consultant Agent Dr. Marco Rossi).
-            </p>
-
-          <div className="space-y-2 pt-1">
-            {(() => {
-              const rawDocs = studentDocuments.filter(d => d.studentId === user?.id || d.studentName === user?.name || d.studentId === 'u-student-1');
-              const seenStages = new Set<string>();
-              const dedupedDocs = rawDocs.filter(d => {
-                const key = String(d.stageNumber || d.stageKey || d.id.replace(/^sdoc-[^-]+-/, ''));
-                if (seenStages.has(key)) return false;
-                seenStages.add(key);
-                return true;
-              });
-              return dedupedDocs.map((doc) => {
-                const isVerified = doc.status === 'Verified';
-                const isRejected = doc.status === 'Not Verified' || doc.status === 'Rejected';
-                const isInProgress = doc.status === 'In Review/In Progress';
-
-                const markerLabel = isVerified
-                  ? 'Verified'
-                  : isRejected
-                  ? 'Not Verified'
-                  : isInProgress
-                  ? 'In Review/In Progress'
-                  : 'Pending';
-
-                const badgeClass = isVerified
-                  ? 'badge-green'
-                  : isRejected
-                  ? 'badge-red'
-                  : isInProgress
-                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                  : 'bg-gray-100 text-gray-700 border border-gray-300';
-
-                const badgeIcon = isVerified
-                  ? 'fa-check-circle'
-                  : isRejected
-                  ? 'fa-times-circle'
-                  : isInProgress
-                  ? 'fa-hourglass-half'
-                  : 'fa-clock';
-
-                return (
-                  <div
-                    key={doc.id}
-                    className={`p-3 rounded-2xl border transition ${
-                      isVerified
-                        ? 'bg-emerald-50/50 border-emerald-200'
-                        : isRejected
-                        ? 'bg-rose-50/40 border-rose-200'
-                        : isInProgress
-                        ? 'bg-amber-50/40 border-amber-200'
-                        : 'bg-gray-50/80 border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="text-xs font-bold text-gray-900 truncate">{doc.title}</p>
-                          <span
-                            className={`badge text-[9px] font-bold py-0.5 px-2 flex items-center gap-1 ${badgeClass}`}
-                          >
-                            <i className={`fas ${badgeIcon}`} />
-                            {markerLabel}
-                          </span>
-                        </div>
-
-                        {/* Submission file details */}
-                        {doc.fileName && (
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mb-1">
-                            <span className="flex items-center gap-1 text-gray-700 font-medium">
-                              <i className="fas fa-paperclip text-[9px] text-teal-600" />
-                              {doc.fileName} {doc.fileSize ? `(${doc.fileSize})` : ''}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Verification officer */}
-                        <p className="text-[10px] text-gray-400">
-                          Category: <span className="text-gray-600 font-semibold">{doc.category}</span> •{' '}
-                          {isVerified ? (
-                            <span className="text-emerald-700 font-semibold">
-                              Verified by {doc.verifiedBy || 'Dr. Marco Rossi (Consultant Agent)'}{' '}
-                              {doc.verifiedAt ? `on ${doc.verifiedAt}` : ''}
-                            </span>
-                          ) : isRejected ? (
-                            <span className="text-rose-700 font-semibold">
-                              Not Verified — Action Required
-                            </span>
-                          ) : isInProgress ? (
-                            <span className="text-amber-700 font-semibold">
-                              In Review/In Progress by Consultant Agent
-                            </span>
-                          ) : (
-                            <span className="text-gray-500 font-semibold">
-                              Pending Consultant Agent Verification
-                            </span>
-                          )}
-                        </p>
-
-                        {/* Sub-items if any */}
-                        {doc.subItems && doc.subItems.length > 0 && (
-                          <div className="mt-2 space-y-1 pt-1.5 border-t border-gray-100">
-                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                              Checklist Sub-Items:
-                            </p>
-                            {doc.subItems.map((sub) => (
-                              <div key={sub.id} className="flex items-center justify-between text-[10px] text-gray-700">
-                                <span className="flex items-center gap-1.5">
-                                  <i className={`fas ${sub.status === 'verified' ? 'fa-check text-emerald-600' : 'fa-clock text-amber-500'} text-[8px]`} />
-                                  {sub.title}
-                                </span>
-                                <span className={`text-[9px] font-bold ${sub.status === 'verified' ? 'text-emerald-700' : 'text-gray-500'}`}>
-                                  {sub.status === 'verified' ? 'Verified' : 'Pending'}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Remarks */}
-                        {doc.remarks && (
-                          <p className="text-[10px] text-teal-800 bg-teal-50/80 p-1.5 rounded-lg mt-1.5 border border-teal-200/60 font-medium">
-                            <span className="font-bold text-teal-900">Consultant Remarks:</span> {doc.remarks}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="shrink-0 flex flex-col items-center gap-1">
-                        <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shadow-2xs ${
-                            isVerified
-                              ? 'bg-emerald-600 text-white'
-                              : isRejected
-                              ? 'bg-red-100 text-red-600'
-                              : isInProgress
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-gray-200 text-gray-500'
-                          }`}
-                        >
-                          <i className={`fas ${
-                            isVerified
-                              ? 'fa-check'
-                              : isRejected
-                              ? 'fa-times'
-                              : isInProgress
-                              ? 'fa-hourglass-half'
-                              : 'fa-clock'
-                          }`} />
-                        </div>
-                        {doc.fileName && (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewDoc({
-                              fileName: doc.fileName || 'Document.pdf',
-                              fileSize: doc.fileSize || '1.8 MB',
-                              stageTitle: doc.title,
-                              studentName: user?.name || 'Mary',
-                              submittedAt: doc.submittedAt,
-                            })}
-                            className="text-[9px] font-bold text-teal-600 hover:text-teal-800 hover:underline pt-0.5"
-                          >
-                            Preview
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
-
-          {/* CTA to open full roadmap modal */}
-          {myDossier && (
-            <button
-              type="button"
-              onClick={() => setShowRoadmapModal(true)}
-              className="w-full py-2.5 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 text-xs font-bold flex items-center justify-center gap-2 transition"
-            >
-              <i className="fas fa-route text-teal-600" />
-              View Full 8-Stage Consular Admissions Roadmap
-            </button>
-          )}
-        </div>
-        )}
-
         <div className="card p-0 overflow-hidden">
           {[
-            { icon: 'fa-chart-pie', label: 'Performance Analytics', screen: 'analytics', badge: 'Phase 6' },
+            { icon: 'fa-chart-pie', label: 'Performance Analytics', screen: 'analytics' },
             { icon: 'fa-book', label: 'My Courses', screen: 'courses' },
             { icon: 'fa-clipboard-check', label: 'Quizzes & Drills', screen: 'quizzes', badge: `${totalAssessmentsCount} Drills` },
             { icon: 'fa-building', label: 'Batches', screen: 'departments' },
@@ -1131,20 +1101,6 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
           <i className="fas fa-exchange-alt" /> Switch Account / Sign In
         </button>
       </div>
-
-      {showRoadmapModal && myDossier && (
-        <StudentConsultancyRoadmapModal
-          dossier={myDossier}
-          onClose={() => setShowRoadmapModal(false)}
-        />
-      )}
-
-      {previewDoc && (
-        <DocumentAttachmentPreviewModal
-          doc={previewDoc}
-          onClose={() => setPreviewDoc(null)}
-        />
-      )}
     </div>
   );
 }
@@ -1949,7 +1905,7 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ==================== ANALYTICS SCREEN (PHASE 6) ====================
+// ==================== ANALYTICS SCREEN ====================
 export function AnalyticsScreen({
   onBack,
   onNavigate

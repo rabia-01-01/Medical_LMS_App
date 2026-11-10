@@ -12,113 +12,8 @@ import { formatFileSize } from './types';
 export const STORAGE_BUCKET = 'resources';
 const LOCAL_STORAGE_KEY = 'lms_resources_cache_v2';
 
-// Seed mock resources for demo/offline fallback
-const SEED_RESOURCES: ResourceWithFile[] = [
-  {
-    id: 'seed-res-1',
-    title: 'High-Yield Human Physiology Notes (NEET UG)',
-    description: 'Concise summary of cardiovascular and respiratory systems with clinical diagrams.',
-    resource_type: 'NOTE',
-    subject_id: 'sub-bio',
-    chapter_id: 'chap-human-physio',
-    topic_id: null,
-    created_by: 'seed-faculty-1',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    subjectName: 'Biology',
-    chapterName: 'Human Physiology',
-    creatorName: 'Dr. Sharma',
-    sizeFormatted: '4.8 MB',
-    file: {
-      id: 'seed-file-1',
-      resource_id: 'seed-res-1',
-      storage_path: 'biology/human-physio/human_physio_notes.pdf',
-      file_name: 'human_physio_notes.pdf',
-      mime_type: 'application/pdf',
-      file_size: 5033164,
-      created_at: new Date().toISOString(),
-    },
-  },
-  {
-    id: 'seed-res-2',
-    title: 'Electrodynamics & Magnetism Formula Sheet',
-    description: 'Master formula sheet with solved examples for competitive medical entrance.',
-    resource_type: 'NOTE',
-    subject_id: 'sub-phy',
-    chapter_id: 'chap-electrodyn',
-    topic_id: null,
-    created_by: 'seed-faculty-1',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    subjectName: 'Physics',
-    chapterName: 'Electrodynamics',
-    creatorName: 'Prof. Verma',
-    sizeFormatted: '2.4 MB',
-    file: {
-      id: 'seed-file-2',
-      resource_id: 'seed-res-2',
-      storage_path: 'physics/electrodynamics/electrodynamics_formulas.pdf',
-      file_name: 'electrodynamics_formulas.pdf',
-      mime_type: 'application/pdf',
-      file_size: 2516582,
-      created_at: new Date().toISOString(),
-    },
-  },
-  {
-    id: 'seed-res-3',
-    title: 'Organic Chemistry Reaction Mechanisms (PYQ Drill)',
-    description: 'Complete 10-year compiled previous year question bank with step-by-step mechanisms.',
-    resource_type: 'PYQ',
-    subject_id: 'sub-chem',
-    chapter_id: 'chap-organic',
-    topic_id: null,
-    created_by: 'seed-faculty-2',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 7).toISOString(),
-    subjectName: 'Chemistry',
-    chapterName: 'Organic Chemistry',
-    creatorName: 'Dr. Mukherjee',
-    sizeFormatted: '6.1 MB',
-    file: {
-      id: 'seed-file-3',
-      resource_id: 'seed-res-3',
-      storage_path: 'chemistry/organic/pyq_organic_reactions.pdf',
-      file_name: 'pyq_organic_reactions.pdf',
-      mime_type: 'application/pdf',
-      file_size: 6396313,
-      created_at: new Date().toISOString(),
-    },
-  },
-  {
-    id: 'seed-res-4',
-    title: 'Cell Division (Mitosis & Meiosis) 3D Animation',
-    description: 'Visual walkthrough of chromosome segregation in high definition.',
-    resource_type: 'VIDEO',
-    subject_id: 'sub-bio',
-    chapter_id: 'chap-cell-bio',
-    topic_id: null,
-    created_by: 'seed-faculty-1',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-    subjectName: 'Biology',
-    chapterName: 'Cell Biology',
-    creatorName: 'Dr. Sharma',
-    sizeFormatted: '45.0 MB',
-    file: {
-      id: 'seed-file-4',
-      resource_id: 'seed-res-4',
-      storage_path: 'biology/cell-biology/cell_division_animation.mp4',
-      file_name: 'cell_division_animation.mp4',
-      mime_type: 'video/mp4',
-      file_size: 47185920,
-      created_at: new Date().toISOString(),
-    },
-  },
-];
+// Default resources intentionally empty for clean production startup
+const SEED_RESOURCES: ResourceWithFile[] = [];
 
 // Offline Local Cache Helpers
 function deduplicateFileList(items: ResourceWithFile[]): ResourceWithFile[] {
@@ -153,7 +48,10 @@ function loadLocalResources(): ResourceWithFile[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return deduplicateFileList(parsed);
+        const cleaned = parsed.filter(
+          (r: any) => !(typeof r?.id === 'string' && r.id.startsWith('seed-res-'))
+        );
+        return deduplicateFileList(cleaned);
       }
     }
   } catch (err) {

@@ -1617,7 +1617,7 @@ export function NewConsultancyApplicantModal({ onClose }: { onClose: () => void 
       studentId: candidate.id,
       studentName: candidate.name,
       studentEmail: candidate.email,
-      studentBatch: candidate.batch || 'Batch 1 (Dec)',
+      studentBatch: candidate.batch || 'Unassigned',
       avatar: candidate.avatar || '👩‍🎓',
       targetCountry,
       targetCourse,
@@ -1665,7 +1665,7 @@ export function NewConsultancyApplicantModal({ onClose }: { onClose: () => void 
           >
             {studentCandidates.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} ({s.email}) — {s.batch || 'Batch 1 (Dec)'}
+                {s.name} ({s.email}){s.batch ? ` — ${s.batch}` : ''}
               </option>
             ))}
           </select>

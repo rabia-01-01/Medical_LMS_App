@@ -220,8 +220,6 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
             {enrolledStudents
               .filter(st => {
                 if (selectedBatchFilter === 'All') return true;
-                if (selectedBatchFilter === 'Batch 1 (Dec)') return st.batch === 'Batch 1 (Dec)' || !st.batch || st.batch.includes('1');
-                if (selectedBatchFilter === 'Batch 2 (May/June)') return st.batch === 'Batch 2 (May/June)' || st.batch?.includes('2');
                 return st.batch === selectedBatchFilter;
               })
               .map(student => {
@@ -241,9 +239,11 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="text-xs font-bold text-gray-900 truncate">{student.name}</p>
-                          <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
-                            {student.batch || 'Batch 1 (Dec)'}
-                          </span>
+                          {student.batch && (
+                            <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                              {student.batch}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-500">
                           <span className="font-semibold text-teal-700 flex items-center gap-1">
@@ -283,7 +283,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           {[
             { icon: 'fa-users', label: 'User Management', desc: `${users.length} registered profiles (${metrics?.activeUsers || users.length} active)`, screen: 'users' },
             { icon: 'fa-book-medical', label: 'Academic & Course Management', desc: `${courses.length} courses, curriculum & cohorts`, screen: 'courses' },
-            { icon: 'fa-layer-group', label: 'Batches', desc: 'Academic Cohort Batches • Batch 1 & Batch 2', screen: 'departments' },
+            { icon: 'fa-layer-group', label: 'Batches', desc: `${cohortBatches.length} active cohort ${cohortBatches.length === 1 ? 'batch' : 'batches'}`, screen: 'departments' },
             { icon: 'fa-shield-alt', label: 'Resource Governance & Moderation', desc: `${resources.length} resources (${resources.filter(r => r.status === 'published').length} published)`, screen: 'resources' },
             { icon: 'fa-clipboard-check', label: 'Assessment & Quiz Engine', desc: `${totalAssessmentsCount} exams & mock drills`, screen: 'quizzes' },
             { icon: 'fa-history', label: 'Security & Audit Logs', desc: `${auditLogs.length} events logged`, screen: 'audit-logs' },
@@ -309,8 +309,8 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
 
 // ==================== ADD USER ====================
 export function AddUser({ onBack }: { onBack: () => void }) {
-  const { addUser } = useData();
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', role: 'student' as 'admin' | 'faculty' | 'student', department: '', targetExam: '', batch: 'Batch 1 (Dec)' });
+  const { addUser, cohortBatches } = useData();
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', role: 'student' as 'admin' | 'faculty' | 'student', department: '', targetExam: '', batch: '' });
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async () => {
@@ -343,6 +343,7 @@ export function AddUser({ onBack }: { onBack: () => void }) {
       status: 'active',
       department: formData.department,
       targetExam: formData.targetExam,
+      batch: formData.role === 'student' ? formData.batch : 'All',
     });
     setSuccess(true);
     setTimeout(() => onBack(), 1500);
@@ -382,8 +383,10 @@ export function AddUser({ onBack }: { onBack: () => void }) {
               <option value="">Target Exam</option><option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
             </select>
             <select value={formData.batch} onChange={(e) => setFormData(p => ({ ...p, batch: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-              <option value="Batch 1 (Dec)">Batch 1 (Dec)</option>
-              <option value="Batch 2 (May/June)">Batch 2 (May/June)</option>
+              <option value="">No Batch Assigned</option>
+              {(cohortBatches || []).map((b) => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
             </select>
           </>
         )}
@@ -396,21 +399,20 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 // ==================== MANAGE USERS ====================
 export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
   const { user: currentUser, startViewingAs } = useAuth();
-  const { users, deleteUser, updateUser, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
+  const { users, cohortBatches, deleteUser, updateUser, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [docFilter, setDocFilter] = useState<string>('All');
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const roles = ['All', 'Batch 1 (Dec)', 'Batch 2 (May/June)', 'Students', 'Faculty', 'Admins', 'Suspended'];
+  const roles = ['All', ...(cohortBatches || []).map(b => b.name), 'Students', 'Faculty', 'Admins', 'Suspended'];
 
   let filtered = users;
   if (filter === 'Students') filtered = users.filter(u => u.role === 'student');
-  if (filter === 'Faculty') filtered = users.filter(u => u.role === 'faculty');
-  if (filter === 'Admins') filtered = users.filter(u => u.role === 'admin');
-  if (filter === 'Suspended') filtered = users.filter(u => u.status !== 'active');
-  if (filter === 'Batch 1 (Dec)') filtered = users.filter(u => u.batch === 'Batch 1 (Dec)');
-  if (filter === 'Batch 2 (May/June)') filtered = users.filter(u => u.batch === 'Batch 2 (May/June)');
+  else if (filter === 'Faculty') filtered = users.filter(u => u.role === 'faculty');
+  else if (filter === 'Admins') filtered = users.filter(u => u.role === 'admin');
+  else if (filter === 'Suspended') filtered = users.filter(u => u.status !== 'active');
+  else if (filter !== 'All') filtered = users.filter(u => u.batch === filter);
 
   if (search.trim()) {
     const q = search.toLowerCase();
@@ -600,9 +602,16 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
             </div>
 
             <div className="space-y-2">
-              {studentDocuments
-                .filter((d) => docFilter === 'All' || d.status === docFilter)
-                .map((doc) => (
+              {studentDocuments.filter((d) => docFilter === 'All' || d.status === docFilter).length === 0 ? (
+                <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <i className="fas fa-file-shield text-gray-300 text-2xl mb-1.5" />
+                  <p className="text-xs font-bold text-gray-700">No Verification Documents</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Documents appear once students opt in or are enrolled in consultancy.</p>
+                </div>
+              ) : (
+                studentDocuments
+                  .filter((d) => docFilter === 'All' || d.status === docFilter)
+                  .map((doc) => (
                   <div key={doc.id} className="p-2.5 rounded-xl border border-gray-200 bg-gray-50 space-y-1.5 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-gray-800 truncate">{doc.title}</span>
@@ -645,7 +654,8 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                       </button>
                     </div>
                   </div>
-                ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -700,30 +710,6 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
     setBatchMaxStudents(25);
     setShowForm(false);
   };
-
-  const batch1Students = (users || []).filter(u => u.role === 'student' && (u.batch === 'Batch 1 (Dec)' || !u.batch || u.batch.includes('1'))).length;
-  const batch2Students = (users || []).filter(u => u.role === 'student' && u.batch === 'Batch 2 (May/June)').length;
-
-  const defaultBatches = [
-    {
-      id: 'batch-1',
-      name: 'Batch 1 (Dec)',
-      session: 'Session: December – April • Winter Cohort',
-      badge: 'Winter Session',
-      color: 'teal',
-      studentsCount: batch1Students,
-      tag: 'Dec Intake',
-    },
-    {
-      id: 'batch-2',
-      name: 'Batch 2 (May/June)',
-      session: 'Session: May – October • Summer Cohort',
-      badge: 'Summer Session',
-      color: 'purple',
-      studentsCount: batch2Students,
-      tag: 'May/June Intake',
-    },
-  ];
 
   return (
     <div>
@@ -789,9 +775,26 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
         )}
 
         {/* Batches Overview Cards */}
+        {cohortBatches.length === 0 ? (
+          <div className="card text-center py-8 space-y-3 border border-dashed border-gray-200">
+            <i className="fas fa-layer-group text-3xl text-gray-300" />
+            <div>
+              <p className="text-sm font-bold text-gray-700">No Academic Batches Yet</p>
+              <p className="text-xs text-gray-500 mt-1">Create your first cohort batch to start enrolling students.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="btn-primary px-4 py-2 text-xs inline-flex items-center gap-1.5"
+            >
+              <i className="fas fa-plus" />
+              <span>Create First Batch</span>
+            </button>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 gap-3">
           {cohortBatches.map((b) => {
-            const enrolled = (users || []).filter(u => u.role === 'student' && (u.batch === b.name || (b.name === 'Batch 1 (Dec)' ? (u.batch?.includes('1') || !u.batch) : b.name === 'Batch 2 (May/June)' ? u.batch?.includes('2') : false)));
+            const enrolled = (users || []).filter(u => u.role === 'student' && u.batch === b.name);
             const color = b.color || (b.name.includes('1') ? 'teal' : b.name.includes('2') ? 'purple' : 'blue');
             const badge = b.badge || (b.name.includes('1') ? 'Winter Session' : b.name.includes('2') ? 'Summer Session' : 'Active Cohort');
 
@@ -885,6 +888,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Batch Joined Students & Courses to Study Modal */}
@@ -921,7 +925,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
                     }`}
                 >
                   <i className="fas fa-user-graduate text-[11px]" />
-                  <span>Joined Students ({users.filter(u => u.role === 'student' && (u.batch === selectedBatchModal.batch || (selectedBatchModal.batch.includes('1') ? (u.batch?.includes('1') || !u.batch) : u.batch?.includes('2')))).length})</span>
+                  <span>Joined Students ({users.filter(u => u.role === 'student' && u.batch === selectedBatchModal.batch).length})</span>
                 </button>
                 <button
                   type="button"
@@ -940,7 +944,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
               {batchTab === 'students' ? (
                 <div>
                   {(() => {
-                    const joined = users.filter(u => u.role === 'student' && (u.batch === selectedBatchModal.batch || (selectedBatchModal.batch.includes('1') ? (u.batch?.includes('1') || !u.batch) : u.batch?.includes('2'))));
+                    const joined = users.filter(u => u.role === 'student' && u.batch === selectedBatchModal.batch);
                     if (joined.length === 0) {
                       return (
                         <div className="text-center py-8 px-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">

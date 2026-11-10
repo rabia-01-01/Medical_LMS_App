@@ -13,118 +13,10 @@ import type {
 const LOCAL_STORAGE_ATTEMPTS_KEY = 'lms_student_attempts_v2';
 
 // ============================================================================
-// SEED ATTEMPTS & ANALYTICS DATA (Medical Exam Performance Baseline)
+// ATTEMPTS & ANALYTICS DATA (Clean Production Startup - No Default Data)
 // ============================================================================
 
-export const SEED_ATTEMPTS: AttemptWithDetails[] = [
-  {
-    id: 'att-seed-01',
-    assessment_id: 'asmt-dpp-1',
-    student_id: 'std-seed-1',
-    started_at: new Date(Date.now() - 86400000 * 6).toISOString(),
-    submitted_at: new Date(Date.now() - 86400000 * 6 + 18 * 60000).toISOString(),
-    status: 'SUBMITTED',
-    score: 8,
-    accuracy: 66.7,
-    assessmentTitle: 'DPP-01: Cardiovascular Dynamics Drill',
-    assessmentType: 'DPP',
-    subjectName: 'Biology',
-    chapterName: 'Human Physiology',
-    totalMarks: 12,
-    durationMinutes: 20,
-    answers: [
-      {
-        id: 'ans-1',
-        attemptId: 'att-seed-01',
-        questionId: 'q-med-1',
-        questionText: 'During cardiac cycle, closure of AV tricuspid and bicuspid valves?',
-        selectedOptionId: 'opt-1-1',
-        selectedOptionText: 'Onset of ventricular systole generating S1 / Lub',
-        correctOptionText: 'Onset of ventricular systole generating S1 / Lub',
-        isCorrect: true,
-        marksAwarded: 4,
-        answeredAt: new Date(Date.now() - 86400000 * 6 + 5 * 60000).toISOString(),
-        explanation: 'AV valve closure marks ventricular systole onset.',
-      },
-      {
-        id: 'ans-2',
-        attemptId: 'att-seed-01',
-        questionId: 'q-med-2',
-        questionText: 'Prokaryotic DNA replication primer synthesis enzyme?',
-        selectedOptionId: 'opt-2-2',
-        selectedOptionText: 'DNA Primase (DnaG product)',
-        correctOptionText: 'DNA Primase (DnaG product)',
-        isCorrect: true,
-        marksAwarded: 4,
-        answeredAt: new Date(Date.now() - 86400000 * 6 + 10 * 60000).toISOString(),
-      },
-      {
-        id: 'ans-3',
-        attemptId: 'att-seed-01',
-        questionId: 'q-med-5',
-        questionText: 'Assertion-Reason on Bohr effect and oxyhemoglobin dissociation curve',
-        selectedOptionId: 'opt-5-2',
-        selectedOptionText: 'Both A and R are true but R is NOT correct explanation',
-        correctOptionText: 'Both A and R are true and R is correct explanation of A',
-        isCorrect: false,
-        marksAwarded: -1,
-        answeredAt: new Date(Date.now() - 86400000 * 6 + 15 * 60000).toISOString(),
-        explanation: 'Acidosis and hypercapnia actively promote O2 release (Bohr effect).',
-      },
-    ],
-  },
-  {
-    id: 'att-seed-02',
-    assessment_id: 'asmt-pyq-1',
-    student_id: 'std-seed-1',
-    started_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    submitted_at: new Date(Date.now() - 86400000 * 4 + 25 * 60000).toISOString(),
-    status: 'SUBMITTED',
-    score: 12,
-    accuracy: 75.0,
-    assessmentTitle: 'PYQ Drill: 10-Year Compiled NEET UG & IMAT',
-    assessmentType: 'PYQ',
-    subjectName: 'Physics',
-    chapterName: 'Electrodynamics & Magnetism',
-    totalMarks: 16,
-    durationMinutes: 30,
-    answers: [],
-  },
-  {
-    id: 'att-seed-03',
-    assessment_id: 'asmt-series-1',
-    student_id: 'std-seed-1',
-    started_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    submitted_at: new Date(Date.now() - 86400000 * 2 + 35 * 60000).toISOString(),
-    status: 'SUBMITTED',
-    score: 16,
-    accuracy: 100.0,
-    assessmentTitle: 'All-India Medical Test Series: Milestone 01',
-    assessmentType: 'TEST_SERIES',
-    subjectName: 'Chemistry',
-    chapterName: 'Organic Reaction Mechanisms',
-    totalMarks: 16,
-    durationMinutes: 40,
-    answers: [],
-  },
-  {
-    id: 'att-seed-04',
-    assessment_id: 'asmt-mock-1',
-    student_id: 'std-seed-1',
-    started_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    submitted_at: new Date(Date.now() - 86400000 * 1 + 42 * 60000).toISOString(),
-    status: 'SUBMITTED',
-    score: 15,
-    accuracy: 80.0,
-    assessmentTitle: 'Grand Mock Test I: Complete Pre-Medical Rehearsal',
-    assessmentType: 'MOCK_TEST',
-    subjectName: 'All Medical Subjects',
-    chapterName: 'Comprehensive Syllabus',
-    totalMarks: 20,
-    durationMinutes: 45,
-    answers: [],
-  },
-];
+export const SEED_ATTEMPTS: AttemptWithDetails[] = [];
 
 // Offline Local Cache Helpers
 function loadLocalAttempts(): AttemptWithDetails[] {
@@ -134,7 +26,7 @@ function loadLocalAttempts(): AttemptWithDetails[] {
   } catch (err) {
     console.error('[attemptService] Failed to load local attempts:', err);
   }
-  return SEED_ATTEMPTS;
+  return [];
 }
 
 function saveLocalAttempts(items: AttemptWithDetails[]) {
@@ -403,8 +295,7 @@ export async function fetchStudentAttempts(studentId?: string): Promise<AttemptW
   // Fallback: Local offline cache
   const local = loadLocalAttempts();
   if (studentId) {
-    const filtered = local.filter((a) => a.student_id === studentId || !a.student_id);
-    return filtered.length > 0 ? filtered : local;
+    return local.filter((a) => a.student_id === studentId || !a.student_id);
   }
   return local;
 }
@@ -443,24 +334,31 @@ export async function getStudentAnalytics(studentId?: string): Promise<StudentAn
       };
     });
 
-  // Subject-wise accuracy breakdown (for BarChart)
-  const subjectMap: Record<string, { correct: number; total: number; color: string }> = {
-    Biology: { correct: 28, total: 35, color: '#0d9488' }, // Teal
-    Physics: { correct: 18, total: 30, color: '#0f2b46' }, // Deep Navy
-    Chemistry: { correct: 22, total: 28, color: '#14b8a6' }, // Light Teal
+  // Subject-wise accuracy breakdown calculated strictly from completed attempts
+  const subjectColors: Record<string, string> = {
+    Biology: '#0d9488',
+    Physics: '#0f2b46',
+    Chemistry: '#14b8a6',
+    Mathematics: '#3b82f6',
   };
+  const subjectMap: Record<string, { correct: number; total: number; color: string }> = {};
 
-  // Enhance with real attempt data if present
   completed.forEach((a) => {
-    const subj = a.subjectName || 'Biology';
+    const subj = a.subjectName || 'General';
     if (!subjectMap[subj]) {
-      subjectMap[subj] = { correct: 0, total: 0, color: '#0d9488' };
+      subjectMap[subj] = { correct: 0, total: 0, color: subjectColors[subj] || '#0d9488' };
     }
-    const acc = Number(a.accuracy) || 70;
-    const estTotal = 5;
-    const estCorrect = Math.round((acc / 100) * estTotal);
-    subjectMap[subj].correct += estCorrect;
-    subjectMap[subj].total += estTotal;
+    const answers = a.answers || [];
+    if (answers.length > 0) {
+      subjectMap[subj].correct += answers.filter((ans) => ans.isCorrect).length;
+      subjectMap[subj].total += answers.length;
+    } else {
+      const acc = Number(a.accuracy) || 0;
+      const estTotal = 5;
+      const estCorrect = Math.round((acc / 100) * estTotal);
+      subjectMap[subj].correct += estCorrect;
+      subjectMap[subj].total += estTotal;
+    }
   });
 
   const subjectAccuracy: SubjectAccuracyStat[] = Object.keys(subjectMap).map((subKey) => {
@@ -475,30 +373,16 @@ export async function getStudentAnalytics(studentId?: string): Promise<StudentAn
     };
   });
 
-  // Weak Area Diagnoser: Identify areas with accuracy < 50%
-  const weakAreas: WeakAreaItem[] = [
-    {
-      subject: 'Physics',
-      topicOrChapter: 'Rotational Motion & Moment of Inertia',
-      accuracy: 38.5,
-      attemptsCount: 3,
-      recommendedAction: 'Review solved PYQs & re-derive parallel-axis theorems.',
-    },
-    {
-      subject: 'Biology',
-      topicOrChapter: 'Renal Physiology & Counter-Current Mechanism',
-      accuracy: 45.0,
-      attemptsCount: 2,
-      recommendedAction: 'Study Henle loop concentration gradients with 3D diagram.',
-    },
-    {
-      subject: 'Chemistry',
-      topicOrChapter: 'Aldol & Cannizzaro Reaction Mechanisms',
-      accuracy: 48.0,
-      attemptsCount: 4,
-      recommendedAction: 'Practice electron arrow-pushing mechanisms with step drills.',
-    },
-  ];
+  // Weak Area Diagnoser: Identify areas with accuracy < 50% from real attempts
+  const weakAreas: WeakAreaItem[] = subjectAccuracy
+    .filter((s) => s.accuracy < 50)
+    .map((s) => ({
+      subject: s.subject,
+      topicOrChapter: s.subject,
+      accuracy: s.accuracy,
+      attemptsCount: completed.filter((a) => (a.subjectName || 'General') === s.subject).length,
+      recommendedAction: `Review ${s.subject} study material and re-attempt practice drills.`,
+    }));
 
   return {
     studentId: studentId || 'current-student',
@@ -507,7 +391,7 @@ export async function getStudentAnalytics(studentId?: string): Promise<StudentAn
     averageScore,
     averageAccuracy,
     bestScore,
-    totalQuestionsAnswered: completed.reduce((sum, a) => sum + (a.answers?.length || 5), 0),
+    totalQuestionsAnswered: completed.reduce((sum, a) => sum + (a.answers?.length || 0), 0),
     scoreHistory,
     subjectAccuracy,
     weakAreas,

@@ -35,16 +35,18 @@ export function PerformanceAnalyticsView({
     );
   }
 
-  if (error || !analytics) {
+  if (error || !analytics || analytics.completedAttempts === 0) {
     return (
-      <div className="card p-4 text-center text-xs text-slate-500 shadow-xs border border-slate-100">
-        <p>No attempt records found. Take an assessment to unlock analytics.</p>
+      <div className="card p-5 text-center text-xs text-slate-500 shadow-xs border border-slate-100">
+        <i className="fas fa-chart-pie text-2xl text-slate-300 mb-2 block" />
+        <p className="font-semibold text-slate-700 mb-1">No Attempt Records Yet</p>
+        <p>Complete a quiz or assessment to unlock live performance analytics.</p>
         {onNavigateToQuizzes && (
           <button
             onClick={onNavigateToQuizzes}
             className="mt-3 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-semibold"
           >
-            Start First Drill
+            Browse Assessments
           </button>
         )}
       </div>
@@ -233,31 +235,39 @@ export function PerformanceAnalyticsView({
             </span>
           </div>
 
-          {analytics.weakAreas.map((weak, i) => (
-            <div
-              key={i}
-              className="card mb-0 p-3 border-l-4 border-rose-500 shadow-2xs space-y-1.5"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-50 text-rose-700">
-                  {weak.subject}
-                </span>
-                <span className="text-xs font-extrabold text-rose-600">
-                  {weak.accuracy}% Accuracy
-                </span>
-              </div>
-
-              <p className="text-xs font-bold text-slate-800">{weak.topicOrChapter}</p>
-
-              <div className="p-2 bg-slate-50 rounded-lg text-[11px] text-slate-600 border border-slate-100 flex items-start gap-1.5">
-                <i className="fas fa-lightbulb text-amber-500 text-xs mt-0.5 flex-shrink-0" />
-                <p>
-                  <span className="font-bold text-slate-700">Prescription:</span>{' '}
-                  {weak.recommendedAction}
-                </p>
-              </div>
+          {analytics.weakAreas.length === 0 ? (
+            <div className="card mb-0 p-4 text-center text-xs text-slate-500 border border-emerald-100 bg-emerald-50/40">
+              <i className="fas fa-check-circle text-emerald-500 text-lg mb-1 block" />
+              <p className="font-semibold text-emerald-800">No Weak Areas Flagged</p>
+              <p className="text-[11px] text-emerald-700 mt-0.5">All attempted subjects are currently scoring 50% or above.</p>
             </div>
-          ))}
+          ) : (
+            analytics.weakAreas.map((weak, i) => (
+              <div
+                key={i}
+                className="card mb-0 p-3 border-l-4 border-rose-500 shadow-2xs space-y-1.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-50 text-rose-700">
+                    {weak.subject}
+                  </span>
+                  <span className="text-xs font-extrabold text-rose-600">
+                    {weak.accuracy}% Accuracy
+                  </span>
+                </div>
+
+                <p className="text-xs font-bold text-slate-800">{weak.topicOrChapter}</p>
+
+                <div className="p-2 bg-slate-50 rounded-lg text-[11px] text-slate-600 border border-slate-100 flex items-start gap-1.5">
+                  <i className="fas fa-lightbulb text-amber-500 text-xs mt-0.5 flex-shrink-0" />
+                  <p>
+                    <span className="font-bold text-slate-700">Prescription:</span>{' '}
+                    {weak.recommendedAction}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 

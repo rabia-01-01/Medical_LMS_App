@@ -188,9 +188,11 @@ export function StudentStudyProgressModal({ student, onClose }: StudentStudyProg
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="badge bg-teal-400/30 text-teal-200 text-[10px] font-bold py-0.5 px-2 rounded-full border border-teal-300/30">
-                  {student.batch || 'Batch 1 (Dec)'}
-                </span>
+                {student.batch && (
+                  <span className="badge bg-teal-400/30 text-teal-200 text-[10px] font-bold py-0.5 px-2 rounded-full border border-teal-300/30">
+                    {student.batch}
+                  </span>
+                )}
                 <span className="badge bg-white/20 text-white text-[10px] font-semibold py-0.5 px-2 rounded-full">
                   Student Record
                 </span>

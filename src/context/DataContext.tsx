@@ -233,32 +233,8 @@ export interface CohortBatch {
   createdAt?: string;
 }
 
-export const DEFAULT_COHORT_BATCHES: CohortBatch[] = [
-  {
-    id: 'batch-1',
-    name: 'Batch 1 (Dec)',
-    session: 'Winter Session: December – April',
-    season: 'Winter Cohort',
-    badge: 'Winter Session',
-    color: 'teal',
-    tag: 'Dec Intake',
-    targetCourse: 'NEET-UG & IMAT Aspirants',
-    maxStudents: 25,
-    description: 'Accelerated winter medical entrance preparation cohort covering all 7 core subjects.',
-  },
-  {
-    id: 'batch-2',
-    name: 'Batch 2 (May/June)',
-    session: 'Summer Session: May – October',
-    season: 'Summer Cohort',
-    badge: 'Summer Session',
-    color: 'purple',
-    tag: 'May/June Intake',
-    targetCourse: 'Target NEET Super-Sprint & IMAT Aspirants',
-    maxStudents: 25,
-    description: 'Comprehensive summer medical entrance foundation cohort covering all 7 core subjects.',
-  },
-];
+// Cohort batches start empty on deployment; Admin creates batches dynamically (supports cohorts like 'Batch 1 (Dec)', 'Batch 2 (May/June)', etc.)
+export const DEFAULT_COHORT_BATCHES: CohortBatch[] = [];
 
 interface DataContextType {
   // Users (Admin Only Management)
@@ -400,196 +376,60 @@ function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
-export const DEFAULT_STUDENT_DOCS: StudentDocument[] = [
-  {
-    id: 'sdoc-passport',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 1,
-    stageKey: 'passport',
-    title: '1. Passport (Valid International Bio-data)',
-    category: 'Identity',
-    status: 'Verified',
-    fileName: 'Passport_BioData_Page.pdf',
-    fileSize: '1.8 MB',
-    submittedAt: '2026-10-10T10:00:00.000Z',
-    verifiedAt: '2026-10-12',
-    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
-    remarks: 'Passport verified. Bio-data clear, expires in 2033, valid for full degree duration.',
-  },
-  {
-    id: 'sdoc-12th-moi',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 2,
-    stageKey: '12th_moi',
-    title: '2. Class 12th Marksheet, Passing Certs & MOI',
-    category: 'Academic',
-    status: 'Verified',
-    fileName: 'Class12_Marksheet_Passing_MOI_Compiled.pdf',
-    fileSize: '3.4 MB',
-    submittedAt: '2026-10-12T11:20:00.000Z',
-    verifiedAt: '2026-10-14',
-    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
-    remarks: 'All 3 academic documents verified. PCB marksheet (94.6%), passing certificate, and MOI valid.',
-    subItems: [
-      { id: 'sub-12th-mark', title: 'Class 12th Marksheet (PCB aggregate & practicals)', status: 'verified', notes: 'Aggregate: 94.6% in PCB' },
-      { id: 'sub-12th-pass', title: 'Class 12th Passing Certificate / Migration', status: 'verified', notes: 'Original certificate verified' },
-      { id: 'sub-12th-moi', title: 'Medium of Instruction (MOI) Certificate in English', status: 'verified', notes: 'Issued by School Principal, 12 years English medium' },
-    ],
-  },
-  {
-    id: 'sdoc-hrd',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 3,
-    stageKey: 'hrd',
-    title: '3. State HRD Attestation',
-    category: 'Attestation',
-    status: 'Verified',
-    fileName: 'HRD_Attested_Backside_Stamp.pdf',
-    fileSize: '2.1 MB',
-    submittedAt: '2026-10-19T09:15:00.000Z',
-    verifiedAt: '2026-10-20',
-    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
-    remarks: 'Regional state HRD seal confirmed with official countersignature.',
-  },
-  {
-    id: 'sdoc-apostille',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 4,
-    stageKey: 'apostille',
-    title: '4. Apostille (MEA Hague)',
-    category: 'Attestation',
-    status: 'Verified',
-    fileName: 'MEA_Apostille_Sticker_Certificate.pdf',
-    fileSize: '1.9 MB',
-    submittedAt: '2026-10-25T14:10:00.000Z',
-    verifiedAt: '2026-10-26',
-    verifiedBy: 'Dr. Marco Rossi (Consultant Agent)',
-    remarks: 'Hague Apostille sticker verified via MEA e-Sanad online QR code.',
-  },
-  {
-    id: 'sdoc-scholarship',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 5,
-    stageKey: 'scholarship_docs',
-    title: '5. SCHOLARSHIP DOCS (Bank, Special, SDM, Translation & Legalisation)',
-    category: 'Scholarship',
-    status: 'In Review/In Progress',
-    fileName: 'Scholarship_Income_Bank_SDM_Draft.pdf',
-    fileSize: '4.2 MB',
-    submittedAt: '2026-10-29T12:00:00.000Z',
-    verifiedAt: undefined,
-    verifiedBy: undefined,
-    remarks: 'Bank Certificate, Special Certificate, and Notary/SDM/Apostille complete. Italian translation & legalisation pending.',
-    subItems: [
-      { id: 'sub-sch-bank', title: 'Bank Certificate (Balance & 6-month statement)', status: 'verified', notes: 'Closing balance confirmed, official bank seal' },
-      { id: 'sub-sch-special', title: 'Special Certificate (Family Composition & Annual Income)', status: 'verified', notes: 'Family composition & income certificate submitted' },
-      { id: 'sub-sch-notary', title: 'Notary, SDM, Apostille (Sub-Divisional Magistrate & MEA)', status: 'verified', notes: 'SDM attestation and MEA scholarship apostille completed' },
-      { id: 'sub-sch-trans', title: 'Translation & Legalisation (Sworn Italian translation & Consular legalisation)', status: 'pending', notes: 'Sent to Italian sworn translator in Rome. Delivery awaited.' },
-    ],
-  },
-  {
-    id: 'sdoc-pre-enrolment',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 6,
-    stageKey: 'pre_enrolment',
-    title: '6. Pre registration evaluation & Pre enrolment (Universitaly / CIMEA DOV)',
-    category: 'Enrolment',
-    status: 'In Review/In Progress',
-    fileName: 'Universitaly_PreEnrolment_Summary.pdf',
-    fileSize: '2.5 MB',
-    submittedAt: '2026-11-02T16:30:00.000Z',
-    verifiedAt: undefined,
-    verifiedBy: undefined,
-    remarks: 'Universitaly pre-enrolment submitted. Awaiting CIMEA statement release to complete stage.',
-    subItems: [
-      { id: 'sub-univ-pre', title: 'Universitaly Pre-Enrolment Application Form & Code', status: 'verified', notes: 'Pre-enrolment submitted to Sapienza University of Rome' },
-      { id: 'sub-univ-eval', title: 'Pre-registration Academic Evaluation & Acceptance Letter', status: 'verified', notes: 'Eligibility evaluation approved by university international desk' },
-      { id: 'sub-univ-dov', title: 'CIMEA Statement of Comparability / DOV (Dichiarazione di Valore)', status: 'pending', notes: 'CIMEA DiploME certificate issuance in final verification' },
-    ],
-  },
-  {
-    id: 'sdoc-registration',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 7,
-    stageKey: 'registration',
-    title: '7. Registration (University Matriculation)',
-    category: 'Registration',
-    status: 'Pending',
-    fileName: 'Infostud_Registration_Draft.pdf',
-    fileSize: '1.2 MB',
-    submittedAt: '2026-11-04T10:00:00.000Z',
-    verifiedAt: undefined,
-    verifiedBy: undefined,
-    remarks: 'Scheduled following CIMEA release and scholarship voucher allocation.',
-  },
-  {
-    id: 'sdoc-examination',
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    stageNumber: 8,
-    stageKey: 'examination',
-    title: '8. EXAMINATION (IMAT Admit Card & Clearance)',
-    category: 'Examination',
-    status: 'Pending',
-    fileName: 'IMAT_Registration_Confirmation.pdf',
-    fileSize: '1.5 MB',
-    submittedAt: '2026-11-05T14:20:00.000Z',
-    verifiedAt: undefined,
-    verifiedBy: undefined,
-    remarks: 'Candidate is actively preparing on the LMS (curriculum completed, 4/4 topics studied in Biology). Test center allocated.',
-    subItems: [
-      { id: 'sub-exam-reg', title: 'IMAT / Medical Entrance Registration Fee Receipt', status: 'verified', notes: 'Exam fee paid, registration confirmed' },
-      { id: 'sub-exam-hall', title: 'Official Examination Admit Card & Roll Number Verification', status: 'pending', notes: 'Admit card will be released 10 days prior to exam' },
-      { id: 'sub-exam-clear', title: 'Examination Day Medical Checklist & Center Clearance', status: 'pending', notes: 'Center: New Delhi / Rome Overseas Testing Center' },
-    ],
-  },
-];
+const CLEAN_SLATE_FLAG = 'sim_clean_slate_v1';
 
-export const DEFAULT_STUDENT_PROGRESS: StudentCurriculumProgress[] = [
-  {
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    studentBatch: 'Batch 1 (Dec)',
-    avatar: '👩‍🎓',
-    completedChapters: [],
-    completedTopics: [],
-    completedTopicDetails: [],
-    lastUpdated: new Date().toISOString(),
-  },
-];
+function ensureCleanSlateStorage(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (!localStorage.getItem(CLEAN_SLATE_FLAG)) {
+      const seededKeys = [
+        'sim_departments',
+        'sim_courses',
+        'sim_resources',
+        'sim_announcements',
+        'sim_calendar_events',
+        'sim_community',
+        'sim_quizzes',
+        'sim_notifications',
+        'sim_audit',
+        'sim_student_documents',
+        'sim_cohort_batches',
+        'sim_admin_batches',
+        'sim_student_progress',
+        'sim_consultancy_dossiers',
+        'sim_consultancy_opt_in',
+        'lms_resources_cache_v2',
+        'lms_assessments_cache_v2',
+        'lms_questions_cache_v2',
+        'lms_student_attempts_v2',
+      ];
+      seededKeys.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem(CLEAN_SLATE_FLAG, 'true');
+    }
+  } catch (e) {
+    console.warn('Clean slate initialization skipped:', e);
+  }
+}
 
-export const DEFAULT_CONSULTANCY_DOSSIERS: StudentConsultancyDossier[] = [
-  {
-    studentId: 'u-student-1',
-    studentName: 'Mary',
-    studentEmail: 'mary@edu.in',
-    studentBatch: 'Batch 2 (May/June)',
-    avatar: '👩‍🎓',
-    targetCountry: 'Italy',
-    targetCourse: 'Medicine and Surgery (Single-Cycle Degree / MD)',
-    targetUniversities: [
-      'Sapienza University of Rome (Medicine & Surgery)',
-      'University of Milan (International Medical School - IMS)',
-      'University of Bologna (School of Medicine)',
-    ],
-    consultantId: 'u-consultant-1',
-    consultantName: 'Dr. Marco Rossi (Consultant Agent)',
-    assignedAt: '2026-10-01T09:00:00Z',
-    overallStatus: 'IN_PROGRESS',
-    intake: '2026 / 2027 Academic Intake',
-    priority: 'High',
-    lastUpdated: new Date().toISOString(),
-    notes: 'Aspirant has completed Class 12th PCB (94.6%), State HRD attestation and MEA Apostille. Sworn Italian translation and Universitaly pre-enrolment in active review.',
-    checklist: createDefaultChecklist(),
-  },
-];
+ensureCleanSlateStorage();
+
+// Canonical 8-stage document ID template keys (populated dynamically when a student opts in or is enrolled)
+export const CONSULTANCY_DOC_STAGE_KEYS = [
+  'sdoc-passport',
+  'sdoc-12th-moi',
+  'sdoc-hrd',
+  'sdoc-apostille',
+  'sdoc-scholarship',
+  'sdoc-pre-enrolment',
+  'sdoc-registration',
+  'sdoc-examination',
+] as const;
+
+export const DEFAULT_STUDENT_DOCS: StudentDocument[] = [];
+
+export const DEFAULT_STUDENT_PROGRESS: StudentCurriculumProgress[] = [];
+
+export const DEFAULT_CONSULTANCY_DOSSIERS: StudentConsultancyDossier[] = [];
 
 // Helper to verify if topic actually exists in the active 3-tier curriculum
 export function isTopicInCurrentCurriculum(id: string, name?: string): boolean {
@@ -697,7 +537,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           role: 'student',
           avatar: '👩‍🎓',
           department: 'Pre-Clinical Sciences',
-          batch: 'Batch 1 (Dec)',
+          batch: '',
           status: 'active',
           createdAt: new Date().toISOString(),
           targetExam: 'NEET-UG',
@@ -740,101 +580,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {}
     return filtered.map((u) => ({
       ...u,
-      batch: u.batch || (u.role === 'student' ? 'Batch 1 (Dec)' : 'All'),
+      batch: u.batch || (u.role === 'student' ? '' : 'All'),
     }));
   });
 
   const [departments, setDepartments] = useState<Department[]>(() => {
-    const stored = loadFromStorage<Department[]>('sim_departments', []);
-    if (!stored || stored.length === 0) {
-      return [
-        {
-          id: 'dept-1',
-          name: 'Pre-Clinical Sciences',
-          icon: 'fa-dna',
-          description: 'Foundations of Human Anatomy, Physiology, Cell Biology & Medical Biochemistry',
-          subjects: ['Biology', 'Chemistry'],
-          batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'dept-2',
-          name: 'Paraclinical & Quantitative Sciences',
-          icon: 'fa-calculator',
-          description: 'Pathology, Medical Physics, Biostatistics, Maths & Clinical Reasoning',
-          subjects: ['Physics', 'Maths', 'Logical Reasoning'],
-          batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'dept-3',
-          name: 'Clinical Medicine & Humanities',
-          icon: 'fa-globe-americas',
-          description: 'Internal Medicine, Healthcare GK, Bioethics & Scientific English',
-          subjects: ['English', 'GK'],
-          batches: ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
-          createdAt: new Date().toISOString(),
-        },
-      ];
-    }
-    return stored.map((d) => ({
-      ...d,
-      batches: d.batches && d.batches.length > 0 ? d.batches : ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
-    }));
+    return loadFromStorage<Department[]>('sim_departments', []);
   });
 
   const [courses, setCourses] = useState<Course[]>(() => {
     const stored = loadFromStorage<Course[]>('sim_courses', []);
-    if (!stored || stored.length === 0) {
-      return [
-        {
-          id: 'crs-1',
-          name: 'NEET-UG Comprehensive Masterclass (Dec)',
-          category: 'NEET-UG',
-          description: 'Full syllabus intensive coverage with DPPs and mock drills for December cohort',
-          subjects: ['Biology', 'Physics', 'Chemistry'],
-          facultyIds: ['u-faculty-1'],
-          studentIds: ['u-student-1'],
-          batch: 'Batch 1 (Dec)',
-          duration: '12 Months',
-          icon: 'fa-heartbeat',
-          color: 'bg-emerald-600',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'crs-2',
-          name: 'Target NEET Super-Sprint (May/June)',
-          category: 'NEET-UG',
-          description: 'Accelerated revision and high-yield question series for May/June batch',
-          subjects: ['Biology', 'Chemistry', 'Maths'],
-          facultyIds: ['u-faculty-1'],
-          studentIds: ['u-student-1'],
-          batch: 'Batch 2 (May/June)',
-          duration: '6 Months',
-          icon: 'fa-stethoscope',
-          color: 'bg-blue-600',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'crs-3',
-          name: 'Clinical Aptitude & Reasoning Foundation',
-          category: 'General',
-          description: 'Logic, quantitative reasoning, and scientific English for medical entrance exams',
-          subjects: ['Logical Reasoning', 'Maths', 'English', 'GK'],
-          facultyIds: ['u-faculty-1'],
-          studentIds: ['u-student-1'],
-          batch: 'Batch 1 (Dec)',
-          duration: '8 Months',
-          icon: 'fa-brain',
-          color: 'bg-purple-600',
-          createdAt: new Date().toISOString(),
-        },
-      ];
-    }
-    return stored.map((c) => ({
+    return (stored || []).map((c) => ({
       ...c,
       studentIds: (c.studentIds || []).filter(id => id !== 'u-student-2'),
-      batch: c.batch || 'Batch 1 (Dec)',
+      batch: c.batch || 'All',
     }));
   });
 
@@ -861,7 +620,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       } else {
         deduplicated.push({
           ...r,
-          batch: r.batch === 'Batch 1 (Dec)' && (r.uploaderName || r.uploaderId) ? 'All' : (r.batch || 'All'),
+          batch: r.batch || 'All',
         });
       }
     }
@@ -873,119 +632,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => loadFromStorage('sim_announcements', []));
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => {
-    return loadFromStorage('sim_calendar_events', [
-      {
-        id: 'cal-default-1',
-        title: 'Comprehensive NEET-UG Diagnostic Mock 1',
-        description: 'Full syllabus 200 questions timing drill with all-India percentile ranking.',
-        date: new Date().toISOString().split('T')[0],
-        time: '09:00 AM',
-        timestamp: new Date().toISOString(),
-        type: 'exam',
-        authorName: 'Academic Directorate',
-        authorRole: 'Admin',
-      },
-      {
-        id: 'cal-default-2',
-        title: 'Clinical Case Discussion: Acid-Base Disorders',
-        description: 'Interactive case study with Dr. Jenkins on arterial blood gas and renal compensation.',
-        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        time: '04:00 PM',
-        timestamp: new Date(Date.now() + 86400000).toISOString(),
-        type: 'lecture',
-        authorName: 'Dr. Sarah Jenkins',
-        authorRole: 'Faculty',
-      },
-    ]);
+    return loadFromStorage<CalendarEvent[]>('sim_calendar_events', []);
   });
 
   const [communityMessages, setCommunityMessages] = useState<CommunityMessage[]>(() => {
     const stored = loadFromStorage<CommunityMessage[]>('sim_community', []);
-    if (!stored || stored.length === 0) {
-      return [
-        {
-          id: 'comm-msg-1',
-          authorId: 'u-faculty-1',
-          authorName: 'Dr. Sarah Jenkins',
-          authorRole: 'Faculty',
-          message:
-            'Welcome everyone! For this week’s Human Physiology module, please pay special attention to the Frank-Starling cardiac relationship and renal clearance mechanisms. Feel free to ask questions here!',
-          time: format(new Date(Date.now() - 7200000), 'dd MMM yyyy, hh:mm a'),
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-          likes: 12,
-          replies: 2,
-          pinned: true,
-          repliesList: [
-            {
-              id: 'rep-1-1',
-              parentId: 'comm-msg-1',
-              authorId: 'u-student-1',
-              authorName: 'Mary',
-              authorRole: 'Student',
-              message:
-                'Thank you Dr. Jenkins! Does the length-tension curve in cardiac muscle peak at the same sarcomere length as skeletal muscle?',
-              time: format(new Date(Date.now() - 5400000), 'dd MMM yyyy, hh:mm a'),
-              timestamp: new Date(Date.now() - 5400000).toISOString(),
-              likes: 4,
-            },
-            {
-              id: 'rep-1-2',
-              parentId: 'comm-msg-1',
-              authorId: 'u-faculty-1',
-              authorName: 'Dr. Sarah Jenkins',
-              authorRole: 'Faculty',
-              message:
-                'Great question Mary! Cardiac muscle operates predominantly on the ascending limb of the Frank-Starling curve (~1.8 to 2.2 µm), giving it higher sensitivity to stretch.',
-              time: format(new Date(Date.now() - 3600000), 'dd MMM yyyy, hh:mm a'),
-              timestamp: new Date(Date.now() - 3600000).toISOString(),
-              likes: 7,
-            },
-          ],
-        },
-        {
-          id: 'comm-msg-2',
-          authorId: 'u-student-1',
-          authorName: 'Mary',
-          authorRole: 'Student',
-          message:
-            'Could someone clarify whether secondary active transport in renal tubules uses ATP directly or relies on the sodium-potassium ATPase electrochemical gradient?',
-          time: format(new Date(Date.now() - 3600000), 'dd MMM yyyy, hh:mm a'),
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          likes: 5,
-          replies: 1,
-          pinned: false,
-          repliesList: [
-            {
-              id: 'rep-2-1',
-              parentId: 'comm-msg-2',
-              authorId: 'u-faculty-1',
-              authorName: 'Dr. Sarah Jenkins',
-              authorRole: 'Faculty',
-              message:
-                'Secondary active transport (e.g. SGLT-2) relies on the Na+ gradient established by primary active Na+/K+ ATPase, consuming indirect metabolic energy.',
-              time: format(new Date(Date.now() - 1800000), 'dd MMM yyyy, hh:mm a'),
-              timestamp: new Date(Date.now() - 1800000).toISOString(),
-              likes: 6,
-            },
-          ],
-        },
-        {
-          id: 'comm-msg-3',
-          authorId: 'u-admin-1',
-          authorName: 'Alice Kernel',
-          authorRole: 'Admin',
-          message:
-            'All students: The upcoming NEET Diagnostic Drill 1 has been scheduled on the Academic Calendar. Please ensure you review your allocated topics in the Curriculum Browser.',
-          time: format(new Date(Date.now() - 1800000), 'dd MMM yyyy, hh:mm a'),
-          timestamp: new Date(Date.now() - 1800000).toISOString(),
-          likes: 8,
-          replies: 0,
-          pinned: false,
-          repliesList: [],
-        },
-      ];
-    }
-    return stored.map((msg, idx) => {
+    return (stored || []).map((msg, idx) => {
       const msgDate = msg.timestamp ? new Date(msg.timestamp) : new Date(Date.now() - (idx + 1) * 3600000);
       return {
         ...msg,
@@ -998,19 +650,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
     const stored = loadFromStorage<Quiz[]>('sim_quizzes', []);
-    return stored.map((q, i) => ({
+    return (stored || []).map((q) => ({
       ...q,
-      batch: q.batch || (i % 2 === 0 ? 'Batch 1 (Dec)' : 'Batch 2 (May/June)'),
+      batch: q.batch || 'All',
     }));
   });
 
   const [notifications, setNotifications] = useState<Notification[]>(() => loadFromStorage('sim_notifications', []));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => loadFromStorage('sim_audit', []));
   const [studentDocuments, setStudentDocuments] = useState<StudentDocument[]>(() => {
-    const stored = loadFromStorage<StudentDocument[]>('sim_student_documents', DEFAULT_STUDENT_DOCS);
+    const stored = loadFromStorage<StudentDocument[]>('sim_student_documents', []);
     const filtered = (stored || []).filter(d => d.studentId !== 'u-student-2' && d.studentName !== 'Alex Rivera');
-    
-    // Deduplicate by stage number (1 through 8) per student to guarantee exactly 8 stages without duplication
+
+    // Deduplicate by stage number (1 through 8) per student
     const stageMap = new Map<string, StudentDocument>();
     filtered.forEach(d => {
       const studentKey = d.studentId || 'u-student-1';
@@ -1022,10 +674,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
 
     const deduplicated = Array.from(stageMap.values());
-    if (deduplicated.length < 8) {
-      saveToStorage('sim_student_documents', DEFAULT_STUDENT_DOCS);
-      return DEFAULT_STUDENT_DOCS;
-    }
     saveToStorage('sim_student_documents', deduplicated);
     return deduplicated;
   });
@@ -1035,35 +683,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem('sim_cohort_batches');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
       const legacyAdmin = localStorage.getItem('sim_admin_batches');
       if (legacyAdmin) {
         const parsed = JSON.parse(legacyAdmin);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const merged = [...DEFAULT_COHORT_BATCHES];
-          parsed.forEach((cb: any) => {
-            if (!merged.some(b => b.name.toLowerCase() === cb.name.toLowerCase())) {
-              merged.push({
-                id: cb.id || Date.now().toString(36),
-                name: cb.name,
-                session: cb.session || 'Academic Cohort Session',
-                season: 'Academic Cohort',
-                badge: 'Active Cohort',
-                color: 'blue',
-                tag: cb.name,
-                targetCourse: cb.targetCourse || 'NEET & IMAT Aspirants',
-                description: `Academic entrance cohort for ${cb.name} covering all core subjects.`,
-              });
-            }
-          });
-          return merged;
+          return parsed.map((cb: any) => ({
+            id: cb.id || Date.now().toString(36),
+            name: cb.name,
+            session: cb.session || 'Academic Cohort Session',
+            season: cb.season || 'Academic Cohort',
+            badge: cb.badge || 'Active Cohort',
+            color: cb.color || 'blue',
+            tag: cb.name,
+            targetCourse: cb.targetCourse || 'NEET & IMAT Aspirants',
+            maxStudents: cb.maxStudents || 25,
+            description: cb.description || `Academic entrance cohort for ${cb.name} covering all core subjects.`,
+          }));
         }
       }
     } catch (e) {
       console.error('Error loading cohort batches:', e);
     }
-    return DEFAULT_COHORT_BATCHES;
+    return [];
   });
 
   const addCohortBatch = (batch: { name: string; session: string; season?: string; targetCourse?: string; description?: string; maxStudents?: number }) => {
@@ -1116,7 +759,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const [studentProgressList, setStudentProgressList] = useState<StudentCurriculumProgress[]>(() => {
-    const raw = loadFromStorage('sim_student_progress', DEFAULT_STUDENT_PROGRESS);
+    const raw = loadFromStorage<StudentCurriculumProgress[]>('sim_student_progress', []);
     const cleaned = (raw || [])
       .filter((p: StudentCurriculumProgress) => p.studentId !== 'u-student-2' && p.studentName !== 'Alex Rivera')
       .map((p: StudentCurriculumProgress) => {
@@ -1172,11 +815,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   });
 
   const [consultancyDossiers, setConsultancyDossiers] = useState<StudentConsultancyDossier[]>(() => {
-    return loadFromStorage<StudentConsultancyDossier[]>('sim_consultancy_dossiers', DEFAULT_CONSULTANCY_DOSSIERS);
+    return loadFromStorage<StudentConsultancyDossier[]>('sim_consultancy_dossiers', []);
   });
 
   const [consultancyOptInMap, setConsultancyOptInMap] = useState<Record<string, boolean>>(() => {
-    return loadFromStorage<Record<string, boolean>>('sim_consultancy_opt_in', { 'u-student-1': true });
+    return loadFromStorage<Record<string, boolean>>('sim_consultancy_opt_in', {});
   });
 
   // Persist to localStorage
@@ -1233,7 +876,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const newDept: Department = {
       ...dept,
       id: generateId(),
-      batches: dept.batches || ['Batch 1 (Dec)', 'Batch 2 (May/June)'],
+      batches: dept.batches || [],
       createdAt: new Date().toISOString(),
     };
     setDepartments(prev => [...prev, newDept]);
@@ -1696,7 +1339,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const newRecord: StudentCurriculumProgress = {
           studentId: sId,
           studentName: studentName || 'Student',
-          studentBatch: studentBatch || 'Batch 1 (Dec)',
+          studentBatch: studentBatch || 'Unassigned',
           completedChapters: initialChapters,
           completedTopics: initialTopics,
           completedTopicDetails: initialDetails,
@@ -1810,7 +1453,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const newRecord: StudentCurriculumProgress = {
           studentId: sId,
           studentName: studentName || 'Student',
-          studentBatch: studentBatch || 'Batch 1 (Dec)',
+          studentBatch: studentBatch || 'Unassigned',
           completedChapters: [],
           completedTopics: [topicId],
           completedTopicDetails: initialDetails,
@@ -1901,13 +1544,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
             : item.status === 'pending'
               ? 'Pending'
               : 'In Review/In Progress',
-        fileName: item.uploadedFile?.fileName || `${item.key}.pdf`,
-        fileSize: item.uploadedFile?.fileSize || '2.0 MB',
-        submissionSource: `Submitted via Student Mail (${dossier.studentEmail})`,
+        fileName: item.uploadedFile?.fileName,
+        fileSize: item.uploadedFile?.fileSize,
         submittedAt: item.uploadedFile?.uploadedAt || new Date().toISOString(),
         verifiedAt: item.verifiedAt ? item.verifiedAt.split('T')[0] : undefined,
         verifiedBy: item.verifiedBy,
         remarks: item.consultantNotes,
+        subItems: item.subItems?.map((sub) => ({
+          id: sub.id,
+          title: sub.title,
+          status: sub.status,
+          notes: sub.notes,
+        })),
       }));
       return [...prev.filter(d => d.studentId !== dossier.studentId), ...studentDocs];
     });
@@ -1962,9 +1610,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     if (optIn) {
       const studentUser = users.find(u => u.id === studentId);
-      const studentName = studentUser?.name || 'Mary';
-      const studentEmail = studentUser?.email || 'mary@medical.lms';
-      const studentBatch = studentUser?.batch || 'Batch 1 (Dec)';
+      const studentName = studentUser?.name || 'Student';
+      const studentEmail = studentUser?.email || '';
+      const studentBatch = studentUser?.batch || 'Unassigned';
 
       // 1. Ensure consultancy dossier exists
       setConsultancyDossiers(prev => {
@@ -2011,11 +1659,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
           title: `${item.stageNumber}. ${item.title}`,
           category: item.category,
           status: 'In Review/In Progress',
-          fileName: `${item.key}.pdf`,
-          fileSize: '2.0 MB',
-          submissionSource: `Submitted via Student Mail (${studentEmail})`,
           submittedAt: new Date().toISOString(),
           remarks: item.consultantNotes,
+          subItems: item.subItems?.map((sub) => ({
+            id: sub.id,
+            title: sub.title,
+            status: sub.status,
+            notes: sub.notes,
+          })),
         }));
         return [...prev.filter(d => d.studentId !== studentId), ...seededDocs];
       });
@@ -2134,7 +1785,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const isVerified = docStatus === 'Verified';
 
       return prev.map(doc => {
-        const isStudentMatch = doc.studentId === studentId || doc.studentId === 'u-student-1';
+        const isStudentMatch = doc.studentId === studentId;
         if (!isStudentMatch) return doc;
 
         const isStageMatch =

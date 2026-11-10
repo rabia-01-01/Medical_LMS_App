@@ -245,13 +245,19 @@ export function createDefaultChecklist(): ConsultancyChecklistItem[] {
  */
 export function createNewApplicantChecklist(): ConsultancyChecklistItem[] {
   return createDefaultChecklist().map((item) => ({
-    ...item,
+    id: item.id,
+    key: item.key,
+    stageNumber: item.stageNumber,
+    title: item.title,
+    category: item.category,
+    description: item.description,
     status: 'in_progress' as ChecklistItemStatus,
     verifiedBy: undefined,
     verifiedAt: undefined,
     consultantNotes: 'Applicant enrolled. Documents in review by Consultant Agent.',
     subItems: item.subItems?.map((sub) => ({
-      ...sub,
+      id: sub.id,
+      title: sub.title,
       status: 'pending' as const,
       notes: 'Pending consultant review and verification',
     })),

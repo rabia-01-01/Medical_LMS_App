@@ -43,7 +43,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
 
 export function LoginScreen() {
   const { signIn, login } = useAuth();
-  const { users, addUser } = useData();
+  const { users, addUser, cohortBatches } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -109,7 +109,7 @@ export function LoginScreen() {
       phone: '+91 98000 00000',
       password: '',
       role: 'student',
-      batch: 'Batch 1 (Dec)',
+      batch: cohortBatches?.[0]?.name || '',
       avatar: '🎓',
       targetExam: 'NEET & IMAT',
       department: 'Medical Sciences',

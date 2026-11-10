@@ -167,8 +167,6 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
             {enrolledStudents
               .filter(st => {
                 if (selectedBatchFilter === 'All') return true;
-                if (selectedBatchFilter === 'Batch 1 (Dec)') return st.batch === 'Batch 1 (Dec)' || !st.batch || st.batch.includes('1');
-                if (selectedBatchFilter === 'Batch 2 (May/June)') return st.batch === 'Batch 2 (May/June)' || st.batch?.includes('2');
                 return st.batch === selectedBatchFilter;
               })
               .map(student => {
@@ -188,9 +186,11 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="text-xs font-bold text-gray-900 truncate">{student.name}</p>
-                          <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
-                            {student.batch || 'Batch 1 (Dec)'}
-                          </span>
+                          {student.batch && (
+                            <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                              {student.batch}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-500">
                           <span className="font-semibold text-teal-700 flex items-center gap-1">

@@ -115,7 +115,7 @@ export function AdminAIMCQGenerator({
   const topics = activeChapter?.topics || [];
 
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
-  const [targetBatch, setTargetBatch] = useState<TargetBatch>('Batch 1 (Dec)');
+  const [targetBatch, setTargetBatch] = useState<TargetBatch>(cohortBatches?.[0]?.name || 'All');
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [generating, setGenerating] = useState(false);
   const [generatingStatus, setGeneratingStatus] = useState('');
@@ -502,8 +502,9 @@ export function AdminAIMCQGenerator({
               onChange={(event) => setTargetBatch(event.target.value)}
               className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-teal-500"
             >
-              {(cohortBatches || [{ id: 'b1', name: 'Batch 1 (Dec)' }, { id: 'b2', name: 'Batch 2 (May/June)' }]).map((b) => (
-                <option key={b.name} value={b.name}>{b.name}</option>
+              <option value="All">All Batches</option>
+              {(cohortBatches || []).map((b) => (
+                <option key={b.id || b.name} value={b.name}>{b.name}</option>
               ))}
             </select>
           </div>

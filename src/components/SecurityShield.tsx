@@ -120,7 +120,7 @@ export function SecurityShield({ children }: { children?: React.ReactNode }) {
     }, 3200);
   };
 
-  const watermarkText = `${user?.email || 'Student'} • ${user?.batch || 'Batch 1 (Dec)'} • DRM PROTECTED`;
+  const watermarkText = `${user?.email || 'Student'}${user?.batch ? ` • ${user.batch}` : ''} • DRM PROTECTED`;
 
   return (
     <>

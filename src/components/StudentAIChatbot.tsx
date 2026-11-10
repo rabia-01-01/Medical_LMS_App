@@ -18,14 +18,14 @@ export function StudentAIChatbot() {
     {
       id: 'welcome',
       sender: 'ai',
-      text: `Hello ${user?.name || 'Student'}! 👋 I am your AI Academic Assistant. I can help you with registration, fee payments, batch enrollment (${user?.batch || 'Batch 1 (Dec)'}), and quiz assessment rules. What would you like assistance with today?`,
+      text: `Hello ${user?.name || 'Student'}! 👋 I am your AI Academic Assistant. I can help you with registration, fee payments${user?.batch ? `, batch enrollment (${user.batch})` : ''}, and quiz assessment rules. What would you like assistance with today?`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
-  const myBatch = user?.batch || 'Batch 1 (Dec)';
+  const myBatch = user?.batch || 'Unassigned';
   const myDocs = studentDocuments.filter((d) => d.studentId === user?.id || d.studentName === user?.name);
   const verifiedDocsCount = myDocs.filter((d) => d.status === 'Verified').length;
 
@@ -64,7 +64,7 @@ export function StudentAIChatbot() {
         reply = `💳 **Fee Payment & Tuition Support:**\n\n• **Batch Allocation:** Your account is assigned to **${myBatch}**.\n• **Payment Methods:** Online Card, UPI, NetBanking, and Medical Student Education Loans.\n• **Receipts:** Official fee payment receipts are uploaded directly to your Student Documentation list once processed by the Academic Directorate.\n• Need installment adjustments? Contact the finance administrator at finance@medical.lms.`;
       } else if (lower.includes('batch') || lower.includes('enroll') || lower.includes('access') || lower.includes('course')) {
         detectedTopic = 'enrollment';
-        reply = `🎓 **Batch-Wise Access Control:**\n\n• **Your Cohort:** ${myBatch}\n• **Strict Batch Security:** Students of Batch 1 (Dec) cannot access Batch 2 (May/June) learning modules, ensuring syllabus pacing integrity.\n• You have access to all 7 core subjects: **Biology, Chemistry, Physics, Maths, Logical Reasoning, English, and GK** for your designated batch.`;
+        reply = `🎓 **Batch-Wise Access Control:**\n\n• **Your Cohort:** ${myBatch}\n• **Strict Batch Security:** Students enrolled in one batch cannot access learning modules from another batch, ensuring syllabus pacing integrity.\n• You have access to all 7 core subjects: **Biology, Chemistry, Physics, Maths, Logical Reasoning, English, and GK** for your designated batch.`;
       } else if (lower.includes('quiz') || lower.includes('exam') || lower.includes('test') || lower.includes('mark') || lower.includes('option a') || lower.includes('question')) {
         detectedTopic = 'quiz';
         reply = `📝 **Assessments & Quiz Protocols:**\n\n• **Marking Scheme:** Standard MCQs award **+4 marks** for correct responses and **-1 mark** for incorrect answers.\n• **Text-Only Question Format:** All practice questions and drills are presented exclusively in text format with 5 multiple-choice options (A, B, C, D, E).\n• **Single Attempt Rule:** You must complete or return to assessments before starting new attempts.\n• **Timer:** Auto-submits upon countdown expiration.`;

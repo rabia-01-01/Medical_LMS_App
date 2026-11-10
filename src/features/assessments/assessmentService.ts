@@ -14,212 +14,12 @@ const LOCAL_STORAGE_ASSESSMENTS_KEY = 'lms_assessments_cache_v2';
 const LOCAL_STORAGE_QUESTIONS_KEY = 'lms_questions_cache_v2';
 
 // ============================================================================
-// HIGH-YIELD MEDICAL QUESTION BANK SEED (Biology, Physics, Chemistry)
+// QUESTION BANK & ASSESSMENTS (Clean Production Startup - No Default Data)
 // ============================================================================
 
-export const SEED_QUESTIONS: QuestionWithOptions[] = [
-  {
-    id: 'q-med-1',
-    subject_id: 'subj-biology',
-    chapter_id: 'chap-bio-1',
-    topic_id: 'top-bio-103',
-    question_text: 'During the cardiac cycle in a healthy adult human, which event corresponds directly to the closure of the atrioventricular (AV) tricuspid and bicuspid valves?',
-    question_type: 'MCQ',
-    marks: 4,
-    negative_marks: 1,
-    explanation: 'The first heart sound (LUB) is produced by the simultaneous closure of the tricuspid and bicuspid (mitral) AV valves at the beginning of ventricular systole to prevent backflow into the atria.',
-    created_by: 'faculty-seed-1',
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    subjectName: 'Biology',
-    chapterName: 'Human Physiology',
-    options: [
-      { id: 'opt-1-1', optionText: 'Onset of ventricular systole generating the first heart sound (S1 / Lub)', isCorrect: true, optionOrder: 1 },
-      { id: 'opt-1-2', optionText: 'End of ventricular systole generating the second heart sound (S2 / Dub)', isCorrect: false, optionOrder: 2 },
-      { id: 'opt-1-3', optionText: 'Rapid ventricular filling phase during joint diastole', isCorrect: false, optionOrder: 3 },
-      { id: 'opt-1-4', optionText: 'Isovolumetric ventricular relaxation period', isCorrect: false, optionOrder: 4 },
-    ],
-  },
-  {
-    id: 'q-med-2',
-    subject_id: 'subj-biology',
-    chapter_id: 'chap-bio-2',
-    topic_id: 'top-bio-204',
-    question_text: 'In prokaryotic DNA replication, which specific enzyme catalyzes the synthesis of RNA primers essential for initiating leading and lagging strand synthesis?',
-    question_type: 'MCQ',
-    marks: 4,
-    negative_marks: 1,
-    explanation: 'DNA primase (encoded by the dnaG gene in E. coli) synthesizes short RNA primers (10-12 nucleotides) that provide the free 3\'-OH group necessary for DNA Polymerase III elongation.',
-    created_by: 'faculty-seed-1',
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    subjectName: 'Biology',
-    chapterName: 'Cell Biology & Genetics',
-    options: [
-      { id: 'opt-2-1', optionText: 'DNA Polymerase I (Kornberg enzyme)', isCorrect: false, optionOrder: 1 },
-      { id: 'opt-2-2', optionText: 'DNA Primase (DnaG product)', isCorrect: true, optionOrder: 2 },
-      { id: 'opt-2-3', optionText: 'DNA Topoisomerase II (Gyrase)', isCorrect: false, optionOrder: 3 },
-      { id: 'opt-2-4', optionText: 'DNA Ligase I', isCorrect: false, optionOrder: 4 },
-    ],
-  },
-  {
-    id: 'q-med-3',
-    subject_id: 'subj-physics',
-    chapter_id: 'chap-phy-2',
-    topic_id: 'top-phy-201',
-    question_text: 'Two point charges +4q and +q are placed separated by a distance L in vacuum. At what distance from +4q along the connecting line is the net electric field intensity exactly zero?',
-    question_type: 'MCQ',
-    marks: 4,
-    negative_marks: 1,
-    explanation: 'Electric field E1 = k(4q)/x² and E2 = k(q)/(L - x)². Equating E1 = E2 gives 2/x = 1/(L - x) => 2L - 2x = x => 3x = 2L => x = (2/3)L from the +4q charge.',
-    created_by: 'faculty-seed-1',
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    subjectName: 'Physics',
-    chapterName: 'Electrodynamics & Magnetism',
-    options: [
-      { id: 'opt-3-1', optionText: '(1/3) L', isCorrect: false, optionOrder: 1 },
-      { id: 'opt-3-2', optionText: '(2/3) L', isCorrect: true, optionOrder: 2 },
-      { id: 'opt-3-3', optionText: '(1/2) L', isCorrect: false, optionOrder: 3 },
-      { id: 'opt-3-4', optionText: '(3/4) L', isCorrect: false, optionOrder: 4 },
-    ],
-  },
-  {
-    id: 'q-med-4',
-    subject_id: 'subj-chemistry',
-    chapter_id: 'chap-chem-1',
-    topic_id: 'top-chem-101',
-    question_text: 'Which of the following alkyl halides undergoes nucleophilic substitution primarily via an SN1 pathway with complete racemization when reacted with weak nucleophiles in polar protic solvents?',
-    question_type: 'MCQ',
-    marks: 4,
-    negative_marks: 1,
-    explanation: 'Tertiary alkyl halides like 2-bromo-2-methylpropane form highly stabilized 3° carbocations via heterolytic cleavage, proceeding stereochemically through planar carbocation intermediates (SN1).',
-    created_by: 'faculty-seed-2',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    subjectName: 'Chemistry',
-    chapterName: 'Organic Reaction Mechanisms',
-    options: [
-      { id: 'opt-4-1', optionText: 'Methyl bromide (CH3Br)', isCorrect: false, optionOrder: 1 },
-      { id: 'opt-4-2', optionText: 'Ethyl chloride (CH3CH2Cl)', isCorrect: false, optionOrder: 2 },
-      { id: 'opt-4-3', optionText: '2-Bromo-2-methylpropane ((CH3)3CBr)', isCorrect: true, optionOrder: 3 },
-      { id: 'opt-4-4', optionText: '1-Chlorobutane (CH3(CH2)3Cl)', isCorrect: false, optionOrder: 4 },
-    ],
-  },
-  {
-    id: 'q-med-5',
-    subject_id: 'subj-biology',
-    chapter_id: 'chap-bio-1',
-    topic_id: 'top-bio-104',
-    question_text: 'Assertion (A): The dissociation of oxyhemoglobin into oxygen and deoxyhemoglobin is enhanced in metabolically active tissues.\nReason (R): High pCO2, elevated H+ concentration (acidosis), and higher temperature shift the oxygen dissociation curve to the right (Bohr effect).',
-    question_type: 'ASSERTION_REASON',
-    marks: 4,
-    negative_marks: 1,
-    explanation: 'Both A and R are true, and R is the correct physiological explanation of the Bohr effect. In actively respiring tissues, metabolic byproducts shift the Hb-O2 curve rightward, promoting O2 unloading.',
-    created_by: 'faculty-seed-1',
-    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    subjectName: 'Biology',
-    chapterName: 'Human Physiology',
-    options: [
-      { id: 'opt-5-1', optionText: 'Both (A) and (R) are true and (R) is the correct explanation of (A)', isCorrect: true, optionOrder: 1 },
-      { id: 'opt-5-2', optionText: 'Both (A) and (R) are true but (R) is NOT the correct explanation of (A)', isCorrect: false, optionOrder: 2 },
-      { id: 'opt-5-3', optionText: '(A) is true but (R) is false', isCorrect: false, optionOrder: 3 },
-      { id: 'opt-5-4', optionText: '(A) is false but (R) is true', isCorrect: false, optionOrder: 4 },
-    ],
-  },
-];
+export const SEED_QUESTIONS: QuestionWithOptions[] = [];
 
-// ============================================================================
-// DEFAULT SEED ASSESSMENTS (DPP, PYQ, Mock Test, Test Series)
-// ============================================================================
-
-export const SEED_ASSESSMENTS: AssessmentWithQuestions[] = [
-  {
-    id: 'asmt-dpp-1',
-    title: 'DPP-01: Cardiovascular Dynamics & Hematology Practice Drill',
-    description: 'Daily practice problem set focused on cardiac cycles, ECG wave analysis, and pulmonary hemodynamics.',
-    assessment_type: 'DPP',
-    subject_id: 'subj-biology',
-    chapter_id: 'chap-bio-1',
-    duration_minutes: 20,
-    total_marks: 12,
-    negative_marks: 1,
-    allow_retake: true,
-    created_by: 'faculty-seed-1',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    subjectName: 'Biology',
-    chapterName: 'Human Physiology',
-    creatorName: 'Dr. Sharma',
-    questionCount: 3,
-    questions: [SEED_QUESTIONS[0], SEED_QUESTIONS[1], SEED_QUESTIONS[4]],
-  },
-  {
-    id: 'asmt-pyq-1',
-    title: 'PYQ Drill: 10-Year Compiled NEET UG & IMAT Medical Questions',
-    description: 'High-probability previous year competitive exam questions with detailed clinical solution explanations.',
-    assessment_type: 'PYQ',
-    subject_id: 'subj-physics',
-    chapter_id: 'chap-phy-2',
-    duration_minutes: 30,
-    total_marks: 16,
-    negative_marks: 1,
-    allow_retake: true,
-    created_by: 'faculty-seed-1',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    subjectName: 'Physics',
-    chapterName: 'Electrodynamics & Magnetism',
-    creatorName: 'Prof. Verma',
-    questionCount: 4,
-    questions: [SEED_QUESTIONS[2], SEED_QUESTIONS[3], SEED_QUESTIONS[0], SEED_QUESTIONS[1]],
-  },
-  {
-    id: 'asmt-mock-1',
-    title: 'Grand Mock Test I: Complete Pre-Medical Grand Rehearsal',
-    description: 'Full-length simulated timed examination with strict medical marking scheme (+4 / -1) and live question palette.',
-    assessment_type: 'MOCK_TEST',
-    subject_id: 'subj-biology',
-    chapter_id: null,
-    duration_minutes: 45,
-    total_marks: 20,
-    negative_marks: 1,
-    allow_retake: false,
-    created_by: 'faculty-seed-2',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 7).toISOString(),
-    subjectName: 'All Medical Subjects',
-    chapterName: 'Comprehensive Syllabus',
-    creatorName: 'Dr. Mukherjee',
-    questionCount: 5,
-    questions: SEED_QUESTIONS,
-  },
-  {
-    id: 'asmt-series-1',
-    title: 'All-India & European Medical Test Series: Milestone 01',
-    description: 'Comprehensive evaluation covering Cell Biology, Reaction Kinetics, and Electrostatics for NEET & IMAT candidates.',
-    assessment_type: 'TEST_SERIES',
-    subject_id: 'subj-chemistry',
-    chapter_id: 'chap-chem-1',
-    duration_minutes: 40,
-    total_marks: 16,
-    negative_marks: 1,
-    allow_retake: true,
-    created_by: 'faculty-seed-2',
-    status: 'PUBLISHED',
-    created_at: new Date(Date.now() - 86400000 * 9).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 9).toISOString(),
-    subjectName: 'Chemistry',
-    chapterName: 'Organic Reaction Mechanisms',
-    creatorName: 'Dr. Mukherjee',
-    questionCount: 4,
-    questions: [SEED_QUESTIONS[3], SEED_QUESTIONS[2], SEED_QUESTIONS[1], SEED_QUESTIONS[4]],
-  },
-];
+export const SEED_ASSESSMENTS: AssessmentWithQuestions[] = [];
 
 // Local offline persistence helpers
 function loadLocalAssessments(): AssessmentWithQuestions[] {
@@ -229,7 +29,7 @@ function loadLocalAssessments(): AssessmentWithQuestions[] {
   } catch (err) {
     console.error('[assessmentService] Error reading local assessments:', err);
   }
-  return SEED_ASSESSMENTS;
+  return [];
 }
 
 function saveLocalAssessments(items: AssessmentWithQuestions[]) {
@@ -247,7 +47,7 @@ function loadLocalQuestions(): QuestionWithOptions[] {
   } catch (err) {
     console.error('[assessmentService] Error reading local questions:', err);
   }
-  return SEED_QUESTIONS;
+  return [];
 }
 
 function saveLocalQuestions(items: QuestionWithOptions[]) {

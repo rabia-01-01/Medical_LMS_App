@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useData, User, EMPTY_USER_PERMISSIONS, normalizePermissions } from '../context/DataContext';
+import { useData, User, EMPTY_USER_PERMISSIONS, FULL_USER_PERMISSIONS, normalizePermissions } from '../context/DataContext';
 import { resetPassword } from '../features/auth';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
   authenticateBackendUser,
+  fetchAdminRegistrationOpen,
   fetchBackendUserStatus,
   googleAuthBackendSync,
   registerBackendSelfUser,
 } from '../services/userAccessApi';
 
-type RegisterableRole = 'faculty' | 'student' | 'consultant';
+type GoogleRole = 'faculty' | 'student' | 'consultant';
+type RegisterableRole = 'admin' | GoogleRole;
 
 export function SplashScreen({ onComplete }: { onComplete: () => void }) {
   useEffect(() => {
@@ -49,11 +51,13 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
 
 export function LoginScreen() {
   const { signIn, login } = useAuth();
-  const { users, addUser, refreshUsersFromBackend } = useData();
+  const { users, addUser, canRegisterAdmin, refreshUsersFromBackend } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [registerInitialRole, setRegisterInitialRole] = useState<RegisterableRole | undefined>(undefined);
+  const [remoteAdminOpen, setRemoteAdminOpen] = useState<boolean | null>(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotStatus, setForgotStatus] = useState<{ message: string; isError: boolean } | null>(null);
@@ -63,9 +67,21 @@ export function LoginScreen() {
   const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [googleEmailInput, setGoogleEmailInput] = useState('');
   const [googleNameInput, setGoogleNameInput] = useState('');
-  const [googleRoleInput, setGoogleRoleInput] = useState<RegisterableRole>('student');
+  const [googleRoleInput, setGoogleRoleInput] = useState<GoogleRole>('student');
   const [googleError, setGoogleError] = useState('');
   const [googleNotice, setGoogleNotice] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    fetchAdminRegistrationOpen().then((open) => {
+      if (active && open !== null) {
+        setRemoteAdminOpen(open);
+      }
+    });
+    return () => { active = false; };
+  }, [showRegister]);
+
+  const showAdminSetup = remoteAdminOpen === null ? canRegisterAdmin : (remoteAdminOpen && canRegisterAdmin);
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
@@ -97,7 +113,7 @@ export function LoginScreen() {
     }
   };
 
-  const handleConfirmGoogleAccount = async (targetEmail: string, targetName?: string, selectedRole?: RegisterableRole) => {
+  const handleConfirmGoogleAccount = async (targetEmail: string, targetName?: string, selectedRole?: GoogleRole) => {
     const cleanEmail = targetEmail.trim().toLowerCase();
     setGoogleError('');
     setGoogleNotice('');
@@ -106,7 +122,7 @@ export function LoginScreen() {
       return;
     }
 
-    const chosenRole: RegisterableRole = selectedRole || googleRoleInput || 'student';
+    const chosenRole: GoogleRole = selectedRole || googleRoleInput || 'student';
     const displayName = (targetName || '').trim() || cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
     const remoteSync = await googleAuthBackendSync({
@@ -270,7 +286,15 @@ export function LoginScreen() {
   };
 
   if (showRegister) {
-    return <RegisterScreen onBack={() => setShowRegister(false)} />;
+    return (
+      <RegisterScreen
+        initialRole={registerInitialRole}
+        onBack={() => {
+          setShowRegister(false);
+          setRegisterInitialRole(undefined);
+        }}
+      />
+    );
   }
 
   return (
@@ -408,13 +432,36 @@ export function LoginScreen() {
           </div>
         </div>
 
-        <div className="text-center mt-6">
+        <div className="text-center mt-6 space-y-3">
           <p className="text-gray-400 text-sm">
             Don't have an account?{' '}
-            <button onClick={() => setShowRegister(true)} className="text-teal-400 font-semibold hover:underline">
+            <button
+              onClick={() => {
+                setRegisterInitialRole(undefined);
+                setShowRegister(true);
+              }}
+              className="text-teal-400 font-semibold hover:underline"
+            >
               Register Now
             </button>
           </p>
+
+          {showAdminSetup && (
+            <button
+              type="button"
+              onClick={() => {
+                setRegisterInitialRole('admin');
+                setShowRegister(true);
+              }}
+              className="w-full py-2.5 px-4 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-400/40 text-teal-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <i className="fas fa-user-shield text-teal-300" />
+              <span>Admin Registration</span>
+              <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal-400/20 text-teal-200">
+                First-Time Setup
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -595,36 +642,64 @@ export function LoginScreen() {
   );
 }
 
-function RegisterScreen({ onBack }: { onBack: () => void }) {
-  const { signUp } = useAuth();
-  const { addUser, users, refreshUsersFromBackend } = useData();
-  const [step, setStep] = useState(1);
+function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRole?: RegisterableRole }) {
+  const { signUp, login } = useAuth();
+  const { addUser, users, canRegisterAdmin, refreshUsersFromBackend } = useData();
+  const [step, setStep] = useState(initialRole === 'admin' && canRegisterAdmin ? 2 : 1);
+  const [remoteAdminOpen, setRemoteAdminOpen] = useState<boolean | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     password: '',
     confirmPassword: '',
-    role: 'student' as RegisterableRole,
+    role: (initialRole === 'admin' && canRegisterAdmin ? 'admin' : (initialRole || 'student')) as RegisterableRole,
     targetExam: '',
     department: '',
   });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; isAdmin: boolean; createdUser?: User } | null>(null);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    let active = true;
+    fetchAdminRegistrationOpen().then((open) => {
+      if (active && open !== null) {
+        setRemoteAdminOpen(open);
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  const showAdminOption = remoteAdminOpen === null ? canRegisterAdmin : (remoteAdminOpen && canRegisterAdmin);
+
+  useEffect(() => {
+    if (!showAdminOption && formData.role === 'admin') {
+      setFormData(prev => ({ ...prev, role: 'student' }));
+      setStep(1);
+    }
+  }, [showAdminOption, formData.role]);
+
   const getRoleAvatar = (r: RegisterableRole) =>
-    r === 'faculty' ? '👨‍⚕️' : r === 'consultant' ? '💼' : '👩‍🎓';
+    r === 'admin' ? '👨‍💼' : r === 'faculty' ? '👨‍⚕️' : r === 'consultant' ? '💼' : '👩‍🎓';
 
   const handleRegister = async () => {
     setError('');
 
     const cleanName = formData.name.trim();
     const cleanEmail = formData.email.trim().toLowerCase();
+    const isAdminSignup = formData.role === 'admin';
 
     if (!cleanName || !cleanEmail || !formData.password) {
       setError('Please fill all required fields.');
+      return;
+    }
+
+    if (isAdminSignup && !showAdminOption) {
+      setError('Administrator registration is already closed because an Admin is registered.');
+      setFormData(prev => ({ ...prev, role: 'student' }));
+      setStep(1);
       return;
     }
 
@@ -651,7 +726,7 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
     setIsSubmitting(true);
 
     try {
-      // 1. Register in shared backend store (enforces status: 'pending' & no resource access)
+      // 1. Register in shared backend store
       const backendRes = await registerBackendSelfUser({
         name: cleanName,
         email: cleanEmail,
@@ -663,12 +738,19 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
       });
 
       if (!backendRes.networkError && !backendRes.ok) {
+        if (backendRes.status === 403 && isAdminSignup) {
+          setRemoteAdminOpen(false);
+          setFormData(prev => ({ ...prev, role: 'student' }));
+        }
         setError(backendRes.error || 'Registration failed.');
         setIsSubmitting(false);
         return;
       }
 
-      // 2. Register in Supabase Auth if configured (remains pending until Admin allows)
+      const nextStatus = isAdminSignup ? 'active' : 'pending';
+      const nextPerms = isAdminSignup ? { ...FULL_USER_PERMISSIONS } : { ...EMPTY_USER_PERMISSIONS };
+
+      // 2. Register in Supabase Auth if configured
       if (isSupabaseConfigured()) {
         const result = await signUp({
           email: cleanEmail,
@@ -678,35 +760,67 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
           role: formData.role,
           department: formData.department.trim(),
           targetExam: formData.targetExam,
-          status: 'pending',
-          accessPermissions: { ...EMPTY_USER_PERMISSIONS },
+          status: nextStatus,
+          accessPermissions: nextPerms,
+          autoLogin: false,
         });
 
         if (!result.success) {
-          setError(result.error || 'Registration failed in Supabase.');
-          setIsSubmitting(false);
-          return;
+          const msg = (result.error || '').toLowerCase();
+          const isDuplicateOrInvalid =
+            msg.includes('already registered') ||
+            msg.includes('already exists') ||
+            msg.includes('invalid') ||
+            msg.includes('password');
+          if (isDuplicateOrInvalid) {
+            setError(result.error || 'Registration failed in Supabase.');
+            setIsSubmitting(false);
+            return;
+          }
+          console.warn('[RegisterScreen] Non-fatal Supabase signup warning:', result.error);
         }
       }
 
-      addUser({
-        id: backendRes.data?.user?.id,
+      const createdUserRecord: User = {
+        id: backendRes.data?.user?.id || `u-${Date.now()}`,
         name: cleanName,
         email: cleanEmail,
         phone: formData.phone.trim(),
         password: formData.password,
         role: formData.role,
         avatar: getRoleAvatar(formData.role),
-        batch: '',
-        status: 'pending',
-        accessPermissions: { ...EMPTY_USER_PERMISSIONS },
-        department: formData.department.trim(),
+        batch: isAdminSignup ? 'All' : '',
+        status: nextStatus,
+        accessPermissions: nextPerms,
+        ...(isAdminSignup ? { selfRegisteredAdmin: true } : {}),
+        department: isAdminSignup ? (formData.department.trim() || 'Academic Directorate') : formData.department.trim(),
         targetExam: formData.targetExam,
-      });
+        createdAt: backendRes.data?.user?.createdAt || new Date().toISOString(),
+      };
+
+      addUser(createdUserRecord);
+
+      if (isAdminSignup) {
+        try { localStorage.setItem('sim_first_admin_registered_v1', 'true'); } catch {}
+        setRemoteAdminOpen(false);
+      }
 
       refreshUsersFromBackend().catch(() => {});
       setSuccessNotice(
-        'Your account has been registered and is awaiting Administrator approval. You will only be able to access your resources (branch, courses, quizzes, announcements, notifications) after an Admin allows your account.'
+        isAdminSignup
+          ? {
+              title: 'Administrator Registered',
+              message:
+                'Your Academy Administrator account is active with full portal access. First-time Admin registration is now removed. You can now allow all users and manage resources.',
+              isAdmin: true,
+              createdUser: createdUserRecord,
+            }
+          : {
+              title: 'Registration Submitted',
+              message:
+                'Your account has been registered and is awaiting Administrator approval. You will only be able to access your resources (branch, courses, quizzes, announcements, notifications) after an Admin allows your account.',
+              isAdmin: false,
+            }
       );
     } catch (err: any) {
       setError(err.message || 'An unexpected registration error occurred.');
@@ -718,6 +832,21 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
   const updateField = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+
+  const roleOptions: {
+    id: RegisterableRole;
+    label: string;
+    desc: string;
+    icon: string;
+    badge?: string;
+  }[] = [
+    { id: 'student', label: 'Medical Aspirant (Student)', desc: 'NEET, IMAT, UCAT exam prep, DPPs, mocks & lecture notes', icon: 'fa-graduation-cap' },
+    { id: 'faculty', label: 'Faculty & Medical Doctor', desc: 'Create curriculum, author medical questions & upload resources', icon: 'fa-user-md' },
+    ...(showAdminOption
+      ? [{ id: 'admin' as RegisterableRole, label: 'Academy Administrator', desc: 'First-time setup: approve users & manage batches, courses & resources', icon: 'fa-user-shield', badge: 'First-Time Setup' }]
+      : []),
+    { id: 'consultant', label: 'Consultant Agent (Study Abroad)', desc: 'Passport, HRD, Apostille, Scholarship docs, Universitaly & IMAT verification', icon: 'fa-briefcase' },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
@@ -747,17 +876,33 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
 
         {successNotice ? (
           <div className="text-center py-10 px-3 animate-slide-up space-y-4">
-            <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center mx-auto border border-amber-400/40">
-              <i className="fas fa-user-clock text-2xl" />
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${
+              successNotice.isAdmin
+                ? 'bg-teal-500/20 text-teal-300 border-teal-400/40'
+                : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+            }`}>
+              <i className={`fas ${successNotice.isAdmin ? 'fa-user-shield' : 'fa-user-clock'} text-2xl`} />
             </div>
-            <h3 className="text-white text-lg font-bold">Registration Submitted</h3>
-            <p className="text-amber-200 text-xs leading-relaxed bg-white/5 border border-white/10 rounded-xl p-3.5">
-              {successNotice}
+            <h3 className="text-white text-lg font-bold">{successNotice.title}</h3>
+            <p className={`text-xs leading-relaxed bg-white/5 border border-white/10 rounded-xl p-3.5 ${
+              successNotice.isAdmin ? 'text-teal-200' : 'text-amber-200'
+            }`}>
+              {successNotice.message}
             </p>
+            {successNotice.isAdmin && successNotice.createdUser && (
+              <button
+                type="button"
+                onClick={() => login(successNotice.createdUser!)}
+                className="btn-primary w-full mt-2"
+              >
+                <i className="fas fa-user-shield mr-2" />
+                Enter Admin Portal
+              </button>
+            )}
             <button
               type="button"
               onClick={onBack}
-              className="btn-primary w-full mt-2"
+              className={successNotice.isAdmin && successNotice.createdUser ? 'btn-secondary w-full' : 'btn-primary w-full mt-2'}
             >
               Back to Sign In
             </button>
@@ -769,16 +914,14 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
                 <div>
                   <h2 className="text-white text-lg font-semibold">Select Your Role</h2>
                   <p className="text-gray-400 text-xs mt-0.5">
-                    Students, Faculty, and Consultant Agents can register here. Admin approval is required before access is granted.
+                    {showAdminOption
+                      ? 'Administrator setup is available for the first Admin only. Students, Faculty, and Consultants require Admin approval.'
+                      : 'Students, Faculty, and Consultant Agents can register here. Admin approval is required before access is granted.'}
                   </p>
                 </div>
 
                 <div className="space-y-3 pt-2">
-                  {[
-                    { id: 'student' as RegisterableRole, label: 'Medical Aspirant (Student)', desc: 'NEET, IMAT, UCAT exam prep, DPPs, mocks & lecture notes', icon: 'fa-graduation-cap' },
-                    { id: 'faculty' as RegisterableRole, label: 'Faculty & Medical Doctor', desc: 'Create curriculum, author medical questions & upload resources', icon: 'fa-user-md' },
-                    { id: 'consultant' as RegisterableRole, label: 'Consultant Agent (Study Abroad)', desc: 'Passport, HRD, Apostille, Scholarship docs, Universitaly & IMAT verification', icon: 'fa-briefcase' },
-                  ].map((r) => (
+                  {roleOptions.map((r) => (
                     <button
                       key={r.id}
                       onClick={() => updateField('role', r.id)}
@@ -794,7 +937,14 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
                         <i className={`fas ${r.icon}`} />
                       </div>
                       <div className="flex-1">
-                        <p className="text-white font-semibold text-sm">{r.label}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-white font-semibold text-sm">{r.label}</p>
+                          {r.badge && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-400/20 text-teal-300 border border-teal-400/30">
+                              {r.badge}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-gray-400 text-xs mt-0.5">{r.desc}</p>
                       </div>
                     </button>
@@ -870,6 +1020,15 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
                   />
                 )}
 
+                {formData.role === 'admin' && (
+                  <input 
+                    value={formData.department}
+                    onChange={(e) => updateField('department', e.target.value)}
+                    placeholder="Directorate / Institution Title (optional)" 
+                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                  />
+                )}
+
                 {error && (
                   <div className="bg-red-500/20 border border-red-500/50 rounded-lg px-3 py-2.5">
                     <p className="text-red-300 text-xs flex items-center gap-1.5">
@@ -905,7 +1064,9 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
                 <div>
                   <h2 className="text-white text-lg font-semibold">Security & Password</h2>
                   <p className="text-gray-400 text-xs mt-0.5">
-                    Create a password. Access remains locked until an Administrator allows your account.
+                    {formData.role === 'admin'
+                      ? 'Create a strong password for your primary Academy Administrator account.'
+                      : 'Create a password. Access remains locked until an Administrator allows your account.'}
                   </p>
                 </div>
 

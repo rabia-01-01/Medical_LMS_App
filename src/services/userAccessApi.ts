@@ -108,13 +108,19 @@ export async function fetchBackendUserStatus(params: {
   return res.data.user;
 }
 
+export async function fetchAdminRegistrationOpen(): Promise<boolean | null> {
+  const res = await requestJson<{ adminRegistrationOpen: boolean }>('/api/users/admin-registration-status');
+  if (!res.ok || typeof res.data?.adminRegistrationOpen !== 'boolean') return null;
+  return res.data.adminRegistrationOpen;
+}
+
 export async function registerBackendSelfUser(payload: {
   id?: string;
   name: string;
   email: string;
   phone?: string;
   password: string;
-  role: 'student' | 'faculty' | 'consultant';
+  role: 'student' | 'faculty' | 'consultant' | 'admin';
   department?: string;
   targetExam?: string;
 }): Promise<ApiResponse<{ user: BackendUserDTO }>> {
@@ -175,6 +181,22 @@ export async function updateBackendUserAccess(
       ...(identity.adminId ? { 'x-admin-id': identity.adminId } : {}),
     },
     body: JSON.stringify({ ...patch, ...identity }),
+  });
+}
+
+export async function allowAllBackendUsers(
+  onlyPending = false,
+  actor?: { adminEmail?: string; adminId?: string }
+): Promise<ApiResponse<{ users: BackendUserDTO[]; updatedCount: number }>> {
+  const identity = actor?.adminEmail || actor?.adminId ? actor : getStoredAdminIdentity();
+  return requestJson<{ users: BackendUserDTO[]; updatedCount: number }>('/api/users/allow-all', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(identity.adminEmail ? { 'x-admin-email': identity.adminEmail } : {}),
+      ...(identity.adminId ? { 'x-admin-id': identity.adminId } : {}),
+    },
+    body: JSON.stringify({ onlyPending, ...identity }),
   });
 }
 

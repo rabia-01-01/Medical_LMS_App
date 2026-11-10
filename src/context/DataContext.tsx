@@ -15,6 +15,7 @@ import {
   fetchBackendUsers,
   createBackendUserAsAdmin,
   updateBackendUserAccess,
+  allowAllBackendUsers,
   deleteBackendUser,
 } from '../services/userAccessApi';
 import {
@@ -50,6 +51,7 @@ export interface User {
   batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)'
   status: AccountStatus;
   accessPermissions?: UserAccessPermissions;
+  selfRegisteredAdmin?: boolean;
   createdAt: string;
   targetExam?: string;
 }
@@ -272,7 +274,9 @@ interface DataContextType {
   deleteUser: (id: string, actorRole?: string, actorEmail?: string) => void;
   getUserById: (id: string) => User | undefined;
   getUsersByRole: (role: string) => User[];
+  allowAllUsersAccess: (actorRole?: string, actorEmail?: string, onlyPending?: boolean) => number;
   refreshUsersFromBackend: () => Promise<User[]>;
+  canRegisterAdmin: boolean;
 
   // Departments & Batches
   departments: Department[];
@@ -911,6 +915,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         targetExam: r.targetExam,
         status,
         accessPermissions: normalizePermissions(r.accessPermissions, status === 'active'),
+        ...(r.selfRegisteredAdmin ? { selfRegisteredAdmin: true } : {}),
         createdAt: r.createdAt || localMatch?.createdAt || new Date().toISOString(),
       };
     });
@@ -956,10 +961,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorageSync);
   }, []);
 
+  const canRegisterAdmin = React.useMemo(() => {
+    try {
+      if (localStorage.getItem('sim_first_admin_registered_v1') === 'true') return false;
+    } catch {}
+    return !users.some(
+      (u) => u.role === 'admin' && Boolean(u.selfRegisteredAdmin)
+    );
+  }, [users]);
+
+  useEffect(() => {
+    if (users.some((u) => u.role === 'admin' && Boolean(u.selfRegisteredAdmin))) {
+      try {
+        localStorage.setItem('sim_first_admin_registered_v1', 'true');
+      } catch {}
+    }
+  }, [users]);
+
   // Users (Admin Only Management & Controlled Self-Registration)
   const addUser = (user: Omit<User, 'id' | 'createdAt'> & { id?: string }, actorRole?: string, actorEmail?: string) => {
     if (actorRole && actorRole !== 'admin') {
       console.warn('[DataContext] Permission Denied: ONLY Admin can add users.');
+      return;
+    }
+    if (!actorRole && user.role === 'admin' && !canRegisterAdmin) {
+      console.warn('[DataContext] Permission Denied: First-time Admin registration is already closed.');
       return;
     }
     const status: AccountStatus = user.role === 'admin' ? 'active' : (user.status || 'pending');
@@ -968,13 +994,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ? { ...FULL_USER_PERMISSIONS }
         : normalizePermissions(user.accessPermissions, status === 'active');
 
+    const isSelfAdmin = !actorRole && user.role === 'admin';
     const newUser: User = {
       ...user,
       id: user.id || generateId(),
       status,
       accessPermissions,
+      ...(isSelfAdmin ? { selfRegisteredAdmin: true, batch: 'All' } : {}),
       createdAt: new Date().toISOString(),
     };
+    if (isSelfAdmin) {
+      try {
+        localStorage.setItem('sim_first_admin_registered_v1', 'true');
+      } catch {}
+    }
     setUsers(prev => {
       const idx = prev.findIndex(u => u.email.toLowerCase() === newUser.email.toLowerCase());
       if (idx !== -1) {
@@ -1051,6 +1084,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const getUserById = (id: string) => users.find(u => u.id === id);
   const getUsersByRole = (role: string) => users.filter(u => u.role === role);
+
+  const allowAllUsersAccess = (actorRole?: string, actorEmail?: string, onlyPending = false): number => {
+    if (actorRole && actorRole !== 'admin') {
+      console.warn('[DataContext] Permission Denied: ONLY Admin can allow users.');
+      return 0;
+    }
+    const matchingCount = users.filter((u) => {
+      if (u.role === 'admin') return false;
+      if (onlyPending) return u.status === 'pending';
+      return u.status !== 'active' || Object.values(normalizePermissions(u.accessPermissions, u.status === 'active')).some(v => !v);
+    }).length;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.role === 'admin') return u;
+        if (onlyPending && u.status !== 'pending') return u;
+        return {
+          ...u,
+          status: 'active',
+          accessPermissions: { ...FULL_USER_PERMISSIONS },
+        };
+      })
+    );
+    allowAllBackendUsers(onlyPending, { adminEmail: actorEmail }).catch(() => {});
+    addAuditLog({
+      action: onlyPending ? 'Allowed All Pending Users' : 'Allowed All Users Full Resource Access',
+      userId: 'system',
+      userName: actorEmail || 'Administrator',
+      details: `Granted full resource access (${matchingCount} accounts updated)`,
+    });
+    return matchingCount;
+  };
 
   // Departments
   const addDepartment = (dept: Omit<Department, 'id' | 'createdAt'>, actorRole?: string) => {
@@ -1999,7 +2064,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      users, addUser, updateUser, deleteUser, getUserById, getUsersByRole, refreshUsersFromBackend,
+      users, addUser, updateUser, deleteUser, getUserById, getUsersByRole, allowAllUsersAccess, refreshUsersFromBackend, canRegisterAdmin,
       departments, addDepartment, deleteDepartment, updateDepartment,
       cohortBatches, addCohortBatch, deleteCohortBatch,
       courses, addCourse, deleteCourse, updateCourse, enrollStudents, unenrollStudent,

@@ -38,15 +38,27 @@ try {
   }
   console.log('  ✔ PASS: Student, Faculty, and Consultant Agent registrations start pending with all 6 resources locked');
 
-  // Admin self-registration blocked
-  const adminReg = userAccessService.registerSelfUser({
-    name: 'Rogue Admin',
-    email: `rogue.${Date.now()}@example.com`,
+  // First-time Admin self-registration allowed once, then closed
+  assert.equal(userAccessService.isAdminRegistrationOpen(), true, 'Admin registration should be open before any admin registers');
+  const firstAdminReg = userAccessService.registerSelfUser({
+    name: 'Primary Academy Admin',
+    email: `first.admin.${Date.now()}@example.com`,
     password: 'password123',
     role: 'admin',
   });
-  assert.equal(adminReg.statusCode, 400, 'Public registration must reject admin role');
-  console.log('  ✔ PASS: Public self-registration blocks admin role');
+  assert.equal(firstAdminReg.statusCode, 201, 'First-time admin registration must succeed');
+  assert.equal(firstAdminReg.user.status, 'active', 'First-time registered admin must be active immediately');
+  assert.equal(firstAdminReg.user.accessPermissions.courses, true);
+  assert.equal(userAccessService.isAdminRegistrationOpen(), false, 'Admin registration must close immediately after 1st admin registers');
+
+  const secondAdminReg = userAccessService.registerSelfUser({
+    name: 'Second Rogue Admin',
+    email: `second.admin.${Date.now()}@example.com`,
+    password: 'password123',
+    role: 'admin',
+  });
+  assert.equal(secondAdminReg.statusCode, 403, 'Second admin registration attempt must be blocked (403)');
+  console.log('  ✔ PASS: First-time admin registration works once, then closes and rejects additional admin signups');
 
   // Google first-time sign-in starts pending
   const googleRes = userAccessService.googleSignInOrRegister({
@@ -111,6 +123,17 @@ try {
   assert.equal(fetchedStatus.accessPermissions.courses, true);
   console.log('  ✔ PASS: Status endpoint reflects exact Admin approval & resource permissions');
 
+  // First Admin actor can allow all pending/non-admin users full resource access
+  const firstAdminActor = userAccessService.verifyAdminActor({ adminEmail: firstAdminReg.user.email });
+  assert.ok(firstAdminActor, 'First registered admin must be recognized as an active Admin actor');
+  const bulkAllow = userAccessService.allowAllUsers({ onlyPending: false }, firstAdminActor);
+  assert.equal(bulkAllow.statusCode, 200);
+  const facultyAfterBulk = userAccessService.getUserStatus({ id: createdIds[1] });
+  assert.equal(facultyAfterBulk.status, 'active');
+  assert.equal(facultyAfterBulk.accessPermissions.resources, true);
+  assert.equal(facultyAfterBulk.accessPermissions.announcements, true);
+  console.log('  ✔ PASS: First registered Admin has full authority to allow all users access to all resources');
+
   // 3. Static Verification of Frontend Access Control Wiring
   console.log('\n[Step 3] Testing Frontend Access Control, UI Gates & Route Guards:');
   const accessCtrlSrc = fs.readFileSync('src/features/auth/accessControl.ts', 'utf8');
@@ -129,9 +152,11 @@ try {
   assert.ok(viteConfigSrc.includes('proxyUnavailable: true'), 'vite.config.js handles offline backend proxy errors cleanly without raw 500');
   assert.ok(appSrc.includes('PendingApprovalScreen') && appSrc.includes('isAccountBlocked'), 'App gates unapproved users at PendingApprovalScreen');
   assert.ok(appSrc.includes('SCREEN_PERMISSION_MAP') && appSrc.includes('hasResourceAccess(activeUser'), 'App enforces screen-level resource permissions');
-  assert.ok(!authScreensSrc.includes("{ id: 'admin' as UserRole"), 'RegisterScreen disallows self-registration as admin');
-  assert.ok(authScreensSrc.includes("id: 'consultant' as RegisterableRole") && authScreensSrc.includes("id: 'faculty' as RegisterableRole"), 'RegisterScreen allows Student, Faculty, Consultant registration');
-  assert.ok(authScreensSrc.includes("status: 'pending'"), 'Registrations default to pending approval');
+  assert.ok(authScreensSrc.includes('Admin Registration') && authScreensSrc.includes('showAdminSetup'), 'LoginScreen displays dedicated first-time Admin Registration button');
+  assert.ok(authScreensSrc.includes('showAdminOption') && authScreensSrc.includes('Academy Administrator'), 'RegisterScreen shows first-time Admin option conditionally');
+  assert.ok(authScreensSrc.includes("id: 'consultant'") && authScreensSrc.includes("id: 'faculty'"), 'RegisterScreen allows Student, Faculty, Consultant registration');
+  assert.ok(authScreensSrc.includes("nextStatus = isAdminSignup ? 'active' : 'pending'") || authScreensSrc.includes("status: 'pending'"), 'Non-admin registrations default to pending approval');
+  assert.ok(adminScreensSrc.includes('Allow All Users') && adminScreensSrc.includes('allowAllUsersAccess'), 'AdminUsers supports allowing all users full resource access');
   assert.ok(adminScreensSrc.includes('Allow & Manage User Access') && adminScreensSrc.includes('RESOURCE_ACCESS_MODULES'), 'AdminUsers provides per-user Allow & Resource Access modal');
   assert.ok(studentScreensSrc.includes("hasResourceAccess(user, 'branch')") && studentScreensSrc.includes("hasResourceAccess(user, 'announcements')"), 'StudentScreens enforces branch & announcements permissions');
   assert.ok(facultyScreensSrc.includes("hasResourceAccess(user, 'courses')") && facultyScreensSrc.includes("hasResourceAccess(user, 'quizzes')"), 'FacultyScreens enforces courses & quizzes permissions');

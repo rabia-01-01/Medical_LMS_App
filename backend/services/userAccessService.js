@@ -207,6 +207,16 @@ function getUserStatus({ email, id }) {
     return toSafeUser(user);
 }
 
+function hasRegisteredAdmin(users) {
+    return users.some(
+        (u) => u.role === "admin" && u.selfRegisteredAdmin === true
+    );
+}
+
+function isAdminRegistrationOpen() {
+    return !hasRegisteredAdmin(loadUsers());
+}
+
 function registerSelfUser(payload) {
     const name = String(payload?.name || payload?.fullName || "").trim();
     const email = String(payload?.email || "").trim().toLowerCase();
@@ -219,18 +229,28 @@ function registerSelfUser(payload) {
     if (!name || !email || !email.includes("@")) {
         return { error: "Valid name and email address are required.", statusCode: 400 };
     }
-    if (!SELF_REGISTER_ROLES.has(role)) {
+
+    const users = loadUsers();
+    if (role === "admin") {
+        if (hasRegisteredAdmin(users)) {
+            return {
+                error: "Administrator registration is closed. An admin has already been registered.",
+                statusCode: 403,
+            };
+        }
+    } else if (!SELF_REGISTER_ROLES.has(role)) {
         return { error: "Only Students, Faculty, and Consultant Agents can register.", statusCode: 400 };
     }
+
     if (password.length < 6) {
         return { error: "Password must be at least 6 characters.", statusCode: 400 };
     }
 
-    const users = loadUsers();
     if (findUserByEmailOrId(users, { email })) {
         return { error: "Email is already registered.", statusCode: 409 };
     }
 
+    const isFirstAdmin = role === "admin";
     const newUser = {
         id: payload?.id || `u-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`,
         name,
@@ -239,11 +259,12 @@ function registerSelfUser(payload) {
         passwordHash: hashPassword(password),
         role,
         avatar: getDefaultAvatar(role),
-        department,
-        batch: "",
+        department: isFirstAdmin ? (department || "Academic Directorate") : department,
+        batch: isFirstAdmin ? "All" : "",
         targetExam,
-        status: "pending",
-        accessPermissions: { ...EMPTY_PERMISSIONS },
+        status: isFirstAdmin ? "active" : "pending",
+        accessPermissions: isFirstAdmin ? { ...FULL_PERMISSIONS } : { ...EMPTY_PERMISSIONS },
+        ...(isFirstAdmin ? { selfRegisteredAdmin: true } : {}),
         createdAt: new Date().toISOString(),
     };
 
@@ -409,6 +430,32 @@ function updateUserAccess(userId, patch, actor) {
     return { user: toSafeUser(updated), statusCode: 200 };
 }
 
+function allowAllUsers({ onlyPending = false } = {}, actor) {
+    if (!actor) {
+        return { error: "Administrator authorization required.", statusCode: 403 };
+    }
+
+    const users = loadUsers();
+    let updatedCount = 0;
+    const nextUsers = users.map((u) => {
+        if (u.role === "admin") return u;
+        if (onlyPending && u.status !== "pending") return u;
+        updatedCount += 1;
+        return {
+            ...u,
+            status: "active",
+            accessPermissions: { ...FULL_PERMISSIONS },
+        };
+    });
+
+    persistUsers(nextUsers);
+    return {
+        users: nextUsers.map(toSafeUser),
+        updatedCount,
+        statusCode: 200,
+    };
+}
+
 function removeUser(userId, actor) {
     if (!actor) {
         return { error: "Administrator authorization required.", statusCode: 403 };
@@ -432,11 +479,13 @@ module.exports = {
     EMPTY_PERMISSIONS,
     listUsers,
     getUserStatus,
+    isAdminRegistrationOpen,
     registerSelfUser,
     googleSignInOrRegister,
     authenticateUser,
     createUserByAdmin,
     updateUserAccess,
+    allowAllUsers,
     removeUser,
     verifyAdminActor,
 };

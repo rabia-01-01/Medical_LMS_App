@@ -63,7 +63,11 @@ export async function fetchUserProfile(
     }
 
     if (profile) {
-      const appRole = mapDbRoleToAppRole(profile.role);
+      const dbMappedRole = mapDbRoleToAppRole(profile.role);
+      const appRole: AppUserRole =
+        metadata?.self_registered_admin === true && mapDbRoleToAppRole(metadata?.role) === 'admin'
+          ? 'admin'
+          : dbMappedRole;
       let studentId: string | undefined;
       let facultyId: string | undefined;
 
@@ -279,6 +283,7 @@ export async function signUpUser({
           avatar_url: avatar,
           approval_status: approvalStatus,
           access_permissions: resolvedPermissions,
+          ...(role === 'admin' ? { self_registered_admin: true } : {}),
         },
       },
     });

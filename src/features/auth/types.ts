@@ -42,6 +42,7 @@ export interface SignUpPayload {
   batch?: string;
   status?: AccountStatus;
   accessPermissions?: UserAccessPermissions;
+  autoLogin?: boolean;
 }
 
 export interface SignInPayload {

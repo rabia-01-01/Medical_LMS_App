@@ -534,7 +534,7 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 // ==================== MANAGE USERS ====================
 export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
   const { user: currentUser, startViewingAs } = useAuth();
-  const { users, cohortBatches, deleteUser, updateUser, refreshUsersFromBackend, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
+  const { users, cohortBatches, deleteUser, updateUser, allowAllUsersAccess, refreshUsersFromBackend, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [docFilter, setDocFilter] = useState<string>('All');
   const [filter, setFilter] = useState(() => {
@@ -676,6 +676,27 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
     setAccessModalUser(null);
   };
 
+  const handleAllowAllUsers = async (onlyPending: boolean) => {
+    const count = allowAllUsersAccess('admin', currentUser?.email, onlyPending);
+    if (currentUser) {
+      await adminService.recordAuditLog({
+        action: onlyPending ? 'ALL_PENDING_ALLOWED' : 'ALL_USERS_ALLOWED',
+        entityType: 'USER',
+        entityId: 'bulk',
+        userId: currentUser.id,
+        userName: currentUser.name || 'Admin',
+        details: `Allowed full resource access for ${count} ${onlyPending ? 'pending' : ''} user(s)`,
+        severity: 'info',
+      });
+    }
+    setAccessToast(
+      onlyPending
+        ? `Allowed ${count} pending user(s) full access to all resources`
+        : `Allowed all non-admin users full access to all resources`
+    );
+    setTimeout(() => setAccessToast(''), 3000);
+  };
+
   return (
     <div>
       <Header title="User Management" subtitle={`${filtered.length} users • ${pendingCount} pending`} showBack onBack={onBack} rightAction={
@@ -695,6 +716,34 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
           <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2">
             <i className="fas fa-check-circle text-emerald-600" />
             <span>{accessToast}</span>
+          </div>
+        )}
+
+        {/* Quick Bulk Access Controls for Admin */}
+        {users.some(u => u.role !== 'admin') && (
+          <div className="flex items-center gap-2 bg-teal-50/80 border border-teal-200 rounded-2xl p-2.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-bold text-teal-900">Bulk Resource Approval</p>
+              <p className="text-[10px] text-teal-700 truncate">
+                {pendingCount > 0 ? `${pendingCount} waiting approval` : 'Grant all users full resource access'}
+              </p>
+            </div>
+            {pendingCount > 0 && (
+              <button
+                type="button"
+                onClick={() => handleAllowAllUsers(true)}
+                className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-bold transition shrink-0"
+              >
+                Allow Pending ({pendingCount})
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleAllowAllUsers(false)}
+              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-bold transition shrink-0"
+            >
+              Allow All Users
+            </button>
           </div>
         )}
 

@@ -3,11 +3,13 @@ const router = express.Router();
 const {
     listUsers,
     getUserStatus,
+    isAdminRegistrationOpen,
     registerSelfUser,
     googleSignInOrRegister,
     authenticateUser,
     createUserByAdmin,
     updateUserAccess,
+    allowAllUsers,
     removeUser,
     verifyAdminActor,
 } = require("../services/userAccessService");
@@ -28,7 +30,11 @@ function handleAction(res, fn) {
 }
 
 router.get("/", (_req, res) =>
-    handleAction(res, () => res.json({ users: listUsers() }))
+    handleAction(res, () => res.json({ users: listUsers(), adminRegistrationOpen: isAdminRegistrationOpen() }))
+);
+
+router.get("/admin-registration-status", (_req, res) =>
+    handleAction(res, () => res.json({ adminRegistrationOpen: isAdminRegistrationOpen() }))
 );
 
 router.get("/status", (req, res) =>
@@ -85,6 +91,17 @@ router.post("/admin-create", (req, res) =>
             return res.status(result.statusCode).json({ error: result.error });
         }
         return res.status(result.statusCode).json({ user: result.user });
+    })
+);
+
+router.post("/allow-all", (req, res) =>
+    handleAction(res, () => {
+        const actor = resolveAdminActor(req);
+        const result = allowAllUsers({ onlyPending: Boolean(req.body?.onlyPending) }, actor);
+        if (result.error) {
+            return res.status(result.statusCode).json({ error: result.error });
+        }
+        return res.status(200).json({ users: result.users, updatedCount: result.updatedCount });
     })
 );
 

@@ -270,14 +270,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (payload: SignUpPayload): Promise<AuthResult<AuthUser>> => {
     setIsLoading(true);
     try {
-      const isPendingSignup = payload.role !== 'admin' && (payload.status || 'pending') !== 'active';
-      if (isPendingSignup) {
+      const shouldSkipSession =
+        payload.autoLogin === false ||
+        (payload.role !== 'admin' && (payload.status || 'pending') !== 'active');
+      if (shouldSkipSession) {
         suppressNextSignInRef.current = true;
       }
       const result = await signUpUser(payload);
       if (result.success && result.data) {
-        if (result.data.status !== 'active') {
-          // Newly registered users cannot enter portal until Admin allows them
+        if (result.data.status !== 'active' || payload.autoLogin === false) {
+          // Wait for explicit sign-in / admin approval before entering dashboard
           await signOutUser();
           setAuthUser(null);
           setUser(null);

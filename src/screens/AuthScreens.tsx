@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useData, User } from '../context/DataContext';
+import { useData, User, EMPTY_USER_PERMISSIONS, normalizePermissions } from '../context/DataContext';
 import { resetPassword } from '../features/auth';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import {
+  authenticateBackendUser,
+  fetchBackendUserStatus,
+  googleAuthBackendSync,
+  registerBackendSelfUser,
+} from '../services/userAccessApi';
 
-type UserRole = 'admin' | 'faculty' | 'student' | 'consultant';
+type RegisterableRole = 'faculty' | 'student' | 'consultant';
 
 export function SplashScreen({ onComplete }: { onComplete: () => void }) {
   useEffect(() => {
@@ -43,7 +49,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
 
 export function LoginScreen() {
   const { signIn, login } = useAuth();
-  const { users, addUser, cohortBatches } = useData();
+  const { users, addUser, refreshUsersFromBackend } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -52,15 +58,19 @@ export function LoginScreen() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotStatus, setForgotStatus] = useState<{ message: string; isError: boolean } | null>(null);
   const [error, setError] = useState('');
+  const [pendingNotice, setPendingNotice] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [googleEmailInput, setGoogleEmailInput] = useState('');
   const [googleNameInput, setGoogleNameInput] = useState('');
+  const [googleRoleInput, setGoogleRoleInput] = useState<RegisterableRole>('student');
   const [googleError, setGoogleError] = useState('');
+  const [googleNotice, setGoogleNotice] = useState('');
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     setError('');
+    setPendingNotice('');
     try {
       if (isSupabaseConfigured()) {
         const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -87,87 +97,149 @@ export function LoginScreen() {
     }
   };
 
-  const handleConfirmGoogleAccount = (targetEmail: string, targetName?: string) => {
+  const handleConfirmGoogleAccount = async (targetEmail: string, targetName?: string, selectedRole?: RegisterableRole) => {
     const cleanEmail = targetEmail.trim().toLowerCase();
+    setGoogleError('');
+    setGoogleNotice('');
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setGoogleError('Please enter a valid Google email address.');
       return;
     }
 
-    const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (existing) {
-      login(existing);
+    const chosenRole: RegisterableRole = selectedRole || googleRoleInput || 'student';
+    const displayName = (targetName || '').trim() || cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+
+    const remoteSync = await googleAuthBackendSync({
+      email: cleanEmail,
+      name: displayName,
+      role: chosenRole,
+    });
+    const localExisting = users.find((u) => u.email.toLowerCase() === cleanEmail);
+    const remoteUser = remoteSync.ok ? remoteSync.data?.user : undefined;
+    const isNewGoogle = remoteUser ? Boolean(remoteSync.data?.isNew) : !localExisting;
+    const resolvedUser: User | undefined = remoteUser
+      ? {
+          ...remoteUser,
+          password: localExisting?.password || '',
+          accessPermissions: normalizePermissions(remoteUser.accessPermissions, remoteUser.status === 'active'),
+        }
+      : localExisting;
+
+    if (resolvedUser && !isNewGoogle) {
+      if (resolvedUser.status === 'pending') {
+        setGoogleNotice('Your account is awaiting Administrator approval. You cannot access portal resources until Admin allows your account.');
+        return;
+      }
+      if (resolvedUser.status === 'suspended') {
+        setGoogleError('Your account has been suspended. Please contact the administrator.');
+        return;
+      }
+      login(resolvedUser);
       setShowGoogleModal(false);
       return;
     }
 
-    const displayName = (targetName || '').trim() || cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-    const newGoogleStudent: User = {
+    const newGoogleUser: User = resolvedUser || {
       id: `u-google-${Date.now()}`,
       name: displayName,
       email: cleanEmail,
-      phone: '+91 98000 00000',
+      phone: '',
       password: '',
-      role: 'student',
-      batch: cohortBatches?.[0]?.name || '',
-      avatar: '🎓',
-      targetExam: 'NEET & IMAT',
-      department: 'Medical Sciences',
-      status: 'active',
+      role: chosenRole,
+      batch: '',
+      avatar: chosenRole === 'faculty' ? '👨‍⚕️' : chosenRole === 'consultant' ? '💼' : '🎓',
+      targetExam: chosenRole === 'student' ? 'NEET & IMAT' : '',
+      department: chosenRole === 'consultant' ? 'Study Abroad & Consular Services' : 'Medical Sciences',
+      status: 'pending',
+      accessPermissions: { ...EMPTY_USER_PERMISSIONS },
       createdAt: new Date().toISOString(),
     };
-    addUser(newGoogleStudent);
-    login(newGoogleStudent);
-    setShowGoogleModal(false);
+
+    addUser(newGoogleUser);
+    refreshUsersFromBackend().catch(() => {});
+    setGoogleNotice('Your Google account has been registered and is awaiting Administrator approval before you can access resources.');
   };
 
   const handleLogin = async () => {
     setError('');
+    setPendingNotice('');
     if (!email.trim() || !password) {
       setError('Please enter your email and password.');
       return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
     setIsLoading(true);
 
     try {
-      // 1. Attempt Supabase Auth login if client is configured
-      if (isSupabaseConfigured()) {
-        const result = await signIn({ email, password });
-        if (result.success) {
+      // 1. Check authoritative backend directory first if online
+      const remoteAuth = await authenticateBackendUser(cleanEmail, password);
+      if (remoteAuth.ok && remoteAuth.data?.user) {
+        const remoteUser: User = {
+          ...remoteAuth.data.user,
+          password,
+          accessPermissions: normalizePermissions(
+            remoteAuth.data.user.accessPermissions,
+            remoteAuth.data.user.status === 'active'
+          ),
+        };
+        if (remoteUser.status === 'pending') {
+          setPendingNotice('Your account is registered and awaiting Administrator approval. Please wait until an Admin allows your account.');
           setIsLoading(false);
           return;
         }
-
-        // If Supabase returned an error, check if local prototype fallback has this user
-        const localUser = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password);
-        if (localUser) {
-          if (localUser.status === 'suspended') {
-            setError('Your account has been suspended. Please contact the administrator.');
-            setIsLoading(false);
-            return;
-          }
-          login(localUser);
+        if (remoteUser.status === 'suspended') {
+          setError('Your account has been suspended. Please contact the administrator.');
           setIsLoading(false);
           return;
         }
-
-        setError(result.error || 'Invalid credentials or user not found.');
+        login(remoteUser);
         setIsLoading(false);
         return;
       }
 
-      // 2. Offline / Prototype fallback
-      const localUser = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password);
+      // 2. Attempt Supabase Auth login if client is configured
+      let supabaseErrorMessage = '';
+      if (isSupabaseConfigured()) {
+        const result = await signIn({ email: cleanEmail, password });
+        if (result.success) {
+          setIsLoading(false);
+          return;
+        }
+        if (result.error === 'PENDING_APPROVAL') {
+          setPendingNotice('Your account is registered and awaiting Administrator approval. Please wait until an Admin allows your account.');
+          setIsLoading(false);
+          return;
+        }
+        supabaseErrorMessage = result.error || '';
+      }
+
+      // 3. Offline / Local prototype fallback (check backend status override if user exists locally)
+      const localUser = users.find(u => u.email.toLowerCase() === cleanEmail && u.password === password);
       if (localUser) {
-        if (localUser.status === 'suspended') {
+        const remoteStatus = await fetchBackendUserStatus({ email: localUser.email, id: localUser.id });
+        const effectiveStatus = remoteStatus?.status || localUser.status;
+        if (effectiveStatus === 'pending') {
+          setPendingNotice('Your account is registered and awaiting Administrator approval. You cannot access portal resources until an Admin allows your account.');
+          setIsLoading(false);
+          return;
+        }
+        if (effectiveStatus === 'suspended') {
           setError('Your account has been suspended. Contact administrator.');
           setIsLoading(false);
           return;
         }
-        login(localUser);
+        login({
+          ...localUser,
+          ...(remoteStatus ? {
+            status: remoteStatus.status,
+            batch: remoteStatus.batch,
+            accessPermissions: remoteStatus.accessPermissions,
+            role: remoteStatus.role,
+          } : {}),
+        });
       } else {
-        setError('Invalid email or password.');
+        setError((!remoteAuth.networkError && remoteAuth.error) || supabaseErrorMessage || 'Invalid email or password.');
       }
     } catch (err: any) {
       setError(err.message || 'An unexpected login error occurred.');
@@ -247,6 +319,18 @@ export function LoginScreen() {
                 <i className="fas fa-exclamation-circle text-red-400" />
                 <span>{error}</span>
               </p>
+            </div>
+          )}
+
+          {pendingNotice && (
+            <div className="bg-amber-500/20 border border-amber-400/50 rounded-xl px-3.5 py-3 animate-slide-up">
+              <div className="flex items-start gap-2">
+                <i className="fas fa-clock text-amber-300 text-sm mt-0.5" />
+                <div>
+                  <p className="text-amber-200 text-xs font-bold">Pending Admin Approval</p>
+                  <p className="text-amber-100/90 text-[11px] mt-0.5 leading-relaxed">{pendingNotice}</p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -398,7 +482,7 @@ export function LoginScreen() {
               </div>
               <button
                 type="button"
-                onClick={() => { setShowGoogleModal(false); setGoogleError(''); }}
+                onClick={() => { setShowGoogleModal(false); setGoogleError(''); setGoogleNotice(''); }}
                 className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center text-xs transition"
               >
                 <i className="fas fa-times" />
@@ -411,7 +495,7 @@ export function LoginScreen() {
                 <input
                   type="email"
                   value={googleEmailInput}
-                  onChange={(e) => { setGoogleEmailInput(e.target.value); setGoogleError(''); }}
+                  onChange={(e) => { setGoogleEmailInput(e.target.value); setGoogleError(''); setGoogleNotice(''); }}
                   placeholder="your.email@gmail.com"
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
@@ -428,13 +512,44 @@ export function LoginScreen() {
                 />
               </div>
 
+              <div>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Account Role (for New Registrations)</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    { id: 'student', label: 'Student' },
+                    { id: 'faculty', label: 'Faculty' },
+                    { id: 'consultant', label: 'Consultant' },
+                  ] as const).map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setGoogleRoleInput(r.id)}
+                      className={`py-1.5 rounded-lg text-[11px] font-bold border transition ${
+                        googleRoleInput === r.id
+                          ? 'bg-teal-600 text-white border-teal-600'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {googleError && (
                 <p className="text-xs text-red-600 font-medium">{googleError}</p>
               )}
 
+              {googleNotice && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 leading-relaxed">
+                  <span className="font-bold block mb-0.5"><i className="fas fa-clock mr-1 text-amber-600" />Pending Admin Approval</span>
+                  {googleNotice}
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={() => handleConfirmGoogleAccount(googleEmailInput, googleNameInput)}
+                onClick={() => handleConfirmGoogleAccount(googleEmailInput, googleNameInput, googleRoleInput)}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer mt-1"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -446,30 +561,32 @@ export function LoginScreen() {
                 <span>Continue with Google</span>
               </button>
 
-              <div className="pt-2.5 border-t border-gray-100">
-                <p className="text-[10px] text-gray-500 font-semibold mb-1.5">Or choose an existing candidate account:</p>
-                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                  {users.filter(u => u.role === 'student').map((student) => (
-                    <button
-                      key={student.id}
-                      type="button"
-                      onClick={() => handleConfirmGoogleAccount(student.email, student.name)}
-                      className="w-full p-2 bg-gray-50 hover:bg-gray-100 rounded-xl text-left flex items-center justify-between transition cursor-pointer border border-gray-100"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold flex items-center justify-center">
-                          {student.name.charAt(0)}
-                        </span>
-                        <div>
-                          <p className="text-xs font-semibold text-gray-800">{student.name}</p>
-                          <p className="text-[10px] text-gray-400 truncate max-w-[170px]">{student.email}</p>
+              {users.some(u => u.role !== 'admin' && u.status === 'active') && (
+                <div className="pt-2.5 border-t border-gray-100">
+                  <p className="text-[10px] text-gray-500 font-semibold mb-1.5">Or choose an approved account:</p>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {users.filter(u => u.role === 'student' && u.status === 'active').map((student) => (
+                      <button
+                        key={student.id}
+                        type="button"
+                        onClick={() => handleConfirmGoogleAccount(student.email, student.name, 'student')}
+                        className="w-full p-2 bg-gray-50 hover:bg-gray-100 rounded-xl text-left flex items-center justify-between transition cursor-pointer border border-gray-100"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold flex items-center justify-center">
+                            {student.name.charAt(0)}
+                          </span>
+                          <div>
+                            <p className="text-xs font-semibold text-gray-800">{student.name}</p>
+                            <p className="text-[10px] text-gray-400 truncate max-w-[170px]">{student.email}</p>
+                          </div>
                         </div>
-                      </div>
-                      <i className="fas fa-chevron-right text-gray-300 text-[10px]" />
-                    </button>
-                  ))}
+                        <i className="fas fa-chevron-right text-gray-300 text-[10px]" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -480,7 +597,7 @@ export function LoginScreen() {
 
 function RegisterScreen({ onBack }: { onBack: () => void }) {
   const { signUp } = useAuth();
-  const { addUser, users } = useData();
+  const { addUser, users, refreshUsersFromBackend } = useData();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
@@ -488,7 +605,7 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
     phone: '',
     password: '',
     confirmPassword: '',
-    role: 'student' as UserRole,
+    role: 'student' as RegisterableRole,
     targetExam: '',
     department: '',
   });
@@ -497,10 +614,16 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  const getRoleAvatar = (r: RegisterableRole) =>
+    r === 'faculty' ? '👨‍⚕️' : r === 'consultant' ? '💼' : '👩‍🎓';
+
   const handleRegister = async () => {
     setError('');
 
-    if (!formData.name.trim() || !formData.email.trim() || !formData.password) {
+    const cleanName = formData.name.trim();
+    const cleanEmail = formData.email.trim().toLowerCase();
+
+    if (!cleanName || !cleanEmail || !formData.password) {
       setError('Please fill all required fields.');
       return;
     }
@@ -520,19 +643,43 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
       return;
     }
 
+    if (users.find(u => u.email.toLowerCase() === cleanEmail)) {
+      setError('Email is already registered.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // 1. Try real Supabase Auth registration
+      // 1. Register in shared backend store (enforces status: 'pending' & no resource access)
+      const backendRes = await registerBackendSelfUser({
+        name: cleanName,
+        email: cleanEmail,
+        phone: formData.phone.trim(),
+        password: formData.password,
+        role: formData.role,
+        department: formData.department.trim(),
+        targetExam: formData.targetExam,
+      });
+
+      if (!backendRes.networkError && !backendRes.ok) {
+        setError(backendRes.error || 'Registration failed.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. Register in Supabase Auth if configured (remains pending until Admin allows)
       if (isSupabaseConfigured()) {
         const result = await signUp({
-          email: formData.email.trim(),
+          email: cleanEmail,
           password: formData.password,
-          fullName: formData.name.trim(),
+          fullName: cleanName,
           phone: formData.phone.trim(),
           role: formData.role,
           department: formData.department.trim(),
           targetExam: formData.targetExam,
+          status: 'pending',
+          accessPermissions: { ...EMPTY_USER_PERMISSIONS },
         });
 
         if (!result.success) {
@@ -540,50 +687,27 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
           setIsSubmitting(false);
           return;
         }
-
-        // Also add to local store for synchronous instant update
-        addUser({
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          phone: formData.phone.trim(),
-          password: formData.password,
-          role: formData.role,
-          avatar: formData.role === 'admin' ? '👨‍💼' : formData.role === 'faculty' ? '👨‍⚕️' : formData.role === 'consultant' ? '💼' : '👩‍🎓',
-          status: 'active',
-          department: formData.department.trim(),
-          targetExam: formData.targetExam,
-        });
-
-        setSuccessNotice('Account registered successfully! Welcome to Sultanat e Italia Medica.');
-        setTimeout(() => {
-          onBack();
-        }, 1500);
-        return;
-      }
-
-      // 2. Offline / Prototype fallback
-      if (users.find(u => u.email.toLowerCase() === formData.email.trim().toLowerCase())) {
-        setError('Email is already registered.');
-        setIsSubmitting(false);
-        return;
       }
 
       addUser({
-        name: formData.name.trim(),
-        email: formData.email.trim(),
+        id: backendRes.data?.user?.id,
+        name: cleanName,
+        email: cleanEmail,
         phone: formData.phone.trim(),
         password: formData.password,
         role: formData.role,
-        avatar: formData.role === 'admin' ? '👨‍💼' : formData.role === 'faculty' ? '👨‍⚕️' : formData.role === 'consultant' ? '💼' : '👩‍🎓',
-        status: 'active',
+        avatar: getRoleAvatar(formData.role),
+        batch: '',
+        status: 'pending',
+        accessPermissions: { ...EMPTY_USER_PERMISSIONS },
         department: formData.department.trim(),
         targetExam: formData.targetExam,
       });
 
-      setSuccessNotice('Account created successfully!');
-      setTimeout(() => {
-        onBack();
-      }, 1200);
+      refreshUsersFromBackend().catch(() => {});
+      setSuccessNotice(
+        'Your account has been registered and is awaiting Administrator approval. You will only be able to access your resources (branch, courses, quizzes, announcements, notifications) after an Admin allows your account.'
+      );
     } catch (err: any) {
       setError(err.message || 'An unexpected registration error occurred.');
     } finally {
@@ -622,12 +746,21 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         {successNotice ? (
-          <div className="text-center py-12 animate-slide-up">
-            <div className="w-16 h-16 rounded-full bg-teal-500/20 text-teal-400 flex items-center justify-center mx-auto mb-4 border border-teal-500/40">
-              <i className="fas fa-check text-2xl" />
+          <div className="text-center py-10 px-3 animate-slide-up space-y-4">
+            <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center mx-auto border border-amber-400/40">
+              <i className="fas fa-user-clock text-2xl" />
             </div>
-            <h3 className="text-white text-lg font-bold mb-2">Registration Complete</h3>
-            <p className="text-teal-300 text-xs">{successNotice}</p>
+            <h3 className="text-white text-lg font-bold">Registration Submitted</h3>
+            <p className="text-amber-200 text-xs leading-relaxed bg-white/5 border border-white/10 rounded-xl p-3.5">
+              {successNotice}
+            </p>
+            <button
+              type="button"
+              onClick={onBack}
+              className="btn-primary w-full mt-2"
+            >
+              Back to Sign In
+            </button>
           </div>
         ) : (
           <>
@@ -635,15 +768,16 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
               <div className="space-y-4 animate-slide-up">
                 <div>
                   <h2 className="text-white text-lg font-semibold">Select Your Role</h2>
-                  <p className="text-gray-400 text-xs mt-0.5">Choose how you will participate in the medical academy.</p>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    Students, Faculty, and Consultant Agents can register here. Admin approval is required before access is granted.
+                  </p>
                 </div>
 
                 <div className="space-y-3 pt-2">
                   {[
-                    { id: 'student' as UserRole, label: 'Medical Aspirant (Student)', desc: 'NEET, IMAT, UCAT exam prep, DPPs, mocks & lecture notes', icon: 'fa-graduation-cap' },
-                    { id: 'faculty' as UserRole, label: 'Faculty & Medical Doctor', desc: 'Create curriculum, author medical questions & upload resources', icon: 'fa-user-md' },
-                    { id: 'admin' as UserRole, label: 'Academy Administrator', desc: 'Manage batches, system governance & institutional analytics', icon: 'fa-user-shield' },
-                    { id: 'consultant' as UserRole, label: 'Consultant Agent (Study Abroad)', desc: 'Passport, HRD, Apostille, Scholarship docs, Universitaly & IMAT verification', icon: 'fa-briefcase' },
+                    { id: 'student' as RegisterableRole, label: 'Medical Aspirant (Student)', desc: 'NEET, IMAT, UCAT exam prep, DPPs, mocks & lecture notes', icon: 'fa-graduation-cap' },
+                    { id: 'faculty' as RegisterableRole, label: 'Faculty & Medical Doctor', desc: 'Create curriculum, author medical questions & upload resources', icon: 'fa-user-md' },
+                    { id: 'consultant' as RegisterableRole, label: 'Consultant Agent (Study Abroad)', desc: 'Passport, HRD, Apostille, Scholarship docs, Universitaly & IMAT verification', icon: 'fa-briefcase' },
                   ].map((r) => (
                     <button
                       key={r.id}
@@ -727,8 +861,26 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
                   />
                 )}
 
+                {formData.role === 'consultant' && (
+                  <input 
+                    value={formData.department}
+                    onChange={(e) => updateField('department', e.target.value)}
+                    placeholder="Consultancy Specialization (e.g. Italy IMAT / HRD & Apostille)" 
+                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                  />
+                )}
+
+                {error && (
+                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg px-3 py-2.5">
+                    <p className="text-red-300 text-xs flex items-center gap-1.5">
+                      <i className="fas fa-exclamation-circle text-red-400" />
+                      <span>{error}</span>
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex gap-3 pt-2">
-                  <button onClick={() => setStep(1)} className="btn-secondary flex-1">
+                  <button onClick={() => { setError(''); setStep(1); }} className="btn-secondary flex-1">
                     Back
                   </button>
                   <button
@@ -752,7 +904,9 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
               <div className="space-y-4 animate-slide-up">
                 <div>
                   <h2 className="text-white text-lg font-semibold">Security & Password</h2>
-                  <p className="text-gray-400 text-xs mt-0.5">Create a strong password for your medical portal account.</p>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    Create a password. Access remains locked until an Administrator allows your account.
+                  </p>
                 </div>
 
                 <input 
@@ -814,6 +968,103 @@ function RegisterScreen({ onBack }: { onBack: () => void }) {
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+export function PendingApprovalScreen({ user }: { user: User }) {
+  const { logout, refreshUserAccess } = useAuth();
+  const { refreshUsersFromBackend } = useData();
+  const [checking, setChecking] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+
+  const handleCheckApproval = async () => {
+    setChecking(true);
+    setStatusMessage('');
+    try {
+      await refreshUsersFromBackend();
+      const updated = await refreshUserAccess();
+      if (updated && updated.status === 'pending') {
+        setStatusMessage('Still awaiting Administrator approval. Please check again shortly.');
+      }
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const isSuspended = user.status === 'suspended';
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
+      <div className="italy-accent">
+        <div className="green" /><div className="white" /><div className="red" />
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center px-6 py-8">
+        <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-3xl p-6 text-center space-y-4 shadow-xl">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${
+            isSuspended
+              ? 'bg-red-500/20 text-red-300 border-red-400/40'
+              : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+          }`}>
+            <i className={`fas ${isSuspended ? 'fa-ban' : 'fa-user-clock'} text-2xl`} />
+          </div>
+
+          <div>
+            <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full mb-2 ${
+              isSuspended ? 'bg-red-500/30 text-red-200' : 'bg-amber-500/30 text-amber-200'
+            }`}>
+              {isSuspended ? 'Access Suspended' : 'Pending Admin Approval'}
+            </span>
+            <h2 className="text-white text-lg font-bold">{user.name}</h2>
+            <p className="text-gray-300 text-xs">{user.email} • {user.role.toUpperCase()}</p>
+          </div>
+
+          <p className="text-gray-200 text-xs leading-relaxed">
+            {isSuspended
+              ? 'Your account access has been suspended by the Academy Administrator. Resources, branches, courses, quizzes, announcements, and notifications are currently unavailable.'
+              : 'Your registration is complete, but an Administrator must allow your account before you can access branches, courses, resources, quizzes, announcements, or notifications.'}
+          </p>
+
+          <div className="flex flex-wrap justify-center gap-1.5 pt-1">
+            {['Resources', 'Branch', 'Courses', 'Quizzes', 'Announcements', 'Notifications'].map((item) => (
+              <span key={item} className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-gray-300 border border-white/10 flex items-center gap-1">
+                <i className="fas fa-lock text-[8px] text-amber-300" />
+                {item}
+              </span>
+            ))}
+          </div>
+
+          {statusMessage && (
+            <p className="text-amber-200 text-[11px] bg-amber-500/15 border border-amber-400/30 rounded-xl px-3 py-2">
+              {statusMessage}
+            </p>
+          )}
+
+          <div className="space-y-2.5 pt-2">
+            {!isSuspended && (
+              <button
+                type="button"
+                onClick={handleCheckApproval}
+                disabled={checking}
+                className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-[#0f2b46] rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 disabled:opacity-70"
+              >
+                <i className={`fas ${checking ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`} />
+                <span>{checking ? 'Checking Approval Status...' : 'Check Approval Status'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={logout}
+              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-semibold text-xs border border-white/15 transition flex items-center justify-center gap-2"
+            >
+              <i className="fas fa-sign-out-alt" />
+              <span>Sign Out / Return to Login</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

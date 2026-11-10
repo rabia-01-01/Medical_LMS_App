@@ -1,7 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { useData, User, deduplicateCompletedChapters } from '../context/DataContext';
+import {
+  useData,
+  User,
+  AccountStatus,
+  UserAccessPermissions,
+  FULL_USER_PERMISSIONS,
+  EMPTY_USER_PERMISSIONS,
+  RESOURCE_ACCESS_MODULES,
+  normalizePermissions,
+  deduplicateCompletedChapters,
+} from '../context/DataContext';
 import { Header, StatusBadge, EmptyState } from '../components/Navigation';
 import { signUpUser } from '../features/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -22,6 +32,8 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
   const enrolledStudents = useMemo(() => users.filter(u => u.role === 'student'), [users]);
   const { metrics, loading: metricsLoading, refreshMetrics, exportAuditLogs } = useAdmin();
   const { assessments } = useAssessments();
+  const pendingUsers = useMemo(() => users.filter(u => u.status === 'pending'), [users]);
+  const activeUsersCount = useMemo(() => users.filter(u => u.status === 'active').length, [users]);
 
   const totalAssessmentsCount = useMemo(() => {
     const seen = new Set(assessments.map(a => a.id));
@@ -182,6 +194,45 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
           </div>
         )}
 
+        {/* Pending User Approval Requests Alert */}
+        {pendingUsers.length > 0 && (
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-2xl p-3.5 shadow-2xs space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shrink-0 shadow-2xs">
+                  <i className="fas fa-user-clock" />
+                </div>
+                <div>
+                  <p className="text-xs font-extrabold text-amber-950">
+                    {pendingUsers.length} Pending Approval {pendingUsers.length === 1 ? 'Request' : 'Requests'}
+                  </p>
+                  <p className="text-[10px] text-amber-800">
+                    New registrations cannot access resources until allowed by Admin
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  try { sessionStorage.setItem('admin_users_filter', 'Pending'); } catch {}
+                  onNavigate('users');
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[11px] font-bold transition shrink-0 shadow-2xs"
+              >
+                Review & Allow
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {pendingUsers.slice(0, 4).map((pu) => (
+                <span key={pu.id} className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white border border-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                  <span>{pu.name}</span>
+                  <span className="text-[9px] uppercase text-amber-600 font-bold">({pu.role})</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Student Curriculum Study Progress Tracker */}
         <div className="card bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
@@ -281,7 +332,7 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
         {/* Operational Modules Navigation */}
         <div className="card p-0 overflow-hidden shadow-xs">
           {[
-            { icon: 'fa-users', label: 'User Management', desc: `${users.length} registered profiles (${metrics?.activeUsers || users.length} active)`, screen: 'users' },
+            { icon: 'fa-users', label: 'User Management', desc: `${users.length} profiles (${activeUsersCount} allowed • ${pendingUsers.length} pending)`, screen: 'users' },
             { icon: 'fa-book-medical', label: 'Academic & Course Management', desc: `${courses.length} courses, curriculum & cohorts`, screen: 'courses' },
             { icon: 'fa-layer-group', label: 'Batches', desc: `${cohortBatches.length} active cohort ${cohortBatches.length === 1 ? 'batch' : 'batches'}`, screen: 'departments' },
             { icon: 'fa-shield-alt', label: 'Resource Governance & Moderation', desc: `${resources.length} resources (${resources.filter(r => r.status === 'published').length} published)`, screen: 'resources' },
@@ -309,12 +360,31 @@ export function AdminDashboard({ onNavigate }: { onNavigate: (screen: string) =>
 
 // ==================== ADD USER ====================
 export function AddUser({ onBack }: { onBack: () => void }) {
+  const { user: currentUser } = useAuth();
   const { addUser, cohortBatches } = useData();
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', role: 'student' as 'admin' | 'faculty' | 'student', department: '', targetExam: '', batch: '' });
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    role: 'student' as 'admin' | 'faculty' | 'student' | 'consultant',
+    department: '',
+    targetExam: '',
+    batch: '',
+    status: 'active' as AccountStatus,
+  });
+  const [accessPerms, setAccessPerms] = useState<UserAccessPermissions>({ ...FULL_USER_PERMISSIONS });
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.email || !formData.password) return;
+
+    const finalPerms =
+      formData.role === 'admin'
+        ? { ...FULL_USER_PERMISSIONS }
+        : formData.status === 'active'
+          ? accessPerms
+          : { ...EMPTY_USER_PERMISSIONS };
 
     if (isSupabaseConfigured()) {
       try {
@@ -327,24 +397,38 @@ export function AddUser({ onBack }: { onBack: () => void }) {
           department: formData.department.trim(),
           targetExam: formData.targetExam,
           batch: formData.batch,
+          status: formData.role === 'admin' ? 'active' : formData.status,
+          accessPermissions: finalPerms,
         });
       } catch (err) {
         console.warn('[AddUser] Supabase register error:', err);
       }
     }
 
-    addUser({
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      password: formData.password,
-      role: formData.role,
-      avatar: formData.role === 'admin' ? '👨‍💼' : formData.role === 'faculty' ? '👨‍⚕️' : '👩‍🎓',
-      status: 'active',
-      department: formData.department,
-      targetExam: formData.targetExam,
-      batch: formData.role === 'student' ? formData.batch : 'All',
-    });
+    addUser(
+      {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: formData.role,
+        avatar:
+          formData.role === 'admin'
+            ? '👨‍💼'
+            : formData.role === 'faculty'
+              ? '👨‍⚕️'
+              : formData.role === 'consultant'
+                ? '💼'
+                : '👩‍🎓',
+        status: formData.role === 'admin' ? 'active' : formData.status,
+        accessPermissions: finalPerms,
+        department: formData.department,
+        targetExam: formData.targetExam,
+        batch: formData.role === 'student' ? formData.batch : (formData.batch || 'All'),
+      },
+      'admin',
+      currentUser?.email
+    );
     setSuccess(true);
     setTimeout(() => onBack(), 1500);
   };
@@ -366,9 +450,9 @@ export function AddUser({ onBack }: { onBack: () => void }) {
       <div className="p-4 space-y-4">
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Role *</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['student', 'faculty', 'admin'] as const).map((role) => (
-              <button key={role} onClick={() => setFormData(p => ({ ...p, role }))} className={`py-2 rounded-lg text-xs font-medium ${formData.role === role ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{role.charAt(0).toUpperCase() + role.slice(1)}</button>
+          <div className="grid grid-cols-4 gap-1.5">
+            {(['student', 'faculty', 'consultant', 'admin'] as const).map((role) => (
+              <button key={role} onClick={() => setFormData(p => ({ ...p, role }))} className={`py-2 rounded-lg text-[11px] font-semibold ${formData.role === role ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{role.charAt(0).toUpperCase() + role.slice(1)}</button>
             ))}
           </div>
         </div>
@@ -376,18 +460,69 @@ export function AddUser({ onBack }: { onBack: () => void }) {
         <input value={formData.email} onChange={(e) => setFormData(p => ({ ...p, email: e.target.value }))} placeholder="Email *" type="email" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         <input value={formData.phone} onChange={(e) => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" type="tel" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         <input value={formData.password} onChange={(e) => setFormData(p => ({ ...p, password: e.target.value }))} placeholder="Password *" type="password" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-        {formData.role === 'faculty' && <input value={formData.department} onChange={(e) => setFormData(p => ({ ...p, department: e.target.value }))} placeholder="Department" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />}
+        {(formData.role === 'faculty' || formData.role === 'consultant') && (
+          <input
+            value={formData.department}
+            onChange={(e) => setFormData(p => ({ ...p, department: e.target.value }))}
+            placeholder={formData.role === 'consultant' ? 'Consultancy Specialization' : 'Department'}
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        )}
         {formData.role === 'student' && (
+          <select value={formData.targetExam} onChange={(e) => setFormData(p => ({ ...p, targetExam: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <option value="">Target Exam</option><option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
+          </select>
+        )}
+        {formData.role !== 'admin' && (
           <>
-            <select value={formData.targetExam} onChange={(e) => setFormData(p => ({ ...p, targetExam: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-              <option value="">Target Exam</option><option>NEET</option><option>IMAT</option><option>UCAT</option><option>MCAT</option>
-            </select>
-            <select value={formData.batch} onChange={(e) => setFormData(p => ({ ...p, batch: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-              <option value="">No Batch Assigned</option>
-              {(cohortBatches || []).map((b) => (
-                <option key={b.id} value={b.name}>{b.name}</option>
-              ))}
-            </select>
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">Assigned Branch / Batch</label>
+              <select value={formData.batch} onChange={(e) => setFormData(p => ({ ...p, batch: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                <option value="">{formData.role === 'student' ? 'No Batch Assigned' : 'All Batches'}</option>
+                {(cohortBatches || []).map((b) => (
+                  <option key={b.id} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-2xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-800">Account Approval & Resource Access</span>
+                <button
+                  type="button"
+                  onClick={() => setFormData(p => ({ ...p, status: p.status === 'active' ? 'pending' : 'active' }))}
+                  className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+                    formData.status === 'active'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-amber-100 text-amber-800 border border-amber-300'
+                  }`}
+                >
+                  {formData.status === 'active' ? 'Allowed Immediately' : 'Pending Approval'}
+                </button>
+              </div>
+              {formData.status === 'active' && (
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  {RESOURCE_ACCESS_MODULES.map((mod) => (
+                    <label
+                      key={mod.key}
+                      className={`flex items-center gap-2 p-2 rounded-xl border text-[11px] font-semibold cursor-pointer ${
+                        accessPerms[mod.key]
+                          ? 'bg-teal-50 border-teal-300 text-teal-900'
+                          : 'bg-white border-gray-200 text-gray-500'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={accessPerms[mod.key]}
+                        onChange={(e) => setAccessPerms(p => ({ ...p, [mod.key]: e.target.checked }))}
+                        className="accent-teal-600"
+                      />
+                      <span className="truncate">{mod.shortLabel}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
         <button onClick={handleSubmit} disabled={!formData.name || !formData.email || !formData.password} className="btn-primary disabled:opacity-50"><i className="fas fa-user-plus mr-2" />Add User</button>
@@ -399,19 +534,41 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 // ==================== MANAGE USERS ====================
 export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
   const { user: currentUser, startViewingAs } = useAuth();
-  const { users, cohortBatches, deleteUser, updateUser, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
+  const { users, cohortBatches, deleteUser, updateUser, refreshUsersFromBackend, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [docFilter, setDocFilter] = useState<string>('All');
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter] = useState(() => {
+    try {
+      const initial = sessionStorage.getItem('admin_users_filter');
+      if (initial) {
+        sessionStorage.removeItem('admin_users_filter');
+        return initial;
+      }
+    } catch {}
+    return 'All';
+  });
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const roles = ['All', ...(cohortBatches || []).map(b => b.name), 'Students', 'Faculty', 'Admins', 'Suspended'];
+  const [accessModalUser, setAccessModalUser] = useState<User | null>(null);
+  const [modalStatus, setModalStatus] = useState<AccountStatus>('active');
+  const [modalBatch, setModalBatch] = useState<string>('');
+  const [modalPermissions, setModalPermissions] = useState<UserAccessPermissions>({ ...FULL_USER_PERMISSIONS });
+  const [accessToast, setAccessToast] = useState('');
+
+  React.useEffect(() => {
+    refreshUsersFromBackend().catch(() => {});
+  }, [refreshUsersFromBackend]);
+
+  const pendingCount = users.filter(u => u.status === 'pending').length;
+  const roles = ['All', 'Pending', ...(cohortBatches || []).map(b => b.name), 'Students', 'Faculty', 'Consultants', 'Admins', 'Suspended'];
 
   let filtered = users;
-  if (filter === 'Students') filtered = users.filter(u => u.role === 'student');
+  if (filter === 'Pending') filtered = users.filter(u => u.status === 'pending');
+  else if (filter === 'Students') filtered = users.filter(u => u.role === 'student');
   else if (filter === 'Faculty') filtered = users.filter(u => u.role === 'faculty');
+  else if (filter === 'Consultants') filtered = users.filter(u => u.role === 'consultant');
   else if (filter === 'Admins') filtered = users.filter(u => u.role === 'admin');
-  else if (filter === 'Suspended') filtered = users.filter(u => u.status !== 'active');
+  else if (filter === 'Suspended') filtered = users.filter(u => u.status === 'suspended');
   else if (filter !== 'All') filtered = users.filter(u => u.batch === filter);
 
   if (search.trim()) {
@@ -425,7 +582,7 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
 
   const handleDelete = async (id: string) => {
     const target = users.find(u => u.id === id);
-    deleteUser(id);
+    deleteUser(id, 'admin', currentUser?.email);
     if (currentUser) {
       await adminService.recordAuditLog({
         action: 'USER_DELETED',
@@ -443,8 +600,20 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   const toggleStatus = async (id: string) => {
     const target = users.find(u => u.id === id);
     if (!target) return;
-    const newStatus = target.status === 'active' ? 'suspended' : 'active';
-    updateUser(id, { status: newStatus });
+    const newStatus: AccountStatus = target.status === 'active' ? 'suspended' : 'active';
+    const nextPerms =
+      newStatus === 'active'
+        ? normalizePermissions(target.accessPermissions, true)
+        : target.accessPermissions;
+    updateUser(
+      id,
+      {
+        status: newStatus,
+        ...(newStatus === 'active' ? { accessPermissions: nextPerms } : {}),
+      },
+      'admin',
+      currentUser?.email
+    );
     if (currentUser) {
       await adminService.recordAuditLog({
         action: `USER_${newStatus.toUpperCase()}`,
@@ -458,9 +627,58 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
     }
   };
 
+  const openAccessModal = (target: User) => {
+    setAccessModalUser(target);
+    const defaultStatus: AccountStatus = target.status === 'pending' ? 'active' : target.status;
+    setModalStatus(defaultStatus);
+    setModalBatch(target.batch || '');
+    const currentNormalized = normalizePermissions(target.accessPermissions, target.status === 'active');
+    const anyEnabled = Object.values(currentNormalized).some(Boolean);
+    setModalPermissions(
+      target.status === 'pending' && !anyEnabled
+        ? { ...FULL_USER_PERMISSIONS }
+        : currentNormalized
+    );
+  };
+
+  const handleSaveUserAccess = async () => {
+    if (!accessModalUser) return;
+    const finalPerms =
+      modalStatus === 'pending'
+        ? { ...EMPTY_USER_PERMISSIONS }
+        : { ...modalPermissions };
+    updateUser(
+      accessModalUser.id,
+      {
+        status: modalStatus,
+        batch: modalBatch,
+        accessPermissions: finalPerms,
+      },
+      'admin',
+      currentUser?.email
+    );
+    if (currentUser) {
+      const enabledLabels = RESOURCE_ACCESS_MODULES.filter((m) => finalPerms[m.key])
+        .map((m) => m.shortLabel)
+        .join(', ');
+      await adminService.recordAuditLog({
+        action: modalStatus === 'active' ? 'USER_ALLOWED' : `USER_${modalStatus.toUpperCase()}`,
+        entityType: 'USER',
+        entityId: accessModalUser.id,
+        userId: currentUser.id,
+        userName: currentUser.name || 'Admin',
+        details: `Updated access for ${accessModalUser.name} (${accessModalUser.role}) -> status=${modalStatus}, batch=${modalBatch || 'None'}, modules=[${enabledLabels || 'None'}]`,
+        severity: modalStatus === 'suspended' ? 'warning' : 'info',
+      });
+    }
+    setAccessToast(`Updated access for ${accessModalUser.name}`);
+    setTimeout(() => setAccessToast(''), 2500);
+    setAccessModalUser(null);
+  };
+
   return (
     <div>
-      <Header title="User Management" subtitle={`${filtered.length} users`} showBack onBack={onBack} rightAction={
+      <Header title="User Management" subtitle={`${filtered.length} users • ${pendingCount} pending`} showBack onBack={onBack} rightAction={
         <div className="flex items-center gap-1.5">
           <button onClick={() => setShowDocsModal(true)} className="px-2.5 py-1 rounded-lg bg-teal-500/40 hover:bg-teal-500/60 text-white text-xs font-semibold flex items-center gap-1" title="Manage Student Documentation">
             <i className="fas fa-file-shield text-[10px]" />
@@ -473,6 +691,13 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
       } />
 
       <div className="p-4 space-y-3">
+        {accessToast && (
+          <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2">
+            <i className="fas fa-check-circle text-emerald-600" />
+            <span>{accessToast}</span>
+          </div>
+        )}
+
         {/* Search Input */}
         <div className="relative">
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
@@ -496,83 +721,323 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
             <button
               key={r}
               onClick={() => setFilter(r)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${filter === r ? 'bg-teal-600 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition flex items-center gap-1 ${
+                filter === r
+                  ? r === 'Pending'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-teal-600 text-white shadow-xs'
+                  : r === 'Pending' && pendingCount > 0
+                    ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
             >
-              {r}
+              <span>{r}</span>
+              {r === 'Pending' && pendingCount > 0 && (
+                <span className={`text-[9px] font-extrabold px-1.5 rounded-full ${filter === 'Pending' ? 'bg-white text-amber-700' : 'bg-amber-500 text-white'}`}>
+                  {pendingCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
         {/* User Cards List */}
         {filtered.length === 0 ? (
-          <EmptyState icon="fa-users" title="No Users" message="No users match the search criteria." />
+          <EmptyState icon="fa-users" title="No Users" message={filter === 'Pending' ? 'No pending registration requests.' : 'No users match the search criteria.'} />
         ) : (
-          filtered.map((u) => (
-            <div key={u.id} className="card flex items-center gap-3 p-3 mb-0 hover:border-teal-200 border border-gray-100 transition">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${u.role === 'student' ? 'bg-teal-100 text-teal-800' : u.role === 'faculty' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                }`}>
-                {u.avatar || '👤'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
-                  {u.targetExam && <span className="badge badge-teal text-[8px] py-0 px-1">{u.targetExam}</span>}
-                  {u.batch && u.batch !== 'All' && (
-                    <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[8px] py-0 px-1">
-                      {u.batch}
-                    </span>
-                  )}
+          filtered.map((u) => {
+            const perms = u.role === 'admin'
+              ? FULL_USER_PERMISSIONS
+              : normalizePermissions(u.accessPermissions, u.status === 'active');
+
+            return (
+              <div key={u.id} className={`card p-3 mb-0 border transition space-y-2 ${u.status === 'pending' ? 'border-amber-300 bg-amber-50/30' : 'border-gray-100 hover:border-teal-200'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${
+                    u.role === 'student'
+                      ? 'bg-teal-100 text-teal-800'
+                      : u.role === 'faculty'
+                        ? 'bg-blue-100 text-blue-800'
+                        : u.role === 'consultant'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-purple-100 text-purple-800'
+                  }`}>
+                    {u.avatar || '👤'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
+                      {u.targetExam && <span className="badge badge-teal text-[8px] py-0 px-1">{u.targetExam}</span>}
+                      {u.batch && u.batch !== 'All' && (
+                        <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[8px] py-0 px-1">
+                          {u.batch}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-gray-400 truncate">{u.email}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`badge text-[9px] py-0 px-1.5 ${
+                        u.role === 'student'
+                          ? 'badge-teal'
+                          : u.role === 'faculty'
+                            ? 'badge-navy'
+                            : u.role === 'consultant'
+                              ? 'badge-orange'
+                              : 'badge-green'
+                      }`}>
+                        {u.role}
+                      </span>
+                      <span className={`text-[10px] font-semibold flex items-center gap-1 ${
+                        u.status === 'active'
+                          ? 'text-emerald-600'
+                          : u.status === 'pending'
+                            ? 'text-amber-600'
+                            : 'text-red-500'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          u.status === 'active'
+                            ? 'bg-emerald-500'
+                            : u.status === 'pending'
+                              ? 'bg-amber-500 animate-pulse'
+                              : 'bg-red-500'
+                        }`} />
+                        {u.status === 'pending' ? 'Pending Approval' : u.status === 'active' ? 'Allowed' : 'Suspended'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-1 flex-shrink-0 items-end">
+                    <div className="flex items-center gap-1">
+                      {u.role !== 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => openAccessModal(u)}
+                          className={`text-[10px] px-2 py-1 rounded font-bold transition flex items-center gap-1 ${
+                            u.status === 'pending'
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                              : 'bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200'
+                          }`}
+                          title="Allow user and choose allowed resources"
+                        >
+                          <i className={`fas ${u.status === 'pending' ? 'fa-check-circle' : 'fa-key'} text-[8px]`} />
+                          <span>{u.status === 'pending' ? 'Allow User' : 'Access'}</span>
+                        </button>
+                      )}
+                      {u.id !== currentUser?.id && (
+                        <button
+                          onClick={() => {
+                            startViewingAs(u, 'Administrative preview and test');
+                            onNavigate(u.role === 'student' ? 'home' : 'dashboard');
+                          }}
+                          className="text-[10px] px-2 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition flex items-center gap-1"
+                          title="Impersonate & test user experience"
+                        >
+                          <i className="fas fa-eye text-[8px]" />
+                          <span>View As</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => toggleStatus(u.id)}
+                        className={`text-[10px] px-2 py-0.5 rounded font-medium transition ${
+                          u.status === 'active'
+                            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {u.status === 'active' ? 'Suspend' : 'Activate'}
+                      </button>
+                      {u.id !== currentUser?.id && (
+                        <button
+                          onClick={() => setConfirmDelete(u.id)}
+                          className="text-[10px] p-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition"
+                          title="Delete user"
+                        >
+                          <i className="fas fa-trash text-[9px]" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-[10px] text-gray-400 truncate">{u.email}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`badge text-[9px] py-0 px-1.5 ${u.role === 'student' ? 'badge-teal' : u.role === 'faculty' ? 'badge-navy' : 'badge-green'
-                    }`}>
-                    {u.role}
-                  </span>
-                  <span className={`text-[10px] font-semibold flex items-center gap-1 ${u.status === 'active' ? 'text-emerald-600' : 'text-red-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                    {u.status}
-                  </span>
+
+                {/* Allowed Resource Chips */}
+                {u.role !== 'admin' && (
+                  <div className="flex flex-wrap gap-1 pt-1.5 border-t border-gray-100">
+                    {u.status !== 'active' ? (
+                      <span className="text-[9px] text-amber-700 font-semibold flex items-center gap-1">
+                        <i className="fas fa-lock text-[8px]" />
+                        <span>All resources locked until Admin allows access</span>
+                      </span>
+                    ) : (
+                      RESOURCE_ACCESS_MODULES.map((m) => (
+                        <span
+                          key={m.key}
+                          className={`text-[9px] px-1.5 py-0.5 rounded-md font-semibold flex items-center gap-1 ${
+                            perms[m.key]
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/70'
+                              : 'bg-gray-100 text-gray-400 line-through'
+                          }`}
+                        >
+                          <i className={`fas ${perms[m.key] ? 'fa-check' : 'fa-ban'} text-[7px]`} />
+                          <span>{m.shortLabel}</span>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* User Approval & Granular Resource Access Control Modal */}
+      {accessModalUser && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm max-h-[88vh] overflow-y-auto p-4 shadow-2xl animate-slide-up space-y-3.5">
+            <div className="flex items-center justify-between pb-2.5 border-b border-gray-100">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-gray-900 truncate">Allow & Manage User Access</h3>
+                <p className="text-[11px] text-gray-500 truncate">{accessModalUser.name} ({accessModalUser.role})</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAccessModalUser(null)}
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-xs shrink-0"
+              >
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            {/* 1. Account Status Decision */}
+            <div>
+              <label className="text-[11px] font-bold text-gray-700 block mb-1.5">1. Portal Access Status</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { id: 'active', label: 'Allow', color: 'bg-emerald-600 text-white' },
+                  { id: 'pending', label: 'Pending', color: 'bg-amber-500 text-white' },
+                  { id: 'suspended', label: 'Suspend', color: 'bg-red-600 text-white' },
+                ] as const).map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setModalStatus(st.id)}
+                    className={`py-2 rounded-xl text-xs font-bold transition ${
+                      modalStatus === st.id ? st.color : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Assigned Branch / Batch */}
+            <div>
+              <label className="text-[11px] font-bold text-gray-700 block mb-1">2. Assigned Branch / Batch</label>
+              <select
+                value={modalBatch}
+                onChange={(e) => setModalBatch(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">No Specific Batch Assigned</option>
+                <option value="All">All Batches</option>
+                {(cohortBatches || []).map((b) => (
+                  <option key={b.id} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Granular Resource Permissions */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-gray-700">3. Allowed Resources</label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setModalPermissions({ ...FULL_USER_PERMISSIONS })}
+                    className="text-[10px] font-bold text-teal-700 hover:underline"
+                  >
+                    Allow All
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setModalPermissions({ ...EMPTY_USER_PERMISSIONS })}
+                    className="text-[10px] font-bold text-rose-600 hover:underline"
+                  >
+                    Lock All
+                  </button>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-1 flex-shrink-0">
-                {u.id !== currentUser?.id && (
-                  <button
-                    onClick={() => {
-                      startViewingAs(u, 'Administrative preview and test');
-                      onNavigate(u.role === 'student' ? 'home' : 'dashboard');
-                    }}
-                    className="text-[10px] px-2 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition flex items-center gap-1"
-                    title="Impersonate & test user experience"
-                  >
-                    <i className="fas fa-eye text-[8px]" />
-                    <span>View As</span>
-                  </button>
-                )}
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => toggleStatus(u.id)}
-                    className={`text-[10px] px-2 py-0.5 rounded font-medium transition ${u.status === 'active' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      }`}
-                  >
-                    {u.status === 'active' ? 'Suspend' : 'Activate'}
-                  </button>
-                  <button
-                    onClick={() => setConfirmDelete(u.id)}
-                    className="text-[10px] p-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition"
-                    title="Delete user"
-                  >
-                    <i className="fas fa-trash text-[9px]" />
-                  </button>
+              {modalStatus !== 'active' ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
+                  Set Portal Access Status to <strong>Allow</strong> to grant access to selected resources.
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {RESOURCE_ACCESS_MODULES.map((mod) => {
+                    const enabled = modalPermissions[mod.key];
+                    return (
+                      <label
+                        key={mod.key}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition ${
+                          enabled
+                            ? 'bg-teal-50/70 border-teal-300'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${
+                            enabled ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-500'
+                          }`}>
+                            <i className={`fas ${mod.icon}`} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-gray-800 truncate">{mod.label}</p>
+                            <p className="text-[10px] text-gray-500 truncate">{mod.description}</p>
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          onChange={(e) =>
+                            setModalPermissions((prev) => ({
+                              ...prev,
+                              [mod.key]: e.target.checked,
+                            }))
+                          }
+                          className="w-4 h-4 accent-teal-600 shrink-0"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ))
-        )}
-      </div>
+
+            <div className="flex gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setAccessModalUser(null)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-200 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveUserAccess}
+                className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-sm transition"
+              >
+                {modalStatus === 'active' ? 'Save & Allow User' : 'Save Status'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Student Documentation Verification Management Modal (Agent + Admin Editing) */}
       {showDocsModal && (
@@ -1459,7 +1924,7 @@ export function SendNotification({ onBack }: { onBack: () => void }) {
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Send To</label>
           <div className="grid grid-cols-2 gap-2">
-            {[{ id: 'all', label: 'All Members' }, { id: 'student', label: 'Students' }, { id: 'faculty', label: 'Faculty' }, { id: 'admin', label: 'Admins' }].map((r) => (
+            {[{ id: 'all', label: 'All Members' }, { id: 'student', label: 'Students' }, { id: 'faculty', label: 'Faculty' }, { id: 'consultant', label: 'Consultants' }, { id: 'admin', label: 'Admins' }].map((r) => (
               <button key={r.id} onClick={() => setTargetRole(r.id)} className={`py-2 rounded-lg text-xs font-medium ${targetRole === r.id ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{r.label}</button>
             ))}
           </div>

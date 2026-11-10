@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { DataProvider } from './context/DataContext';
-import { BottomNav } from './components/Navigation';
-import { SplashScreen, LoginScreen } from './screens/AuthScreens';
+import { DataProvider, useData, hasResourceAccess } from './context/DataContext';
+import { BottomNav, AccessRestrictedScreen } from './components/Navigation';
+import { SplashScreen, LoginScreen, PendingApprovalScreen } from './screens/AuthScreens';
+import type { AccessModuleKey } from './features/auth';
 import { StudentHome, StudentCourses, StudentResources, StudentCommunity, StudentProfile, NotificationsScreen, AnnouncementsScreen, AboutScreen, DepartmentsScreen, HelpScreen, CalendarScreen, AnalyticsScreen } from './screens/StudentScreens';
 import { QuizList, QuizDetail, ActiveQuiz, QuizResults } from './screens/QuizScreens';
 import { FacultyDashboard, FacultyCourses, UploadResource, CreateQuiz, FacultySubmissions, FacultyNotifications, FacultyProfile, FacultyAnnouncements, FacultyCommunity, FacultyResources } from './screens/FacultyScreens';
@@ -44,10 +45,37 @@ const consultantNavItems = [
   { id: 'profile', icon: 'fa-user-tie', label: 'Profile' },
 ];
 
+const SCREEN_PERMISSION_MAP: Record<string, { module: AccessModuleKey; label: string }> = {
+  departments: { module: 'branch', label: 'Batches & Branches' },
+  courses: { module: 'courses', label: 'Courses & Curriculum' },
+  'course-detail': { module: 'courses', label: 'Courses & Curriculum' },
+  resources: { module: 'resources', label: 'Learning Resources' },
+  'faculty-resources': { module: 'resources', label: 'Learning Resources' },
+  upload: { module: 'resources', label: 'Learning Resources' },
+  quizzes: { module: 'quizzes', label: 'Quizzes & Examinations' },
+  'quiz-detail': { module: 'quizzes', label: 'Quizzes & Examinations' },
+  'active-quiz': { module: 'quizzes', label: 'Quizzes & Examinations' },
+  'quiz-results': { module: 'quizzes', label: 'Quizzes & Examinations' },
+  'create-quiz': { module: 'quizzes', label: 'Quizzes & Examinations' },
+  submissions: { module: 'quizzes', label: 'Quizzes & Examinations' },
+  announcements: { module: 'announcements', label: 'Announcements & Calendar' },
+  calendar: { module: 'announcements', label: 'Announcements & Calendar' },
+  notifications: { module: 'notifications', label: 'Notifications & Alerts' },
+};
+
 function AppContent() {
   const { user, isAuthenticated, isLoading, isViewingAs, viewingAsUser, stopViewingAs } = useAuth();
+  const { users } = useData();
   const [showSplash, setShowSplash] = useState(true);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('mobile');
+
+  const activeUser = useMemo(() => {
+    if (!user) return null;
+    const liveMatch = users.find(
+      (u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+    );
+    return liveMatch ? { ...user, ...liveMatch, password: '' } : user;
+  }, [user, users]);
 
   const handleDisplayModeChange = (mode: DisplayMode) => {
     // Strictly lock display mode to mobile device aspect ratio
@@ -110,17 +138,19 @@ function AppContent() {
   }, []);
 
   if (showSplash || isLoading) return <SplashScreen onComplete={() => setShowSplash(false)} />;
-  if (!isAuthenticated) return <LoginScreen />;
+  if (!isAuthenticated || !activeUser) return <LoginScreen />;
 
-  const navItems = user?.role === 'admin'
+  const isAccountBlocked = activeUser.role !== 'admin' && activeUser.status !== 'active';
+
+  const navItems = activeUser.role === 'admin'
     ? adminNavItems
-    : user?.role === 'faculty'
+    : activeUser.role === 'faculty'
     ? facultyNavItems
-    : user?.role === 'consultant'
+    : activeUser.role === 'consultant'
     ? consultantNavItems
     : studentNavItems;
   const isTabScreen = navItems.some(item => item.id === currentScreen);
-  const showBottomNav = isTabScreen;
+  const showBottomNav = isTabScreen && !isAccountBlocked;
 
   const ViewingAsBanner = isViewingAs && (
     <div className="bg-purple-600 text-white px-4 py-2 flex items-center justify-between text-xs z-50">
@@ -130,6 +160,18 @@ function AppContent() {
   );
 
   const renderScreen = () => {
+    const permReq = SCREEN_PERMISSION_MAP[currentScreen];
+    if (permReq && !hasResourceAccess(activeUser, permReq.module)) {
+      return <AccessRestrictedScreen moduleName={permReq.label} onBack={handleBack} />;
+    }
+    if (
+      currentScreen === 'resource-view' &&
+      !hasResourceAccess(activeUser, 'resources') &&
+      !hasResourceAccess(activeUser, 'courses')
+    ) {
+      return <AccessRestrictedScreen moduleName="Learning Resources" onBack={handleBack} />;
+    }
+
     // Student screens
     if (user?.role === 'student') {
       switch (currentScreen) {
@@ -234,9 +276,15 @@ function AppContent() {
       <div className={containerClass}>
         <SecurityShield>
           {ViewingAsBanner}
-          <div className="screen-content">{renderScreen()}</div>
-          {user?.role === 'student' && currentScreen !== 'community' && currentScreen !== 'announcements' && currentScreen !== 'active-quiz' && currentScreen !== 'quiz-results' && currentScreen !== 'quiz-detail' && currentScreen !== 'departments' && <StudentAIChatbot />}
-          {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
+          {isAccountBlocked ? (
+            <PendingApprovalScreen user={activeUser} />
+          ) : (
+            <>
+              <div className="screen-content">{renderScreen()}</div>
+              {activeUser.role === 'student' && currentScreen !== 'community' && currentScreen !== 'announcements' && currentScreen !== 'active-quiz' && currentScreen !== 'quiz-results' && currentScreen !== 'quiz-detail' && currentScreen !== 'departments' && <StudentAIChatbot />}
+              {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
+            </>
+          )}
         </SecurityShield>
       </div>
     </>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Header } from '../components/Navigation';
+import { Header, AccessRestrictedScreen } from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
+import { useData, hasResourceAccess } from '../context/DataContext';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 import { CurriculumBrowser } from '../features/curriculum';
 import { resourceService, useResources, DocumentProtectionWrapper, deduplicateAndMergeResources } from '../features/resources';
@@ -216,6 +216,10 @@ function useResourceUrl(resource: any) {
 
 // ==================== RESOURCE VIEWER ====================
 export function ResourceViewer({ onBack, resource }: { onBack: () => void; resource?: any }) {
+  const { user } = useAuth();
+  if (!hasResourceAccess(user, 'resources') && !hasResourceAccess(user, 'courses')) {
+    return <AccessRestrictedScreen moduleName="Learning Resources" onBack={onBack} />;
+  }
   const r = resource || { title: 'Document', type: 'PDF', subject: 'General', size: '5 MB', uploaderName: 'Faculty', date: '2024-12-15' };
 
   const mime = (r.mimeType || r.file?.mime_type || '').toLowerCase();
@@ -1681,6 +1685,10 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
 
   const facultyMembers = users.filter(u => c?.facultyIds?.includes(u.id));
   const enrolledStudents = users.filter(u => c?.studentIds?.includes(u.id));
+
+  if (!hasResourceAccess(user, 'courses')) {
+    return <AccessRestrictedScreen moduleName="Courses & Curriculum" onBack={onBack} />;
+  }
 
   if (!c) return (
     <div>

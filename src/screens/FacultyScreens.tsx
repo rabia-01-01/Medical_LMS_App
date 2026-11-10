@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useData, Course, Resource, deduplicateCompletedChapters } from '../context/DataContext';
-import { Header, StatusBadge, EmptyState } from '../components/Navigation';
+import { useData, hasResourceAccess, Course, Resource, deduplicateCompletedChapters } from '../context/DataContext';
+import { Header, StatusBadge, EmptyState, AccessRestrictedScreen } from '../components/Navigation';
 import { CurriculumBrowser, useSubjects, useChapters } from '../features/curriculum';
 import { resourceService, normalizeResourceType, useResources, deduplicateAndMergeResources } from '../features/resources';
 import { AssessmentCreator } from '../features/assessments';
@@ -24,8 +24,15 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
     const merged = deduplicateAndMergeResources(cloudResources, resources);
     return merged.filter(r => r.uploaderId === user?.id || !r.uploaderId);
   }, [cloudResources, resources, user?.id]);
+  const canAccessCourses = hasResourceAccess(user, 'courses');
+  const canAccessResources = hasResourceAccess(user, 'resources');
+  const canAccessQuizzes = hasResourceAccess(user, 'quizzes');
+  const canAccessAnnouncements = hasResourceAccess(user, 'announcements');
+  const canAccessNotifications = hasResourceAccess(user, 'notifications');
+  const canAccessBranch = hasResourceAccess(user, 'branch');
+
   const myQuizzes = quizzes.filter(q => q.createdById === user?.id);
-  const unreadNotifs = notifications.filter(n => !n.read).length;
+  const unreadNotifs = canAccessNotifications ? notifications.filter(n => !n.read && (n.targetRole === 'all' || n.targetRole === 'faculty')).length : 0;
 
   return (
     <div>
@@ -46,15 +53,15 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div onClick={() => onNavigate('courses')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
-            <p className="text-teal-300 text-lg font-bold">7 Subjects</p>
+            <p className="text-teal-300 text-lg font-bold">{canAccessCourses ? '7 Subjects' : <i className="fas fa-lock text-sm text-amber-300" />}</p>
             <p className="text-gray-300 text-[10px]">Manage Curriculum</p>
           </div>
           <div onClick={() => onNavigate('faculty-resources')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
-            <p className="text-teal-300 text-lg font-bold">{myResources.length}</p>
+            <p className="text-teal-300 text-lg font-bold">{canAccessResources ? myResources.length : <i className="fas fa-lock text-sm text-amber-300" />}</p>
             <p className="text-gray-300 text-[10px]">Resources</p>
           </div>
           <div onClick={() => onNavigate('submissions')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/15 transition">
-            <p className="text-teal-300 text-lg font-bold">{myQuizzes.length}</p>
+            <p className="text-teal-300 text-lg font-bold">{canAccessQuizzes ? myQuizzes.length : <i className="fas fa-lock text-sm text-amber-300" />}</p>
             <p className="text-gray-300 text-[10px]">Quizzes</p>
           </div>
         </div>
@@ -62,28 +69,43 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
       <div className="p-4 space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onNavigate('faculty-resources')} className="card flex flex-col items-center py-4 active:bg-gray-50">
-            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center mb-2"><i className="fas fa-folder text-teal-600" /></div>
+          <button onClick={() => onNavigate('faculty-resources')} className={`card flex flex-col items-center py-4 active:bg-gray-50 ${!canAccessResources ? 'opacity-65' : ''}`}>
+            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center mb-2 relative">
+              <i className="fas fa-folder text-teal-600" />
+              {!canAccessResources && <i className="fas fa-lock text-[9px] text-amber-600 absolute -top-0.5 -right-0.5" />}
+            </div>
             <span className="text-xs font-medium text-gray-700">View Resources</span>
           </button>
-          <button onClick={() => onNavigate('upload')} className="card flex flex-col items-center py-4 active:bg-gray-50 border border-teal-200">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2"><i className="fas fa-cloud-upload-alt text-emerald-600" /></div>
+          <button onClick={() => onNavigate('upload')} className={`card flex flex-col items-center py-4 active:bg-gray-50 border border-teal-200 ${!canAccessResources ? 'opacity-65' : ''}`}>
+            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2 relative">
+              <i className="fas fa-cloud-upload-alt text-emerald-600" />
+              {!canAccessResources && <i className="fas fa-lock text-[9px] text-amber-600 absolute -top-0.5 -right-0.5" />}
+            </div>
             <span className="text-xs font-medium text-gray-700">Upload Resource</span>
           </button>
-          <button onClick={() => onNavigate('create-quiz')} className="card flex flex-col items-center py-4 active:bg-gray-50">
-            <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center mb-2"><i className="fas fa-clipboard-list text-purple-600" /></div>
+          <button onClick={() => onNavigate('create-quiz')} className={`card flex flex-col items-center py-4 active:bg-gray-50 ${!canAccessQuizzes ? 'opacity-65' : ''}`}>
+            <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center mb-2 relative">
+              <i className="fas fa-clipboard-list text-purple-600" />
+              {!canAccessQuizzes && <i className="fas fa-lock text-[9px] text-amber-600 absolute -top-0.5 -right-0.5" />}
+            </div>
             <span className="text-xs font-medium text-gray-700">Create Quiz</span>
           </button>
-          <button onClick={() => onNavigate('announcements')} className="card flex flex-col items-center py-4 active:bg-gray-50">
-            <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center mb-2"><i className="fas fa-bullhorn text-orange-600" /></div>
+          <button onClick={() => onNavigate('announcements')} className={`card flex flex-col items-center py-4 active:bg-gray-50 ${!canAccessAnnouncements ? 'opacity-65' : ''}`}>
+            <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center mb-2 relative">
+              <i className="fas fa-bullhorn text-orange-600" />
+              {!canAccessAnnouncements && <i className="fas fa-lock text-[9px] text-amber-600 absolute -top-0.5 -right-0.5" />}
+            </div>
             <span className="text-xs font-medium text-gray-700">Announcements</span>
           </button>
           <button onClick={() => onNavigate('community')} className="card flex flex-col items-center py-4 active:bg-gray-50">
             <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mb-2"><i className="fas fa-comments text-blue-600" /></div>
             <span className="text-xs font-medium text-gray-700">Community</span>
           </button>
-          <button onClick={() => onNavigate('departments')} className="card flex flex-col items-center py-4 active:bg-gray-50">
-            <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mb-2"><i className="fas fa-layer-group text-indigo-600" /></div>
+          <button onClick={() => onNavigate('departments')} className={`card flex flex-col items-center py-4 active:bg-gray-50 ${!canAccessBranch ? 'opacity-65' : ''}`}>
+            <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mb-2 relative">
+              <i className="fas fa-layer-group text-indigo-600" />
+              {!canAccessBranch && <i className="fas fa-lock text-[9px] text-amber-600 absolute -top-0.5 -right-0.5" />}
+            </div>
             <span className="text-xs font-medium text-gray-700">Batches</span>
           </button>
         </div>
@@ -285,6 +307,10 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
 
 // ==================== FACULTY COURSES / MANAGE CURRICULUM ====================
 export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, data?: any) => void }) {
+  const { user } = useAuth();
+  if (!hasResourceAccess(user, 'courses')) {
+    return <AccessRestrictedScreen moduleName="Courses & Curriculum" onBack={() => onNavigate('dashboard')} />;
+  }
   return (
     <div>
       <Header 
@@ -462,6 +488,10 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
         </div>
       </div>
     );
+  }
+
+  if (!hasResourceAccess(user, 'resources')) {
+    return <AccessRestrictedScreen moduleName="Learning Resources" onBack={onBack} />;
   }
 
   return (
@@ -655,6 +685,10 @@ export function CreateQuiz({ onBack }: { onBack: () => void }) {
     );
   }
 
+  if (!hasResourceAccess(user, 'quizzes')) {
+    return <AccessRestrictedScreen moduleName="Quizzes & Assessment Creation" onBack={onBack} />;
+  }
+
   return <AssessmentCreator onBack={onBack} />;
 }
 
@@ -662,6 +696,9 @@ export function CreateQuiz({ onBack }: { onBack: () => void }) {
 export function FacultySubmissions({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const { quizzes } = useData();
+  if (!hasResourceAccess(user, 'quizzes')) {
+    return <AccessRestrictedScreen moduleName="Quizzes" onBack={onBack} />;
+  }
   const myQuizzes = quizzes.filter(q => q.createdById === user?.id);
 
   return (
@@ -695,6 +732,9 @@ export function FacultySubmissions({ onBack }: { onBack: () => void }) {
 export function FacultyNotifications({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const { notifications, markNotificationRead } = useData();
+  if (!hasResourceAccess(user, 'notifications')) {
+    return <AccessRestrictedScreen moduleName="Notifications" onBack={onBack} />;
+  }
   const myNotifs = notifications.filter(n => n.targetRole === 'all' || n.targetRole === user?.role);
 
   return (
@@ -783,6 +823,10 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [pinned, setPinned] = useState(false);
+
+  if (!hasResourceAccess(user, 'announcements')) {
+    return <AccessRestrictedScreen moduleName="Announcements" onBack={onBack} />;
+  }
 
   const handlePost = () => {
     if (!title || !content || !user) return;
@@ -1040,6 +1084,10 @@ export function FacultyResources({ onBack, onNavigate }: { onBack: () => void; o
   if (search.trim()) {
     const q = search.toLowerCase();
     filtered = filtered.filter(r => r.title.toLowerCase().includes(q) || (r.subject && r.subject.toLowerCase().includes(q)));
+  }
+
+  if (!hasResourceAccess(user, 'resources')) {
+    return <AccessRestrictedScreen moduleName="Learning Resources" onBack={onBack} />;
   }
 
   const handleDelete = async (resourceId: string) => {

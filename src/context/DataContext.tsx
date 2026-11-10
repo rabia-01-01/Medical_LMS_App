@@ -1,6 +1,22 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { format } from 'date-fns';
 import { DEFAULT_CURRICULUM } from '../features/curriculum/curriculumService';
+import {
+  type AccountStatus,
+  type UserAccessPermissions,
+  FULL_USER_PERMISSIONS,
+  EMPTY_USER_PERMISSIONS,
+  RESOURCE_ACCESS_MODULES,
+  normalizePermissions,
+  hasResourceAccess,
+  isUserApproved,
+} from '../features/auth';
+import {
+  fetchBackendUsers,
+  createBackendUserAsAdmin,
+  updateBackendUserAccess,
+  deleteBackendUser,
+} from '../services/userAccessApi';
 import {
   ConsultancyChecklistItem,
   ConsultancyChecklistSubItem,
@@ -10,6 +26,17 @@ import {
   createDefaultChecklist,
   createNewApplicantChecklist,
 } from '../features/consultancy/types';
+
+export {
+  type AccountStatus,
+  type UserAccessPermissions,
+  FULL_USER_PERMISSIONS,
+  EMPTY_USER_PERMISSIONS,
+  RESOURCE_ACCESS_MODULES,
+  normalizePermissions,
+  hasResourceAccess,
+  isUserApproved,
+};
 
 export interface User {
   id: string;
@@ -21,7 +48,8 @@ export interface User {
   avatar: string;
   department?: string;
   batch?: string; // 'Batch 1 (Dec)' | 'Batch 2 (May/June)'
-  status: 'active' | 'suspended';
+  status: AccountStatus;
+  accessPermissions?: UserAccessPermissions;
   createdAt: string;
   targetExam?: string;
 }
@@ -239,11 +267,12 @@ export const DEFAULT_COHORT_BATCHES: CohortBatch[] = [];
 interface DataContextType {
   // Users (Admin Only Management)
   users: User[];
-  addUser: (user: Omit<User, 'id' | 'createdAt'>, actorRole?: string) => void;
-  updateUser: (id: string, data: Partial<User>, actorRole?: string) => void;
-  deleteUser: (id: string, actorRole?: string) => void;
+  addUser: (user: Omit<User, 'id' | 'createdAt'> & { id?: string }, actorRole?: string, actorEmail?: string) => void;
+  updateUser: (id: string, data: Partial<User>, actorRole?: string, actorEmail?: string) => void;
+  deleteUser: (id: string, actorRole?: string, actorEmail?: string) => void;
   getUserById: (id: string) => User | undefined;
   getUsersByRole: (role: string) => User[];
+  refreshUsersFromBackend: () => Promise<User[]>;
 
   // Departments & Batches
   departments: Department[];
@@ -513,6 +542,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           department: 'Academic Directorate',
           batch: 'All',
           status: 'active',
+          accessPermissions: { ...FULL_USER_PERMISSIONS },
           createdAt: new Date().toISOString(),
         },
         {
@@ -526,6 +556,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           department: 'Pre-Clinical Sciences',
           batch: 'All',
           status: 'active',
+          accessPermissions: { ...FULL_USER_PERMISSIONS },
           createdAt: new Date().toISOString(),
         },
         {
@@ -539,6 +570,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           department: 'Pre-Clinical Sciences',
           batch: '',
           status: 'active',
+          accessPermissions: { ...FULL_USER_PERMISSIONS },
           createdAt: new Date().toISOString(),
           targetExam: 'NEET-UG',
         },
@@ -553,6 +585,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           department: 'Overseas Admissions & Consular Directorate',
           batch: 'All',
           status: 'active',
+          accessPermissions: { ...FULL_USER_PERMISSIONS },
           createdAt: new Date().toISOString(),
           targetExam: 'IMAT & Study in Italy Admissions',
         },
@@ -571,6 +604,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         department: 'Overseas Admissions & Consular Directorate',
         batch: 'All',
         status: 'active',
+        accessPermissions: { ...FULL_USER_PERMISSIONS },
         createdAt: new Date().toISOString(),
         targetExam: 'IMAT & Study in Italy Admissions',
       });
@@ -578,10 +612,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem('sim_users', JSON.stringify(filtered));
     } catch {}
-    return filtered.map((u) => ({
-      ...u,
-      batch: u.batch || (u.role === 'student' ? '' : 'All'),
-    }));
+    return filtered.map((u) => {
+      const normalizedStatus: AccountStatus =
+        u.role === 'admin'
+          ? 'active'
+          : u.status === 'pending' || u.status === 'suspended' || u.status === 'active'
+            ? u.status
+            : 'active';
+      return {
+        ...u,
+        batch: u.batch || (u.role === 'student' ? '' : 'All'),
+        status: normalizedStatus,
+        accessPermissions:
+          u.role === 'admin'
+            ? { ...FULL_USER_PERMISSIONS }
+            : normalizePermissions(u.accessPermissions, normalizedStatus === 'active'),
+      };
+    });
   });
 
   const [departments, setDepartments] = useState<Department[]>(() => {
@@ -823,7 +870,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   });
 
   // Persist to localStorage
-  useEffect(() => { saveToStorage('sim_users', users); }, [users]);
+  useEffect(() => {
+    saveToStorage('sim_users', users);
+    try {
+      window.dispatchEvent(new Event('lms-users-updated'));
+    } catch {}
+  }, [users]);
   useEffect(() => { saveToStorage('sim_departments', departments); }, [departments]);
   useEffect(() => { saveToStorage('sim_courses', courses); }, [courses]);
   useEffect(() => { saveToStorage('sim_resources', resources); }, [resources]);
@@ -838,32 +890,162 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveToStorage('sim_consultancy_dossiers', consultancyDossiers); }, [consultancyDossiers]);
   useEffect(() => { saveToStorage('sim_consultancy_opt_in', consultancyOptInMap); }, [consultancyOptInMap]);
 
-  // Users (Admin Only)
-  const addUser = (user: Omit<User, 'id' | 'createdAt'>, actorRole?: string) => {
+  const mergeWithBackendUsers = useCallback((remoteUsers: any[], currentLocal: User[]): User[] => {
+    const byEmail = new Map<string, User>();
+    currentLocal.forEach((u) => {
+      byEmail.set(u.email.toLowerCase(), u);
+    });
+    const merged: User[] = remoteUsers.map((r) => {
+      const localMatch = byEmail.get(r.email.toLowerCase()) || currentLocal.find((u) => u.id === r.id);
+      const status: AccountStatus = r.role === 'admin' ? 'active' : (r.status || 'pending');
+      return {
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        phone: r.phone || '',
+        password: localMatch?.password || '',
+        role: r.role,
+        avatar: r.avatar || localMatch?.avatar || '👤',
+        department: r.department,
+        batch: typeof r.batch === 'string' ? r.batch : (localMatch?.batch ?? ''),
+        targetExam: r.targetExam,
+        status,
+        accessPermissions: normalizePermissions(r.accessPermissions, status === 'active'),
+        createdAt: r.createdAt || localMatch?.createdAt || new Date().toISOString(),
+      };
+    });
+    const remoteEmails = new Set(remoteUsers.map((r) => r.email.toLowerCase()));
+    currentLocal.forEach((u) => {
+      if (!remoteEmails.has(u.email.toLowerCase())) {
+        merged.push(u);
+      }
+    });
+    return merged;
+  }, []);
+
+  const refreshUsersFromBackend = useCallback(async (): Promise<User[]> => {
+    const remote = await fetchBackendUsers();
+    if (!remote) return users;
+    let nextList: User[] = users;
+    setUsers((prev) => {
+      nextList = mergeWithBackendUsers(remote, prev);
+      return nextList;
+    });
+    return nextList;
+  }, [mergeWithBackendUsers, users]);
+
+  useEffect(() => {
+    fetchBackendUsers().then((remote) => {
+      if (!remote) return;
+      setUsers((prev) => mergeWithBackendUsers(remote, prev));
+    });
+  }, [mergeWithBackendUsers]);
+
+  useEffect(() => {
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key === 'sim_users' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setUsers(parsed);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageSync);
+    return () => window.removeEventListener('storage', handleStorageSync);
+  }, []);
+
+  // Users (Admin Only Management & Controlled Self-Registration)
+  const addUser = (user: Omit<User, 'id' | 'createdAt'> & { id?: string }, actorRole?: string, actorEmail?: string) => {
     if (actorRole && actorRole !== 'admin') {
       console.warn('[DataContext] Permission Denied: ONLY Admin can add users.');
       return;
     }
-    const newUser: User = { ...user, id: generateId(), createdAt: new Date().toISOString() };
-    setUsers(prev => [...prev, newUser]);
-    addAuditLog({ action: 'User Created', userId: 'system', userName: 'Administrator', details: `Created user: ${user.name} (${user.role})` });
+    const status: AccountStatus = user.role === 'admin' ? 'active' : (user.status || 'pending');
+    const accessPermissions =
+      user.role === 'admin'
+        ? { ...FULL_USER_PERMISSIONS }
+        : normalizePermissions(user.accessPermissions, status === 'active');
+
+    const newUser: User = {
+      ...user,
+      id: user.id || generateId(),
+      status,
+      accessPermissions,
+      createdAt: new Date().toISOString(),
+    };
+    setUsers(prev => {
+      const idx = prev.findIndex(u => u.email.toLowerCase() === newUser.email.toLowerCase());
+      if (idx !== -1) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...newUser, id: copy[idx].id };
+        return copy;
+      }
+      return [...prev, newUser];
+    });
+    if (actorRole === 'admin') {
+      createBackendUserAsAdmin(newUser, { adminEmail: actorEmail }).catch(() => {});
+    }
+    addAuditLog({ action: 'User Created', userId: 'system', userName: actorRole === 'admin' ? 'Administrator' : newUser.name, details: `Created user: ${user.name} (${user.role}) [${status}]` });
   };
 
-  const updateUser = (id: string, data: Partial<User>, actorRole?: string) => {
+  const computeUpdatedUser = (u: User, data: Partial<User>): User => {
+    const nextStatus: AccountStatus = u.role === 'admin' ? 'active' : (data.status || u.status);
+    let nextPermissions = u.accessPermissions
+      ? normalizePermissions(u.accessPermissions, u.status === 'active')
+      : normalizePermissions(null, u.status === 'active');
+
+    if (data.accessPermissions) {
+      nextPermissions = normalizePermissions(data.accessPermissions, nextStatus === 'active');
+    } else if (nextStatus === 'active' && u.status !== 'active') {
+      const anyEnabled = Object.values(nextPermissions).some(Boolean);
+      if (!anyEnabled) nextPermissions = { ...FULL_USER_PERMISSIONS };
+    } else if (nextStatus === 'pending') {
+      nextPermissions = { ...EMPTY_USER_PERMISSIONS };
+    }
+
+    return {
+      ...u,
+      ...data,
+      status: nextStatus,
+      accessPermissions: u.role === 'admin' ? { ...FULL_USER_PERMISSIONS } : nextPermissions,
+    };
+  };
+
+  const updateUser = (id: string, data: Partial<User>, actorRole?: string, actorEmail?: string) => {
     if (actorRole && actorRole !== 'admin') {
       console.warn('[DataContext] Permission Denied: ONLY Admin can update users.');
       return;
     }
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...data } : u));
+    const existingTarget = users.find(u => u.id === id);
+    if (existingTarget) {
+      const updated = computeUpdatedUser(existingTarget, data);
+      updateBackendUserAccess(
+        id,
+        {
+          email: existingTarget.email,
+          status: updated.status,
+          batch: updated.batch,
+          accessPermissions: updated.accessPermissions,
+          role: updated.role,
+          department: updated.department,
+          targetExam: updated.targetExam,
+        },
+        { adminEmail: actorEmail }
+      ).catch(() => {});
+    }
+    setUsers(prev => prev.map(u => (u.id === id ? computeUpdatedUser(u, data) : u)));
   };
 
-  const deleteUser = (id: string, actorRole?: string) => {
+  const deleteUser = (id: string, actorRole?: string, actorEmail?: string) => {
     if (actorRole && actorRole !== 'admin') {
       console.warn('[DataContext] Permission Denied: ONLY Admin can delete users.');
       return;
     }
     const user = users.find(u => u.id === id);
     setUsers(prev => prev.filter(u => u.id !== id));
+    deleteBackendUser(id, { adminEmail: actorEmail }).catch(() => {});
     addAuditLog({ action: 'User Deleted', userId: 'system', userName: 'Administrator', details: `Deleted user: ${user?.name}` });
   };
 
@@ -1817,7 +1999,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      users, addUser, updateUser, deleteUser, getUserById, getUsersByRole,
+      users, addUser, updateUser, deleteUser, getUserById, getUsersByRole, refreshUsersFromBackend,
       departments, addDepartment, deleteDepartment, updateDepartment,
       cohortBatches, addCohortBatch, deleteCohortBatch,
       courses, addCourse, deleteCourse, updateCourse, enrollStudents, unenrollStudent,

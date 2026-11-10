@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import type { UserRole as DbUserRole } from '../../types/database';
-import type { AuthUser, AppUserRole, SignInPayload, SignUpPayload, AuthResult } from './types';
+import type { AuthUser, AppUserRole, SignInPayload, SignUpPayload, AuthResult, AccountStatus, UserAccessPermissions } from './types';
+import { EMPTY_USER_PERMISSIONS, FULL_USER_PERMISSIONS, normalizePermissions } from './accessControl';
 
 /**
  * Normalizes PostgreSQL ENUM role to application lowercase role.
@@ -82,6 +83,22 @@ export async function fetchUserProfile(
         facultyId = faculty?.id;
       }
 
+      const resolvedStatus: AccountStatus =
+        appRole === 'admin'
+          ? 'active'
+          : metadata?.approval_status === 'pending' || metadata?.approval_status === 'suspended' || metadata?.approval_status === 'active'
+            ? metadata.approval_status
+            : 'active';
+
+      const resolvedPermissions: UserAccessPermissions =
+        appRole === 'admin'
+          ? { ...FULL_USER_PERMISSIONS }
+          : metadata?.access_permissions
+            ? normalizePermissions(metadata.access_permissions, resolvedStatus === 'active')
+            : resolvedStatus === 'active'
+              ? { ...FULL_USER_PERMISSIONS }
+              : { ...EMPTY_USER_PERMISSIONS };
+
       return {
         id: profile.id,
         name: profile.full_name,
@@ -90,7 +107,8 @@ export async function fetchUserProfile(
         role: appRole,
         avatar: profile.avatar_url || getDefaultAvatar(appRole),
         department: metadata?.department,
-        status: 'active',
+        status: resolvedStatus,
+        accessPermissions: resolvedPermissions,
         createdAt: profile.created_at,
         targetExam: metadata?.target_exam || metadata?.targetExam,
         dbRole: profile.role,
@@ -99,12 +117,23 @@ export async function fetchUserProfile(
       };
     }
 
-    // Auto-heal profile if row doesn't exist yet
+    // Auto-heal profile if row doesn't exist yet (e.g. fresh Google OAuth signup -> pending until admin allows)
     const rawRole = metadata?.role ? mapDbRoleToAppRole(metadata.role) : 'student';
-    const dbRole = mapAppRoleToDbRole(rawRole);
+    const safeRole: AppUserRole = rawRole === 'admin' ? 'student' : rawRole;
+    const dbRole = mapAppRoleToDbRole(safeRole);
     const fullName = metadata?.full_name || metadata?.name || userEmail?.split('@')[0] || 'Medical User';
-    const avatar = metadata?.avatar_url || getDefaultAvatar(rawRole);
+    const avatar = metadata?.avatar_url || getDefaultAvatar(safeRole);
     const phone = metadata?.phone || null;
+    const autoStatus: AccountStatus =
+      metadata?.approval_status === 'active' || metadata?.approval_status === 'suspended'
+        ? metadata.approval_status
+        : 'pending';
+    const autoPermissions: UserAccessPermissions =
+      metadata?.access_permissions
+        ? normalizePermissions(metadata.access_permissions, autoStatus === 'active')
+        : autoStatus === 'active'
+          ? { ...FULL_USER_PERMISSIONS }
+          : { ...EMPTY_USER_PERMISSIONS };
 
     const { data: inserted, error: insertError } = await supabase
       .from('profiles')
@@ -123,9 +152,9 @@ export async function fetchUserProfile(
     }
 
     // Ensure student or faculty extension table record
-    if (rawRole === 'student') {
+    if (safeRole === 'student') {
       await supabase.from('students').upsert({ profile_id: userId }, { onConflict: 'profile_id' });
-    } else if (rawRole === 'faculty') {
+    } else if (safeRole === 'faculty') {
       await supabase.from('faculty').upsert(
         { profile_id: userId, designation: metadata?.department || 'Faculty' },
         { onConflict: 'profile_id' }
@@ -137,10 +166,11 @@ export async function fetchUserProfile(
       name: fullName,
       email: userEmail || '',
       phone: phone || '',
-      role: rawRole,
+      role: safeRole,
       avatar: avatar,
       department: metadata?.department,
-      status: 'active',
+      status: autoStatus,
+      accessPermissions: autoPermissions,
       createdAt: inserted?.created_at || new Date().toISOString(),
       targetExam: metadata?.target_exam || metadata?.targetExam,
       dbRole,
@@ -218,6 +248,8 @@ export async function signUpUser({
   role,
   department,
   targetExam,
+  status,
+  accessPermissions,
 }: SignUpPayload): Promise<AuthResult<AuthUser>> {
   if (!isSupabaseConfigured()) {
     return {
@@ -229,6 +261,10 @@ export async function signUpUser({
   try {
     const dbRole = mapAppRoleToDbRole(role);
     const avatar = getDefaultAvatar(role);
+    const approvalStatus: AccountStatus = role === 'admin' ? 'active' : (status || 'pending');
+    const resolvedPermissions: UserAccessPermissions = role === 'admin'
+      ? { ...FULL_USER_PERMISSIONS }
+      : normalizePermissions(accessPermissions, approvalStatus === 'active');
 
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
@@ -241,6 +277,8 @@ export async function signUpUser({
           department: department?.trim() || '',
           target_exam: targetExam || '',
           avatar_url: avatar,
+          approval_status: approvalStatus,
+          access_permissions: resolvedPermissions,
         },
       },
     });
@@ -293,7 +331,8 @@ export async function signUpUser({
       role,
       avatar,
       department,
-      status: 'active',
+      status: approvalStatus,
+      accessPermissions: resolvedPermissions,
       createdAt: new Date().toISOString(),
       targetExam,
       dbRole,

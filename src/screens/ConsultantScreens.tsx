@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
+import { useData, hasResourceAccess } from '../context/DataContext';
 import {
   StudentConsultancyDossier,
   ConsultancyChecklistItem,
@@ -94,11 +94,14 @@ export function ConsultantDashboard({
   const [selectedStageForInspection, setSelectedStageForInspection] = useState<number | null>(null);
   const [showStageInspectionModal, setShowStageInspectionModal] = useState(false);
 
+  const canAccessNotifications = hasResourceAccess(user, 'notifications');
+
   const consultantNotifs = useMemo(() => {
+    if (!canAccessNotifications) return [];
     return (notifications || []).filter(
       (n) => n.targetRole === 'consultant' || n.targetRole === 'all'
     );
-  }, [notifications]);
+  }, [notifications, canAccessNotifications]);
 
   const unreadConsultantNotifs = useMemo(() => {
     return consultantNotifs.filter((n) => !n.read);

@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { useData, deduplicateCompletedChapters } from '../context/DataContext';
-import { Header, BottomNav, SearchBar, EmptyState, StatusBadge } from '../components/Navigation';
+import { useData, hasResourceAccess, deduplicateCompletedChapters } from '../context/DataContext';
+import { Header, BottomNav, SearchBar, EmptyState, StatusBadge, AccessRestrictedScreen } from '../components/Navigation';
 import { CurriculumBrowser } from '../features/curriculum';
 import { useResources, deduplicateAndMergeResources } from '../features/resources';
 import { PerformanceAnalyticsView, useStudentAnalytics } from '../features/attempts';
@@ -15,9 +15,15 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
   const { user } = useAuth();
   const { courses, announcements, communityMessages, quizzes, cohortBatches, notifications, getStudentProgress, getStudentDossier, isConsultancyOptedIn, setConsultancyOptIn, studentDocuments } = useData();
   const { assessments } = useAssessments();
+  const canAccessBranch = hasResourceAccess(user, 'branch');
+  const canAccessCourses = hasResourceAccess(user, 'courses');
+  const canAccessQuizzes = hasResourceAccess(user, 'quizzes');
+  const canAccessAnnouncements = hasResourceAccess(user, 'announcements');
+  const canAccessNotifications = hasResourceAccess(user, 'notifications');
+  const canAccessResources = hasResourceAccess(user, 'resources');
   const studentBatch = user?.batch || '';
-  const myCourses = courses.filter(c => (!c.batch || c.batch === 'All' || !studentBatch || c.batch === studentBatch) && c.studentIds.includes(user?.id || ''));
-  const unreadNotifs = notifications.filter(n => !n.read).length;
+  const myCourses = canAccessCourses ? courses.filter(c => (!c.batch || c.batch === 'All' || (Boolean(studentBatch) && (studentBatch === 'All' || c.batch === studentBatch))) && c.studentIds.includes(user?.id || '')) : [];
+  const unreadNotifs = canAccessNotifications ? notifications.filter(n => !n.read && (n.targetRole === 'all' || n.targetRole === 'student')).length : 0;
   const myProgress = getStudentProgress(user?.id);
   const myCompletedChapters = deduplicateCompletedChapters(myProgress?.completedChapters || []).length;
   const myCompletedTopics = (myProgress?.completedTopicDetails || []).filter(d => d.name && !d.name.toLowerCase().includes('body fluids') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.name.trim())).length || (myProgress?.completedTopics || []).filter(t => !t.toLowerCase().includes('body fluids') && !t.includes('-')).length;
@@ -62,16 +68,16 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-teal-300 text-lg font-bold">{myCourses.length}</p>
+          <div onClick={() => onNavigate('courses')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/20 active:scale-95 transition">
+            <p className="text-teal-300 text-lg font-bold">{canAccessCourses ? myCourses.length : <i className="fas fa-lock text-sm text-amber-300" />}</p>
             <p className="text-gray-300 text-[10px]">Courses</p>
           </div>
           <div onClick={() => onNavigate('quizzes')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/20 active:scale-95 transition">
-            <p className="text-teal-300 text-lg font-bold">{totalAssessmentsCount}</p>
+            <p className="text-teal-300 text-lg font-bold">{canAccessQuizzes ? totalAssessmentsCount : <i className="fas fa-lock text-sm text-amber-300" />}</p>
             <p className="text-gray-300 text-[10px]">Active Drills</p>
           </div>
           <div onClick={() => onNavigate('departments')} className="bg-white/10 rounded-xl p-3 text-center backdrop-blur-sm cursor-pointer hover:bg-white/20 active:scale-95 transition">
-            <p className="text-teal-300 text-lg font-bold">{cohortBatches.length}</p>
+            <p className="text-teal-300 text-lg font-bold">{canAccessBranch ? cohortBatches.length : <i className="fas fa-lock text-sm text-amber-300" />}</p>
             <p className="text-gray-300 text-[10px]">Batches</p>
           </div>
         </div>
@@ -79,27 +85,43 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
       <div className="italy-accent"><div className="green" /><div className="white" /><div className="red" /></div>
 
       <div className="p-4 space-y-4">
-        {/* Exam Preparation */}
-        <div>
-          <h2 className="text-gray-800 font-bold text-sm mb-3">Exam Preparation</h2>
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
-            {[
-              { name: 'NEET', color: 'bg-teal-500', icon: 'fa-book-medical' },
-              { name: 'IMAT', color: 'bg-blue-500', icon: 'fa-globe-europe' },
-              { name: 'UCAT', color: 'bg-purple-500', icon: 'fa-stethoscope' },
-              { name: 'MCAT', color: 'bg-indigo-500', icon: 'fa-user-md' },
-            ].map((exam) => (
-              <button key={exam.name} onClick={() => onNavigate('courses')} className="flex-shrink-0 w-20">
-                <div className={`${exam.color} w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-1`}>
-                  <i className={`fas ${exam.icon} text-white`} />
-                </div>
-                <p className="text-xs text-center text-gray-600 font-medium">{exam.name}</p>
-              </button>
-            ))}
+        {/* Allowed Resource Quick Summary Banner when partial permissions */}
+        {(!canAccessResources || !canAccessBranch || !canAccessCourses || !canAccessQuizzes || !canAccessAnnouncements || !canAccessNotifications) && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900">
+            <i className="fas fa-shield-alt text-amber-600 mt-0.5" />
+            <div>
+              <p className="font-bold">Custom Resource Access Active</p>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                Some portal resources are currently restricted by the Administrator.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Exam Preparation */}
+        {canAccessCourses && (
+          <div>
+            <h2 className="text-gray-800 font-bold text-sm mb-3">Exam Preparation</h2>
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
+              {[
+                { name: 'NEET', color: 'bg-teal-500', icon: 'fa-book-medical' },
+                { name: 'IMAT', color: 'bg-blue-500', icon: 'fa-globe-europe' },
+                { name: 'UCAT', color: 'bg-purple-500', icon: 'fa-stethoscope' },
+                { name: 'MCAT', color: 'bg-indigo-500', icon: 'fa-user-md' },
+              ].map((exam) => (
+                <button key={exam.name} onClick={() => onNavigate('courses')} className="flex-shrink-0 w-20">
+                  <div className={`${exam.color} w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-1`}>
+                    <i className={`fas ${exam.icon} text-white`} />
+                  </div>
+                  <p className="text-xs text-center text-gray-600 font-medium">{exam.name}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Curriculum Study Progress */}
+        {canAccessCourses && (
         <div className="card bg-gradient-to-br from-teal-50 via-emerald-50/50 to-white border border-teal-200/80 p-3.5 rounded-2xl shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -142,6 +164,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             </div>
           </div>
         </div>
+        )}
 
         {/* Study Abroad & Consular Admissions Dossier (Handwritten 8-Stage Checklist) */}
         {isOptedIn && myDossier ? (
@@ -516,6 +539,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
         )}
 
         {/* My Courses */}
+        {canAccessCourses && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-gray-800 font-bold text-sm">My Courses</h2>
@@ -541,8 +565,10 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             ))
           )}
         </div>
+        )}
 
         {/* Academic Cohort Batches */}
+        {canAccessBranch && (
         <div>
           <div className="flex items-center justify-between mb-2.5">
             <h2 className="text-gray-800 font-bold text-sm">Academic Batches</h2>
@@ -585,9 +611,10 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
             </div>
           )}
         </div>
+        )}
 
         {/* Announcements */}
-        {announcements.length > 0 && (
+        {canAccessAnnouncements && announcements.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-gray-800 font-bold text-sm">Announcements</h2>
@@ -609,7 +636,7 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
         )}
 
         {/* Upcoming Quizzes */}
-        {quizzes.filter(q => q.status === 'active').length > 0 && (
+        {canAccessQuizzes && quizzes.filter(q => q.status === 'active').length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-gray-800 font-bold text-sm">Upcoming Quizzes</h2>
@@ -692,6 +719,10 @@ export function StudentCourses({ onNavigate }: { onNavigate: (screen: string, da
     return true;
   };
 
+  if (!hasResourceAccess(user, 'courses')) {
+    return <AccessRestrictedScreen moduleName="Courses & Medical Curriculum" onBack={() => onNavigate('home')} />;
+  }
+
   return (
     <div>
       <Header
@@ -721,6 +752,10 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
     return deduplicateAndMergeResources(cloudResources, localResources);
   }, [cloudResources, localResources]);
 
+  if (!hasResourceAccess(user, 'resources')) {
+    return <AccessRestrictedScreen moduleName="Learning Resources" onBack={() => onNavigate('home')} />;
+  }
+
   // Show resources uploaded by Admin and Faculty to students
   const studentBatch = user?.batch || '';
   let filtered = allResources.filter((r: any) => {
@@ -731,7 +766,7 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
     );
     if (isTopicDocument) return false;
 
-    return (r.status === 'published' || r.status === 'PUBLISHED' || !r.status) && (!r.batch || r.batch === 'All' || !studentBatch || r.batch === studentBatch);
+    return (r.status === 'published' || r.status === 'PUBLISHED' || !r.status) && (!r.batch || r.batch === 'All' || (Boolean(studentBatch) && (studentBatch === 'All' || r.batch === studentBatch)));
   });
   if (filter !== 'All') {
     const fLower = filter.toLowerCase();
@@ -1123,6 +1158,9 @@ export function StudentProfile({ onNavigate }: { onNavigate: (screen: string) =>
 export function NotificationsScreen({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const { notifications, markNotificationRead, markAllRead } = useData();
+  if (!hasResourceAccess(user, 'notifications')) {
+    return <AccessRestrictedScreen moduleName="Notifications" onBack={onBack} />;
+  }
   const myNotifs = notifications.filter(n => n.targetRole === 'all' || n.targetRole === user?.role);
 
   return (
@@ -1155,7 +1193,11 @@ export function NotificationsScreen({ onBack }: { onBack: () => void }) {
 
 // ==================== ANNOUNCEMENTS ====================
 export function AnnouncementsScreen({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
   const { announcements } = useData();
+  if (!hasResourceAccess(user, 'announcements')) {
+    return <AccessRestrictedScreen moduleName="Announcements" onBack={onBack} />;
+  }
   return (
     <div>
       <Header title="Announcements" showBack onBack={onBack} />
@@ -1362,6 +1404,9 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
 export function DepartmentsScreen({ onBack }: { onBack: () => void }) {
   const { users, cohortBatches } = useData();
   const { user } = useAuth();
+  if (!hasResourceAccess(user, 'branch')) {
+    return <AccessRestrictedScreen moduleName="Batches & Branches" onBack={onBack} />;
+  }
   const studentBatch = user?.batch || '';
 
   const batchesList = (cohortBatches || []).map((b) => {
@@ -1516,6 +1561,10 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
   const [newEventDate, setNewEventDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [newEventTime, setNewEventTime] = useState('10:00 AM');
   const [newEventType, setNewEventType] = useState<'announcement' | 'exam' | 'lecture' | 'deadline'>('lecture');
+
+  if (!hasResourceAccess(user, 'announcements')) {
+    return <AccessRestrictedScreen moduleName="Academic Calendar & Announcements" onBack={onBack} />;
+  }
 
   const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
 

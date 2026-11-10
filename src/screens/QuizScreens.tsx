@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { useData } from '../context/DataContext';
+import { useData, hasResourceAccess } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { Header, EmptyState } from '../components/Navigation';
+import { Header, EmptyState, AccessRestrictedScreen } from '../components/Navigation';
 import {
   useAssessments,
   AssessmentRunner,
@@ -60,9 +60,10 @@ function mapLegacyQuizToAssessment(q: any): AssessmentWithQuestions {
     updated_at: q.endDate || new Date().toISOString(),
     subjectName: q.subject || 'General Medical',
     creatorName: q.createdByName || 'Faculty',
+    batch: q.batch || 'All',
     questionCount: mappedQuestions.length,
     questions: mappedQuestions,
-  };
+  } as AssessmentWithQuestions & { batch?: string };
 }
 
 // ==================== QUIZZES / ASSESSMENTS LIST ====================
@@ -107,6 +108,11 @@ export function QuizList({
 
   let filtered = allAssessments;
 
+  if (user?.role === 'student') {
+    const studentBatch = user.batch || '';
+    filtered = filtered.filter((a: any) => !a.batch || a.batch === 'All' || (Boolean(studentBatch) && (studentBatch === 'All' || a.batch === studentBatch)));
+  }
+
   if (filter === 'DPP') {
     filtered = filtered.filter((a) => a.assessment_type === 'DPP');
   } else if (filter === 'PYQ') {
@@ -125,6 +131,10 @@ export function QuizList({
         (a.subjectName && a.subjectName.toLowerCase().includes(q)) ||
         (a.description && a.description.toLowerCase().includes(q))
     );
+  }
+
+  if (!hasResourceAccess(user, 'quizzes')) {
+    return <AccessRestrictedScreen moduleName="Quizzes & Examinations" onBack={onBack} />;
   }
 
   return (
@@ -262,6 +272,7 @@ export function QuizDetail({
   onNavigate: (screen: string, data?: any) => void;
   quiz?: any;
 }) {
+  const { user } = useAuth();
   const asmt: AssessmentWithQuestions | null = useMemo(() => {
     if (!quiz) return null;
     if (quiz.questions && quiz.questions.length > 0 && quiz.questions[0].options) {
@@ -271,6 +282,10 @@ export function QuizDetail({
   }, [quiz]);
 
   const [showInstructions, setShowInstructions] = useState(false);
+
+  if (!hasResourceAccess(user, 'quizzes')) {
+    return <AccessRestrictedScreen moduleName="Quizzes & Examinations" onBack={onBack} />;
+  }
 
   if (!asmt) {
     return (
@@ -454,6 +469,7 @@ export function ActiveQuiz({
   onNavigate: (screen: string, data?: any) => void;
   quiz?: any;
 }) {
+  const { user } = useAuth();
   const resolvedAssessment: AssessmentWithQuestions | null = useMemo(() => {
     if (!quiz) return null;
     if (quiz.questions && quiz.questions.length > 0 && quiz.questions[0].options) {
@@ -461,6 +477,10 @@ export function ActiveQuiz({
     }
     return mapLegacyQuizToAssessment(quiz);
   }, [quiz]);
+
+  if (!hasResourceAccess(user, 'quizzes')) {
+    return <AccessRestrictedScreen moduleName="Quizzes & Examinations" onBack={() => onNavigate('quizzes')} />;
+  }
 
   if (!resolvedAssessment || !resolvedAssessment.questions || resolvedAssessment.questions.length === 0) {
     return (

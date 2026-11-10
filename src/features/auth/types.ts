@@ -2,6 +2,17 @@ import type { UserRole as DbUserRole } from '../../types/database';
 
 export type AppUserRole = 'admin' | 'faculty' | 'student' | 'consultant';
 
+export type AccountStatus = 'pending' | 'active' | 'suspended';
+
+export interface UserAccessPermissions {
+  resources: boolean;
+  branch: boolean;
+  courses: boolean;
+  quizzes: boolean;
+  announcements: boolean;
+  notifications: boolean;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -10,7 +21,8 @@ export interface AuthUser {
   role: AppUserRole;
   avatar: string;
   department?: string;
-  status: 'active' | 'suspended';
+  status: AccountStatus;
+  accessPermissions?: UserAccessPermissions;
   createdAt: string;
   targetExam?: string;
   batch?: string;
@@ -28,6 +40,8 @@ export interface SignUpPayload {
   department?: string;
   targetExam?: string;
   batch?: string;
+  status?: AccountStatus;
+  accessPermissions?: UserAccessPermissions;
 }
 
 export interface SignInPayload {

@@ -60,8 +60,10 @@ app.get("/api/health", (_req, res) => {
 });
 
 const aiRoutes = require("./route/aiRoutes");
+const userAccessRoutes = require("./route/userAccessRoutes");
 
 app.use("/api/ai", aiRoutes);
+app.use("/api/users", userAccessRoutes);
 
 // Return JSON 404 for unmatched /api routes rather than falling back to HTML
 app.use("/api", (_req, res) => {

@@ -109,7 +109,46 @@ export function StatusBadge({ status }: { status: string }) {
     completed: { class: 'badge-navy', label: 'Completed' },
     published: { class: 'badge-green', label: 'Published' },
     draft: { class: 'badge-red', label: 'Draft' },
+    pending: { class: 'badge-orange', label: 'Pending Approval' },
+    suspended: { class: 'badge-red', label: 'Suspended' },
   };
   const c = config[status] || config.active;
   return <span className={`badge ${c.class}`}>{c.label}</span>;
+}
+
+export function AccessRestrictedScreen({
+  moduleName,
+  onBack,
+  message,
+}: {
+  moduleName: string;
+  onBack?: () => void;
+  message?: string;
+}) {
+  return (
+    <div>
+      <Header title={moduleName} showBack={Boolean(onBack)} onBack={onBack} gradient={false} />
+      <div className="p-6">
+        <div className="card border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-slate-50 text-center py-8 px-5 space-y-3 shadow-xs">
+          <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto text-2xl border border-amber-200 shadow-2xs">
+            <i className="fas fa-lock" />
+          </div>
+          <h3 className="text-base font-bold text-gray-900">{moduleName} Access Restricted</h3>
+          <p className="text-xs text-gray-600 leading-relaxed max-w-xs mx-auto">
+            {message || `Your account does not currently have Administrator permission to access ${moduleName}. Please ask the Administrator to allow access to this resource.`}
+          </p>
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="mt-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5"
+            >
+              <i className="fas fa-arrow-left text-[10px]" />
+              <span>Go Back</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

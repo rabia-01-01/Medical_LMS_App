@@ -11,7 +11,7 @@
     "build": "vite build",
     "start": "node backend/server.js",
     "render:build": "npm install --include=dev && npm run build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p frontend/tsconfig.json --noEmit",
     "test": "node test-all.mjs",
     "test:all": "node test-all.mjs",
     "test:phase1": "node test-phase1.mjs",

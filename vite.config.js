@@ -8,15 +8,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
+  root: path.resolve(__dirname, "frontend"),
+  envDir: __dirname,
   plugins: [react(), tailwindcss()],
+  build: {
+    outDir: path.resolve(__dirname, "dist"),
+    emptyOutDir: true,
+  },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@components": path.resolve(__dirname, "./src/components"),
-      "@features": path.resolve(__dirname, "./src/features"),
-      "@context": path.resolve(__dirname, "./src/context"),
-      "@lib": path.resolve(__dirname, "./src/lib"),
-      "@types": path.resolve(__dirname, "./src/types"),
+      "@": path.resolve(__dirname, "./frontend/src"),
+      "@components": path.resolve(__dirname, "./frontend/src/components"),
+      "@features": path.resolve(__dirname, "./frontend/src/features"),
+      "@context": path.resolve(__dirname, "./frontend/src/context"),
+      "@lib": path.resolve(__dirname, "./frontend/src/lib"),
+      "@types": path.resolve(__dirname, "./frontend/src/types"),
     },
   },
   server: {

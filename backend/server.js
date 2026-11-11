@@ -71,7 +71,11 @@ app.use("/api", (_req, res) => {
 });
 
 // Serve built Vite SPA bundle in production
-const distPath = path.resolve(__dirname, "..", "dist");
+const rootDistPath = path.resolve(__dirname, "..", "dist");
+const frontendDistPath = path.resolve(__dirname, "..", "frontend", "dist");
+const distPath = fs.existsSync(path.join(rootDistPath, "index.html"))
+    ? rootDistPath
+    : frontendDistPath;
 const indexHtmlPath = path.join(distPath, "index.html");
 
 if (fs.existsSync(indexHtmlPath)) {

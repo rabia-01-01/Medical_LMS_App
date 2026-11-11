@@ -1,7 +1,10 @@
 import React from 'react';
+import { useRbac } from '../hooks/useRbac';
+import type { PermissionCapability } from '../features/auth/rbac';
+import type { AccessModuleKey } from '../features/auth/accessControl';
 
 interface BottomNavProps {
-  items: { icon: string; label: string; id: string }[];
+  items: { icon: string; label: string; id: string; locked?: boolean }[];
   activeTab: string;
   onTabChange: (id: string) => void;
   notificationCount?: number;
@@ -13,13 +16,22 @@ export function BottomNav({ items, activeTab, onTabChange, notificationCount = 0
       {items.map((item) => (
         <div
           key={item.id}
-          className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
+          className={`nav-item ${activeTab === item.id ? 'active' : ''} ${item.locked ? 'opacity-65' : ''}`}
           onClick={() => onTabChange(item.id)}
+          title={item.locked ? `${item.label} (Locked until Admin grants access)` : item.label}
         >
-          {item.id === 'notifications' && notificationCount > 0 && (
+          {item.id === 'notifications' && notificationCount > 0 && !item.locked && (
             <span className="notification-dot" />
           )}
-          <i className={`fas ${item.icon}`} />
+          <div className="relative inline-flex items-center justify-center">
+            <i className={`fas ${item.icon}`} />
+            {item.locked && (
+              <i
+                className="fas fa-lock text-[8px] text-amber-500 absolute -top-1 -right-2 bg-white rounded-full p-0.5 shadow-2xs"
+                aria-hidden="true"
+              />
+            )}
+          </div>
           <span>{item.label}</span>
         </div>
       ))}
@@ -148,6 +160,95 @@ export function AccessRestrictedScreen({
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Declarative O(1) Role + Capability / Module guard powered by useRbac().
+ */
+export function RoleGuard({
+  capability,
+  module,
+  moduleName,
+  onBack,
+  deniedMessage,
+  children,
+}: {
+  capability?: PermissionCapability;
+  module?: AccessModuleKey;
+  moduleName: string;
+  onBack?: () => void;
+  deniedMessage?: string;
+  children: React.ReactNode;
+}) {
+  const rbac = useRbac();
+  const allowedByModule = module ? rbac.hasModule(module) : true;
+  const allowedByCap = capability ? rbac.can(capability) : true;
+
+  if (!allowedByModule || !allowedByCap) {
+    return (
+      <AccessRestrictedScreen
+        moduleName={moduleName}
+        onBack={onBack}
+        message={deniedMessage}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
+
+/**
+ * Shared countdown alert surfaced when a role-based rate limit or cooldown triggers.
+ */
+export function RateLimitAlert({
+  message,
+  retryAfterSeconds = 0,
+  policyLabel,
+  variant = 'light',
+}: {
+  message?: string | null;
+  retryAfterSeconds?: number;
+  policyLabel?: string;
+  variant?: 'light' | 'dark';
+}) {
+  if (!message) return null;
+
+  const isDark = variant === 'dark';
+  return (
+    <div
+      role="alert"
+      className={`rounded-xl px-3 py-2.5 text-xs border flex items-start gap-2 animate-fade-in ${
+        isDark
+          ? 'bg-amber-500/20 border-amber-400/50 text-amber-100'
+          : 'bg-amber-50 border-amber-200 text-amber-900'
+      }`}
+    >
+      <i
+        className={`fas fa-hourglass-half mt-0.5 text-xs shrink-0 ${
+          isDark ? 'text-amber-300' : 'text-amber-600'
+        }`}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="font-bold">
+            Rate Limit Active{retryAfterSeconds > 0 ? ` • ${retryAfterSeconds}s` : ''}
+          </span>
+          {policyLabel && (
+            <span
+              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                isDark ? 'bg-white/10 text-amber-200' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {policyLabel}
+            </span>
+          )}
+        </div>
+        <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-amber-100/90' : 'text-amber-800'}`}>
+          {message}
+        </p>
       </div>
     </div>
   );

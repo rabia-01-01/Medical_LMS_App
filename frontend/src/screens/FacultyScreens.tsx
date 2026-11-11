@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, hasResourceAccess, Course, Resource, deduplicateCompletedChapters } from '../context/DataContext';
-import { Header, StatusBadge, EmptyState, AccessRestrictedScreen } from '../components/Navigation';
+import { Header, StatusBadge, EmptyState, AccessRestrictedScreen, RateLimitAlert } from '../components/Navigation';
+import { useRbac } from '../hooks/useRbac';
+import { useRateLimitGuard } from '../hooks/useRateLimitGuard';
 import { CurriculumBrowser, useSubjects, useChapters } from '../features/curriculum';
 import { resourceService, normalizeResourceType, useResources, deduplicateAndMergeResources } from '../features/resources';
 import { AssessmentCreator } from '../features/assessments';
@@ -24,12 +26,13 @@ export function FacultyDashboard({ onNavigate }: { onNavigate: (screen: string, 
     const merged = deduplicateAndMergeResources(cloudResources, resources);
     return merged.filter(r => r.uploaderId === user?.id || !r.uploaderId);
   }, [cloudResources, resources, user?.id]);
-  const canAccessCourses = hasResourceAccess(user, 'courses');
-  const canAccessResources = hasResourceAccess(user, 'resources');
-  const canAccessQuizzes = hasResourceAccess(user, 'quizzes');
-  const canAccessAnnouncements = hasResourceAccess(user, 'announcements');
-  const canAccessNotifications = hasResourceAccess(user, 'notifications');
-  const canAccessBranch = hasResourceAccess(user, 'branch');
+  const rbac = useRbac();
+  const canAccessCourses = rbac.hasModule('courses');
+  const canAccessResources = rbac.hasModule('resources');
+  const canAccessQuizzes = rbac.hasModule('quizzes');
+  const canAccessAnnouncements = rbac.hasModule('announcements');
+  const canAccessNotifications = rbac.hasModule('notifications');
+  const canAccessBranch = rbac.hasModule('branch');
 
   const myQuizzes = quizzes.filter(q => q.createdById === user?.id);
   const unreadNotifs = canAccessNotifications ? notifications.filter(n => !n.read && (n.targetRole === 'all' || n.targetRole === 'faculty')).length : 0;
@@ -336,6 +339,8 @@ export function FacultyCourses({ onNavigate }: { onNavigate: (screen: string, da
 // ==================== UPLOAD RESOURCE ====================
 export function UploadResource({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  const rbac = useRbac();
+  const uploadRateLimit = useRateLimitGuard('content:upload_resource');
   const { courses, addResource } = useData();
   const { subjects } = useSubjects();
 
@@ -409,8 +414,19 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
   };
 
   const handleSubmit = async () => {
+    if (!rbac.can('resources:upload')) {
+      setErrorMessage('You do not have permission to upload learning resources.');
+      return;
+    }
+
     if (!formData.title || !formData.courseId || !user || (!formData.fileData && !selectedFile)) {
       alert('Please fill all required fields and upload a file');
+      return;
+    }
+
+    const rateCheck = uploadRateLimit.tryConsume();
+    if (!rateCheck.allowed) {
+      setErrorMessage(rateCheck.message);
       return;
     }
 
@@ -638,9 +654,20 @@ export function UploadResource({ onBack }: { onBack: () => void }) {
           </label>
         </div>
 
+        <div className="flex items-center justify-between text-[10px] text-gray-500 px-0.5">
+          <span>Upload Quota: <strong>{uploadRateLimit.remaining}/{uploadRateLimit.limit} remaining</strong></span>
+          <span className="badge badge-teal text-[9px]">{uploadRateLimit.policyLabel}</span>
+        </div>
+
+        <RateLimitAlert
+          message={uploadRateLimit.limitError}
+          retryAfterSeconds={uploadRateLimit.retryAfterSeconds}
+          policyLabel={uploadRateLimit.policyLabel}
+        />
+
         <button 
           onClick={handleSubmit} 
-          disabled={!formData.title || !formData.courseId || (!formData.fileData && !selectedFile) || uploading} 
+          disabled={!formData.title || !formData.courseId || (!formData.fileData && !selectedFile) || uploading || uploadRateLimit.isBlocked} 
           className="btn-primary disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {uploading ? (
@@ -818,18 +845,23 @@ export function FacultyProfile({ onNavigate }: { onNavigate: (screen: string) =>
 // ==================== FACULTY ANNOUNCEMENTS ====================
 export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  const rbac = useRbac();
+  const announcementLimit = useRateLimitGuard('comms:announcement');
   const { announcements, addAnnouncement } = useData();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [pinned, setPinned] = useState(false);
 
-  if (!hasResourceAccess(user, 'announcements')) {
+  if (!hasResourceAccess(user, 'announcements') || !rbac.can('announcements:view')) {
     return <AccessRestrictedScreen moduleName="Announcements" onBack={onBack} />;
   }
 
   const handlePost = () => {
+    if (!rbac.can('announcements:publish')) return;
     if (!title || !content || !user) return;
+    const rateCheck = announcementLimit.tryConsume();
+    if (!rateCheck.allowed) return;
     addAnnouncement({ title, content, pinned, authorId: user.id, authorName: user.name, authorRole: user.role });
     setTitle(''); setContent(''); setPinned(false); setShowForm(false);
   };
@@ -837,19 +869,29 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <Header title="Announcements" showBack onBack={onBack} rightAction={
-        <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
+        rbac.can('announcements:publish') ? (
+          <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm"><i className="fas fa-plus" /></button>
+        ) : undefined
       } />
       <div className="p-4 space-y-3">
         {showForm && (
-          <div className="card border-2 border-teal-200">
-            <h3 className="text-sm font-bold text-gray-800 mb-3">New Announcement</h3>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2" />
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Content" rows={3} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm mb-2 resize-none" />
-            <div className="flex items-center gap-2 mb-3">
+          <div className="card border-2 border-teal-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">New Announcement</h3>
+              <span className="badge badge-teal text-[9px]">{announcementLimit.remaining}/{announcementLimit.limit} • {announcementLimit.policyLabel}</span>
+            </div>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" />
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Content" rows={3} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none" />
+            <div className="flex items-center gap-2">
               <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
               <span className="text-xs text-gray-600">Pin this announcement</span>
             </div>
-            <button onClick={handlePost} className="btn-primary">Post Announcement</button>
+            <RateLimitAlert
+              message={announcementLimit.limitError}
+              retryAfterSeconds={announcementLimit.retryAfterSeconds}
+              policyLabel={announcementLimit.policyLabel}
+            />
+            <button onClick={handlePost} disabled={!title || !content || announcementLimit.isBlocked} className="btn-primary disabled:opacity-50">Post Announcement</button>
           </div>
         )}
         {announcements.length === 0 ? (
@@ -884,6 +926,9 @@ export function FacultyAnnouncements({ onBack }: { onBack: () => void }) {
 // ==================== FACULTY COMMUNITY ====================
 export function FacultyCommunity({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  const rbac = useRbac();
+  const postLimit = useRateLimitGuard('community:post');
+  const replyLimit = useRateLimitGuard('community:reply');
   const { communityMessages, addCommunityMessage, addCommunityReply } = useData();
   const [newMessage, setNewMessage] = useState('');
   const [replyTarget, setReplyTarget] = useState<{
@@ -903,20 +948,26 @@ export function FacultyCommunity({ onBack }: { onBack: () => void }) {
   const [replyText, setReplyText] = useState('');
 
   const handlePost = () => {
+    if (!rbac.can('community:post')) return;
     if (!newMessage.trim() || !user) return;
-    addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: 'Faculty', message: newMessage, pinned: false });
+    if (!postLimit.tryConsume().allowed) return;
+    const authorLabel = rbac.role === 'consultant' ? 'Consultant' : 'Faculty';
+    addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: authorLabel, message: newMessage, pinned: false });
     setNewMessage('');
   };
 
   const handleSendReply = (parentId: string, targetReplyId?: string, targetAuthor?: string) => {
+    if (!rbac.can('community:reply')) return;
     if (!replyText.trim() || !user) return;
+    if (!replyLimit.tryConsume().allowed) return;
     const parentReplyId = targetReplyId || replyTarget?.replyId;
     const replyToAuthor = targetAuthor || (replyTarget?.replyId ? replyTarget.replyAuthorName : undefined);
+    const authorLabel = rbac.role === 'consultant' ? 'Consultant' : 'Faculty';
 
     addCommunityReply(parentId, {
       authorId: user.id,
       authorName: user.name,
-      authorRole: 'Faculty',
+      authorRole: authorLabel,
       message: replyText.trim(),
       parentReplyId,
       replyToAuthor,
@@ -929,9 +980,18 @@ export function FacultyCommunity({ onBack }: { onBack: () => void }) {
     <div>
       <Header title="Community" showBack onBack={onBack} />
       <div className="p-4 space-y-3 pb-10">
-        <div className="card">
-          <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Post a message..." rows={2} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none mb-2" />
-          <button onClick={handlePost} className="btn-primary">Post</button>
+        <div className="card space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-gray-500">
+            <span>Post Quota: <strong>{postLimit.remaining}/{postLimit.limit} remaining</strong></span>
+            <span className="badge badge-teal text-[9px]">{postLimit.policyLabel}</span>
+          </div>
+          <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Post a message..." rows={2} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none" />
+          <RateLimitAlert
+            message={postLimit.limitError || replyLimit.limitError}
+            retryAfterSeconds={postLimit.isBlocked ? postLimit.retryAfterSeconds : replyLimit.retryAfterSeconds}
+            policyLabel={postLimit.isBlocked ? postLimit.policyLabel : replyLimit.policyLabel}
+          />
+          <button onClick={handlePost} disabled={!newMessage.trim() || postLimit.isBlocked} className="btn-primary disabled:opacity-50">Post</button>
         </div>
         {communityMessages.map((msg) => (
           <div key={msg.id} className={`card ${msg.pinned ? 'border-l-4 border-teal-500' : ''}`}>

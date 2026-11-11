@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Header, AccessRestrictedScreen } from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
 import { useData, hasResourceAccess } from '../context/DataContext';
+import { useRbac } from '../hooks/useRbac';
 import { EnrollStudentsModal } from '../components/EnrollStudentsModal';
 import { CurriculumBrowser } from '../features/curriculum';
 import { resourceService, useResources, DocumentProtectionWrapper, deduplicateAndMergeResources } from '../features/resources';
@@ -1661,13 +1662,16 @@ function FileViewer({ onBack, resource }: { onBack: () => void; resource: any })
 
 export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => void; course?: any; onNavigate: (screen: string, data?: any) => void }) {
   const { user } = useAuth();
+  const rbac = useRbac();
   const { resources: localResources, users, enrollStudents } = useData();
   const { resources: cloudResources } = useResources();
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const c = course;
 
-  const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
-  const isStudent = user?.role === 'student';
+  const canEnrollOthers = rbac.can('courses:enroll_others');
+  const canUploadResources = rbac.can('resources:upload');
+  const isFacultyOrAdmin = canUploadResources;
+  const isStudent = rbac.role === 'student';
   const isEnrolled = isStudent ? (c?.studentIds || []).includes(user?.id || '') : false;
 
   const courseResources = useMemo(() => {
@@ -1704,7 +1708,7 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
         showBack
         onBack={onBack}
         rightAction={
-          isFacultyOrAdmin ? (
+          canEnrollOthers ? (
             <button
               onClick={() => setShowEnrollModal(true)}
               className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
@@ -1886,23 +1890,27 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
               <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
                 Enrolled Students ({enrolledStudents.length})
               </h3>
-              <button
-                onClick={() => setShowEnrollModal(true)}
-                className="text-xs font-semibold text-teal-600 hover:underline flex items-center gap-1"
-              >
-                <i className="fas fa-user-plus text-[10px]" /> Manage
-              </button>
+              {canEnrollOthers && (
+                <button
+                  onClick={() => setShowEnrollModal(true)}
+                  className="text-xs font-semibold text-teal-600 hover:underline flex items-center gap-1"
+                >
+                  <i className="fas fa-user-plus text-[10px]" /> Manage
+                </button>
+              )}
             </div>
             {enrolledStudents.length === 0 ? (
               <div className="text-center py-5 bg-gray-50 rounded-xl">
                 <i className="fas fa-users-slash text-2xl text-gray-300 mb-1.5" />
                 <p className="text-xs text-gray-500 font-medium">No students enrolled yet</p>
-                <button
-                  onClick={() => setShowEnrollModal(true)}
-                  className="mt-2 text-xs font-semibold text-teal-600 hover:underline"
-                >
-                  Enroll students now
-                </button>
+                {canEnrollOthers && (
+                  <button
+                    onClick={() => setShowEnrollModal(true)}
+                    className="mt-2 text-xs font-semibold text-teal-600 hover:underline"
+                  >
+                    Enroll students now
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -1927,7 +1935,7 @@ export function CourseDetail({ onBack, course, onNavigate }: { onBack: () => voi
       </div>
 
       {/* Enroll Modal Dialog */}
-      {showEnrollModal && (
+      {canEnrollOthers && showEnrollModal && (
         <EnrollStudentsModal
           course={c}
           onClose={() => setShowEnrollModal(false)}

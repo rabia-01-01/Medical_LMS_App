@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Header } from '../../components/Navigation';
+import { Header, RateLimitAlert, AccessRestrictedScreen } from '../../components/Navigation';
 import { useAuth } from '../../context/AuthContext';
+import { useRbac } from '../../hooks/useRbac';
+import { useRateLimitGuard } from '../../hooks/useRateLimitGuard';
 import { useCurriculum } from '../curriculum';
 import { useAssessments } from './useAssessments';
 import type { AssessmentType, QuestionType, CreateQuestionInput } from './types';
@@ -13,6 +15,8 @@ interface AssessmentCreatorProps {
 
 export function AssessmentCreator({ onBack, onSuccess }: AssessmentCreatorProps) {
   const { user } = useAuth();
+  const rbac = useRbac();
+  const quizCreateLimit = useRateLimitGuard('content:create_quiz');
   const { subjects, chapters, activeSubject, setActiveSubjectId } = useCurriculum();
   const { createAssessment } = useAssessments();
 
@@ -87,6 +91,11 @@ export function AssessmentCreator({ onBack, onSuccess }: AssessmentCreatorProps)
   };
 
   const handleSubmit = async () => {
+    if (!rbac.can('quizzes:create')) {
+      setErrorMessage('Quiz authoring is restricted to authorized Faculty members.');
+      return;
+    }
+
     if (!title.trim()) {
       setErrorMessage('Please provide an assessment title.');
       return;
@@ -100,6 +109,12 @@ export function AssessmentCreator({ onBack, onSuccess }: AssessmentCreatorProps)
 
     if (validQuestions.length === 0) {
       setErrorMessage('Please add at least one complete question with options.');
+      return;
+    }
+
+    const rateCheck = quizCreateLimit.tryConsume();
+    if (!rateCheck.allowed) {
+      setErrorMessage(rateCheck.message);
       return;
     }
 
@@ -487,10 +502,19 @@ export function AssessmentCreator({ onBack, onSuccess }: AssessmentCreatorProps)
 
         {/* Submit Actions */}
         <div className="pt-2 pb-6 space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
+            <span>Authoring Quota: <strong>{quizCreateLimit.remaining}/{quizCreateLimit.limit} remaining</strong></span>
+            <span className="badge badge-teal text-[9px]">{quizCreateLimit.policyLabel}</span>
+          </div>
+          <RateLimitAlert
+            message={quizCreateLimit.limitError}
+            retryAfterSeconds={quizCreateLimit.retryAfterSeconds}
+            policyLabel={quizCreateLimit.policyLabel}
+          />
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || quizCreateLimit.isBlocked}
             className="btn-primary w-full disabled:opacity-50"
           >
             {saving ? (

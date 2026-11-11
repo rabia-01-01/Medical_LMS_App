@@ -3,7 +3,9 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameM
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useData, hasResourceAccess, deduplicateCompletedChapters } from '../context/DataContext';
-import { Header, BottomNav, SearchBar, EmptyState, StatusBadge, AccessRestrictedScreen } from '../components/Navigation';
+import { Header, BottomNav, SearchBar, EmptyState, StatusBadge, AccessRestrictedScreen, RateLimitAlert } from '../components/Navigation';
+import { useRbac } from '../hooks/useRbac';
+import { useRateLimitGuard } from '../hooks/useRateLimitGuard';
 import { CurriculumBrowser } from '../features/curriculum';
 import { useResources, deduplicateAndMergeResources } from '../features/resources';
 import { PerformanceAnalyticsView, useStudentAnalytics } from '../features/attempts';
@@ -15,12 +17,13 @@ export function StudentHome({ onNavigate }: { onNavigate: (screen: string, data?
   const { user } = useAuth();
   const { courses, announcements, communityMessages, quizzes, cohortBatches, notifications, getStudentProgress, getStudentDossier, isConsultancyOptedIn, setConsultancyOptIn, studentDocuments } = useData();
   const { assessments } = useAssessments();
-  const canAccessBranch = hasResourceAccess(user, 'branch');
-  const canAccessCourses = hasResourceAccess(user, 'courses');
-  const canAccessQuizzes = hasResourceAccess(user, 'quizzes');
-  const canAccessAnnouncements = hasResourceAccess(user, 'announcements');
-  const canAccessNotifications = hasResourceAccess(user, 'notifications');
-  const canAccessResources = hasResourceAccess(user, 'resources');
+  const rbac = useRbac();
+  const canAccessBranch = rbac.hasModule('branch');
+  const canAccessCourses = rbac.hasModule('courses');
+  const canAccessQuizzes = rbac.hasModule('quizzes');
+  const canAccessAnnouncements = rbac.hasModule('announcements');
+  const canAccessNotifications = rbac.hasModule('notifications');
+  const canAccessResources = rbac.hasModule('resources');
   const studentBatch = user?.batch || '';
   const myCourses = canAccessCourses ? courses.filter(c => (!c.batch || c.batch === 'All' || (Boolean(studentBatch) && (studentBatch === 'All' || c.batch === studentBatch))) && c.studentIds.includes(user?.id || '')) : [];
   const unreadNotifs = canAccessNotifications ? notifications.filter(n => !n.read && (n.targetRole === 'all' || n.targetRole === 'student')).length : 0;
@@ -867,6 +870,9 @@ export function StudentResources({ onNavigate }: { onNavigate: (screen: string, 
 // ==================== COMMUNITY SCREEN ====================
 export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const { user } = useAuth();
+  const rbac = useRbac();
+  const postLimit = useRateLimitGuard('community:post');
+  const replyLimit = useRateLimitGuard('community:reply');
   const { communityMessages, addCommunityMessage, addCommunityReply } = useData();
   const [newMessage, setNewMessage] = useState('');
   const [replyTarget, setReplyTarget] = useState<{
@@ -886,7 +892,9 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
   const [replyText, setReplyText] = useState('');
 
   const handleSendReply = (parentId: string, targetReplyId?: string, targetAuthor?: string) => {
+    if (!rbac.can('community:reply')) return;
     if (!replyText.trim() || !user) return;
+    if (!replyLimit.tryConsume().allowed) return;
     const parentReplyId = targetReplyId || replyTarget?.replyId;
     const replyToAuthor = targetAuthor || (replyTarget?.replyId ? replyTarget.replyAuthorName : undefined);
 
@@ -903,7 +911,9 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
   };
 
   const handlePost = () => {
+    if (!rbac.can('community:post')) return;
     if (!newMessage.trim() || !user) return;
+    if (!postLimit.tryConsume().allowed) return;
     addCommunityMessage({
       authorId: user.id,
       authorName: user.name,
@@ -1050,10 +1060,19 @@ export function StudentCommunity({ onNavigate }: { onNavigate: (screen: string) 
           ))
         )}
       </div>
-      <div className="fixed bottom-[70px] left-0 right-0 max-w-[430px] mx-auto bg-white border-t border-gray-100 p-3 z-40">
+      <div className="fixed bottom-[70px] left-0 right-0 max-w-[430px] mx-auto bg-white border-t border-gray-100 p-3 z-40 space-y-2">
+        <RateLimitAlert
+          message={postLimit.limitError || replyLimit.limitError}
+          retryAfterSeconds={postLimit.isBlocked ? postLimit.retryAfterSeconds : replyLimit.retryAfterSeconds}
+          policyLabel={postLimit.isBlocked ? postLimit.policyLabel : replyLimit.policyLabel}
+        />
+        <div className="flex items-center justify-between text-[10px] text-gray-400 px-1">
+          <span>Post Quota: <strong className="text-gray-600">{postLimit.remaining}/{postLimit.limit}</strong></span>
+          <span>{postLimit.policyLabel}</span>
+        </div>
         <div className="flex items-center gap-2">
-          <input value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Share with the community..." className="flex-1 px-3 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" onKeyDown={(e) => e.key === 'Enter' && handlePost()} />
-          <button onClick={handlePost} className="w-9 h-9 rounded-full bg-teal-500 flex items-center justify-center"><i className="fas fa-paper-plane text-white text-sm" /></button>
+          <input value={newMessage} onChange={(e) => setNewMessage(e.target.value)} disabled={postLimit.isBlocked} placeholder={postLimit.isBlocked ? `Cooldown (${postLimit.retryAfterSeconds}s)...` : 'Share with the community...'} className="flex-1 px-3 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-60" onKeyDown={(e) => e.key === 'Enter' && handlePost()} />
+          <button onClick={handlePost} disabled={!newMessage.trim() || postLimit.isBlocked} className="w-9 h-9 rounded-full bg-teal-500 flex items-center justify-center disabled:opacity-50"><i className="fas fa-paper-plane text-white text-sm" /></button>
         </div>
       </div>
     </div>
@@ -1562,11 +1581,12 @@ export function CalendarScreen({ onBack }: { onBack: () => void }) {
   const [newEventTime, setNewEventTime] = useState('10:00 AM');
   const [newEventType, setNewEventType] = useState<'announcement' | 'exam' | 'lecture' | 'deadline'>('lecture');
 
+  const rbac = useRbac();
+  const isFacultyOrAdmin = rbac.can('calendar:manage');
+
   if (!hasResourceAccess(user, 'announcements')) {
     return <AccessRestrictedScreen moduleName="Academic Calendar & Announcements" onBack={onBack} />;
   }
-
-  const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
 
   // Consolidate all academic events
   const allEvents = useMemo(() => {

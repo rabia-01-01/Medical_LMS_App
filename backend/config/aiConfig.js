@@ -11,8 +11,16 @@ const GROQ_MODELS = [
     "qwen/qwen3.8-27b"
 ];
 
+const CHAT_GROQ_MODELS = [
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "mixtral-8x7b-32768",
+    "openai/gpt-oss-20b"
+];
+
 module.exports = {
     GROQ_MODELS,
+    CHAT_GROQ_MODELS,
     GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
     MAX_QUESTION_COUNT: 25,
     MIN_QUESTION_COUNT: 1

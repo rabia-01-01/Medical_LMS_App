@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, hasResourceAccess } from '../context/DataContext';
+import { useRbac } from '../hooks/useRbac';
 import {
   StudentConsultancyDossier,
   ConsultancyChecklistItem,
@@ -82,6 +83,7 @@ export function ConsultantDashboard({
   onBack?: () => void;
 }) {
   const { user } = useAuth();
+  const rbac = useRbac();
   const { consultancyDossiers, cohortBatches, deleteConsultancyDossier, notifications, markNotificationRead } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,7 +96,7 @@ export function ConsultantDashboard({
   const [selectedStageForInspection, setSelectedStageForInspection] = useState<number | null>(null);
   const [showStageInspectionModal, setShowStageInspectionModal] = useState(false);
 
-  const canAccessNotifications = hasResourceAccess(user, 'notifications');
+  const canAccessNotifications = rbac.hasModule('notifications') && rbac.can('notifications:view');
 
   const consultantNotifs = useMemo(() => {
     if (!canAccessNotifications) return [];

@@ -4,6 +4,9 @@ import { useCurriculum } from '../features/curriculum';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { getQuestionsFromBank } from '../data/imatQuestionBank';
+import { useRbac } from '../hooks/useRbac';
+import { useRateLimitGuard } from '../hooks/useRateLimitGuard';
+import { RateLimitAlert } from './Navigation';
 
 interface GeneratedMCQ {
   id: number;
@@ -89,9 +92,11 @@ export function AdminAIMCQGenerator({
   const { curriculum, subjects } = useCurriculum();
   const { addQuiz, cohortBatches } = useData();
   const { user } = useAuth();
+  const rbac = useRbac();
+  const aiRateLimit = useRateLimitGuard('ai:mcq_generate');
 
-  const isFaculty = user?.role === 'faculty';
-  const canGenerate = user?.role === 'faculty' || user?.role === 'admin';
+  const isFaculty = rbac.role === 'faculty';
+  const canGenerate = rbac.can('ai:mcq_generate');
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
     subjects[0]?.id || 'subj-biology',
@@ -148,6 +153,12 @@ export function AdminAIMCQGenerator({
 
     if (!activeSubj || !activeChapter) {
       setErrorMessage('Please select a subject and chapter first.');
+      return;
+    }
+
+    const rateCheck = aiRateLimit.tryConsume();
+    if (!rateCheck.allowed) {
+      setErrorMessage(rateCheck.message);
       return;
     }
 
@@ -582,10 +593,26 @@ export function AdminAIMCQGenerator({
           </div>
         </div>
 
+        <div className="flex items-center justify-between text-[10px] text-gray-500 px-0.5">
+          <span>
+            Role Quota:{' '}
+            <strong className="text-gray-700">
+              {aiRateLimit.remaining}/{aiRateLimit.limit} remaining
+            </strong>
+          </span>
+          <span className="badge badge-teal text-[9px]">{aiRateLimit.policyLabel}</span>
+        </div>
+
+        <RateLimitAlert
+          message={aiRateLimit.limitError}
+          retryAfterSeconds={aiRateLimit.retryAfterSeconds}
+          policyLabel={aiRateLimit.policyLabel}
+        />
+
         <button
           type="button"
           onClick={handleGenerateAI}
-          disabled={generating || !activeSubj || !activeChapter}
+          disabled={generating || aiRateLimit.isBlocked || !activeSubj || !activeChapter}
           className="w-full py-2.5 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {generating ? (

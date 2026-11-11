@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData, hasResourceAccess } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useRbac } from '../hooks/useRbac';
 import { Header, EmptyState, AccessRestrictedScreen } from '../components/Navigation';
 import {
   useAssessments,
@@ -75,13 +76,14 @@ export function QuizList({
   onNavigate: (screen: string, data?: any) => void;
 }) {
   const { user } = useAuth();
+  const rbac = useRbac();
   const { quizzes: legacyQuizzes } = useData();
   const { assessments: cloudAssessments, loading: cloudLoading } = useAssessments();
 
   const [filter, setFilter] = useState<string>('All');
   const [search, setSearch] = useState<string>('');
 
-  const isFaculty = user?.role === 'faculty';
+  const isFaculty = rbac.role === 'faculty' || user?.role === 'faculty';
 
   // Merge unified assessments with legacy quizzes
   const allAssessments = useMemo(() => {
@@ -273,6 +275,7 @@ export function QuizDetail({
   quiz?: any;
 }) {
   const { user } = useAuth();
+  const rbac = useRbac();
   const asmt: AssessmentWithQuestions | null = useMemo(() => {
     if (!quiz) return null;
     if (quiz.questions && quiz.questions.length > 0 && quiz.questions[0].options) {
@@ -282,8 +285,9 @@ export function QuizDetail({
   }, [quiz]);
 
   const [showInstructions, setShowInstructions] = useState(false);
+  const canTakeQuiz = rbac.can('quizzes:take');
 
-  if (!hasResourceAccess(user, 'quizzes')) {
+  if (!hasResourceAccess(user, 'quizzes') || !rbac.can('quizzes:view')) {
     return <AccessRestrictedScreen moduleName="Quizzes & Examinations" onBack={onBack} />;
   }
 
@@ -383,13 +387,20 @@ export function QuizDetail({
         </div>
 
         {/* Start Button */}
-        <button
-          onClick={() => setShowInstructions(true)}
-          className="btn-primary w-full py-3 shadow-sm flex items-center justify-center gap-2"
-        >
-          <i className="fas fa-play text-xs" />
-          <span>Start Assessment</span>
-        </button>
+        {canTakeQuiz ? (
+          <button
+            onClick={() => setShowInstructions(true)}
+            className="btn-primary w-full py-3 shadow-sm flex items-center justify-center gap-2"
+          >
+            <i className="fas fa-play text-xs" />
+            <span>Start Assessment</span>
+          </button>
+        ) : (
+          <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 text-center font-medium">
+            <i className="fas fa-eye mr-1.5 text-teal-600" />
+            Preview Mode — Timed assessment execution is restricted to active Student accounts.
+          </div>
+        )}
       </div>
     </div>
   );

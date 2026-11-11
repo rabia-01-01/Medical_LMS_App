@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, User, EMPTY_USER_PERMISSIONS, FULL_USER_PERMISSIONS, normalizePermissions } from '../context/DataContext';
-import { resetPassword } from '../features/auth';
+import { resetPassword, resetRateLimit } from '../features/auth';
+import { RateLimitAlert } from '../components/Navigation';
+import { useRateLimitGuard } from '../hooks/useRateLimitGuard';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
   authenticateBackendUser,
@@ -70,6 +72,18 @@ export function LoginScreen() {
   const [googleRoleInput, setGoogleRoleInput] = useState<GoogleRole>('student');
   const [googleError, setGoogleError] = useState('');
   const [googleNotice, setGoogleNotice] = useState('');
+  const loginRateLimit = useRateLimitGuard('auth:login', {
+    roleOverride: 'guest',
+    actorIdOverride: email.trim().toLowerCase() || 'guest',
+  });
+  const googleRateLimit = useRateLimitGuard('auth:google', {
+    roleOverride: 'guest',
+    actorIdOverride: googleEmailInput.trim().toLowerCase() || 'google-oauth',
+  });
+  const forgotRateLimit = useRateLimitGuard('auth:forgot_password', {
+    roleOverride: 'guest',
+    actorIdOverride: forgotEmail.trim().toLowerCase() || 'forgot',
+  });
 
   useEffect(() => {
     let active = true;
@@ -122,6 +136,12 @@ export function LoginScreen() {
       return;
     }
 
+    const googleRateCheck = googleRateLimit.tryConsume(cleanEmail, 'guest');
+    if (!googleRateCheck.allowed) {
+      setGoogleError(googleRateCheck.message);
+      return;
+    }
+
     const chosenRole: GoogleRole = selectedRole || googleRoleInput || 'student';
     const displayName = (targetName || '').trim() || cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
@@ -150,6 +170,7 @@ export function LoginScreen() {
         setGoogleError('Your account has been suspended. Please contact the administrator.');
         return;
       }
+      resetRateLimit('auth:google', 'guest', cleanEmail);
       login(resolvedUser);
       setShowGoogleModal(false);
       return;
@@ -185,6 +206,12 @@ export function LoginScreen() {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const rateCheck = loginRateLimit.tryConsume(cleanEmail, 'guest');
+    if (!rateCheck.allowed) {
+      setError(rateCheck.message);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -209,6 +236,7 @@ export function LoginScreen() {
           setIsLoading(false);
           return;
         }
+        resetRateLimit('auth:login', 'guest', cleanEmail);
         login(remoteUser);
         setIsLoading(false);
         return;
@@ -245,6 +273,7 @@ export function LoginScreen() {
           setIsLoading(false);
           return;
         }
+        resetRateLimit('auth:login', 'guest', cleanEmail);
         login({
           ...localUser,
           ...(remoteStatus ? {
@@ -265,13 +294,20 @@ export function LoginScreen() {
   };
 
   const handleForgotPassword = async () => {
-    if (!forgotEmail.trim()) {
+    const cleanForgot = forgotEmail.trim().toLowerCase();
+    if (!cleanForgot) {
       setForgotStatus({ message: 'Please enter your registered email address.', isError: true });
       return;
     }
 
+    const rateCheck = forgotRateLimit.tryConsume(cleanForgot, 'guest');
+    if (!rateCheck.allowed) {
+      setForgotStatus({ message: rateCheck.message, isError: true });
+      return;
+    }
+
     setForgotStatus({ message: 'Sending recovery link...', isError: false });
-    const result = await resetPassword(forgotEmail.trim());
+    const result = await resetPassword(cleanForgot);
 
     if (result.success) {
       setForgotStatus({ message: 'Password recovery email sent! Please check your inbox.', isError: false });
@@ -358,6 +394,13 @@ export function LoginScreen() {
             </div>
           )}
 
+          <RateLimitAlert
+            message={loginRateLimit.limitError}
+            retryAfterSeconds={loginRateLimit.retryAfterSeconds}
+            policyLabel={loginRateLimit.policyLabel}
+            variant="dark"
+          />
+
           <div className="flex justify-between items-center text-xs">
             <span className="text-gray-400 text-[11px] flex items-center gap-1">
               <i className="fas fa-shield-alt text-teal-400" /> Supabase Secured
@@ -373,7 +416,7 @@ export function LoginScreen() {
 
           <button
             onClick={handleLogin}
-            disabled={isLoading}
+            disabled={isLoading || loginRateLimit.isBlocked}
             className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-teal-500/30 active:scale-[0.98] transition disabled:opacity-70 cursor-pointer"
           >
             {isLoading ? (
@@ -492,6 +535,14 @@ export function LoginScreen() {
                 {forgotStatus.message}
               </p>
             )}
+            <div className="mb-3">
+              <RateLimitAlert
+                message={forgotRateLimit.limitError}
+                retryAfterSeconds={forgotRateLimit.retryAfterSeconds}
+                policyLabel={forgotRateLimit.policyLabel}
+                variant="dark"
+              />
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={() => { setShowForgotModal(false); setForgotStatus(null); }}
@@ -501,7 +552,8 @@ export function LoginScreen() {
               </button>
               <button
                 onClick={handleForgotPassword}
-                className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-xs font-semibold"
+                disabled={forgotRateLimit.isBlocked}
+                className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
               >
                 Send Link
               </button>
@@ -587,6 +639,12 @@ export function LoginScreen() {
                 <p className="text-xs text-red-600 font-medium">{googleError}</p>
               )}
 
+              <RateLimitAlert
+                message={googleRateLimit.limitError}
+                retryAfterSeconds={googleRateLimit.retryAfterSeconds}
+                policyLabel={googleRateLimit.policyLabel}
+              />
+
               {googleNotice && (
                 <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 leading-relaxed">
                   <span className="font-bold block mb-0.5"><i className="fas fa-clock mr-1 text-amber-600" />Pending Admin Approval</span>
@@ -596,8 +654,9 @@ export function LoginScreen() {
 
               <button
                 type="button"
+                disabled={googleRateLimit.isBlocked}
                 onClick={() => handleConfirmGoogleAccount(googleEmailInput, googleNameInput, googleRoleInput)}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer mt-1"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer mt-1 disabled:opacity-60"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -661,6 +720,10 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState<{ title: string; message: string; isAdmin: boolean; createdUser?: User } | null>(null);
   const [error, setError] = useState('');
+  const registerRateLimit = useRateLimitGuard('auth:register', {
+    roleOverride: formData.role,
+    actorIdOverride: formData.email.trim().toLowerCase() || `signup-${formData.role}`,
+  });
 
   useEffect(() => {
     let active = true;
@@ -720,6 +783,12 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
 
     if (users.find(u => u.email.toLowerCase() === cleanEmail)) {
       setError('Email is already registered.');
+      return;
+    }
+
+    const regRateCheck = registerRateLimit.tryConsume(cleanEmail || `signup-${formData.role}`, formData.role);
+    if (!regRateCheck.allowed) {
+      setError(regRateCheck.message);
       return;
     }
 
@@ -1094,6 +1163,13 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
                   </div>
                 )}
 
+                <RateLimitAlert
+                  message={registerRateLimit.limitError}
+                  retryAfterSeconds={registerRateLimit.retryAfterSeconds}
+                  policyLabel={registerRateLimit.policyLabel}
+                  variant="dark"
+                />
+
                 <label className="flex items-start gap-2.5 mt-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1112,7 +1188,7 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
                   </button>
                   <button
                     onClick={handleRegister}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || registerRateLimit.isBlocked}
                     className="btn-primary flex-1 disabled:opacity-70"
                   >
                     {isSubmitting ? (
@@ -1139,8 +1215,17 @@ export function PendingApprovalScreen({ user }: { user: User }) {
   const { refreshUsersFromBackend } = useData();
   const [checking, setChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const approvalCheckLimit = useRateLimitGuard('approval:status_check', {
+    roleOverride: user.role,
+    actorIdOverride: user.id || user.email,
+  });
 
   const handleCheckApproval = async () => {
+    const rateCheck = approvalCheckLimit.tryConsume(user.id || user.email, user.role);
+    if (!rateCheck.allowed) {
+      setStatusMessage(rateCheck.message);
+      return;
+    }
     setChecking(true);
     setStatusMessage('');
     try {
@@ -1203,12 +1288,19 @@ export function PendingApprovalScreen({ user }: { user: User }) {
             </p>
           )}
 
+          <RateLimitAlert
+            message={approvalCheckLimit.limitError}
+            retryAfterSeconds={approvalCheckLimit.retryAfterSeconds}
+            policyLabel={approvalCheckLimit.policyLabel}
+            variant="dark"
+          />
+
           <div className="space-y-2.5 pt-2">
             {!isSuspended && (
               <button
                 type="button"
                 onClick={handleCheckApproval}
-                disabled={checking}
+                disabled={checking || approvalCheckLimit.isBlocked}
                 className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-[#0f2b46] rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 disabled:opacity-70"
               >
                 <i className={`fas ${checking ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`} />

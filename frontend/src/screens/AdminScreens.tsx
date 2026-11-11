@@ -12,8 +12,10 @@ import {
   normalizePermissions,
   deduplicateCompletedChapters,
 } from '../context/DataContext';
-import { Header, StatusBadge, EmptyState } from '../components/Navigation';
+import { Header, StatusBadge, EmptyState, RateLimitAlert, AccessRestrictedScreen } from '../components/Navigation';
 import { signUpUser } from '../features/auth';
+import { useRbac } from '../hooks/useRbac';
+import { useRateLimitGuard } from '../hooks/useRateLimitGuard';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { CurriculumBrowser } from '../features/curriculum';
 import { useResources, resourceService, deduplicateAndMergeResources } from '../features/resources';
@@ -534,6 +536,8 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 // ==================== MANAGE USERS ====================
 export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
   const { user: currentUser, startViewingAs } = useAuth();
+  const rbac = useRbac();
+  const bulkApproveLimit = useRateLimitGuard('admin:bulk_action');
   const { users, cohortBatches, deleteUser, updateUser, allowAllUsersAccess, refreshUsersFromBackend, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [docFilter, setDocFilter] = useState<string>('All');
@@ -677,6 +681,10 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   };
 
   const handleAllowAllUsers = async (onlyPending: boolean) => {
+    if (!rbac.can('users:approve')) return;
+    const rateCheck = bulkApproveLimit.tryConsume();
+    if (!rateCheck.allowed) return;
+
     const count = allowAllUsersAccess('admin', currentUser?.email, onlyPending);
     if (currentUser) {
       await adminService.recordAuditLog({
@@ -720,30 +728,39 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
         )}
 
         {/* Quick Bulk Access Controls for Admin */}
-        {users.some(u => u.role !== 'admin') && (
-          <div className="flex items-center gap-2 bg-teal-50/80 border border-teal-200 rounded-2xl p-2.5">
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-bold text-teal-900">Bulk Resource Approval</p>
-              <p className="text-[10px] text-teal-700 truncate">
-                {pendingCount > 0 ? `${pendingCount} waiting approval` : 'Grant all users full resource access'}
-              </p>
-            </div>
-            {pendingCount > 0 && (
+        {rbac.can('users:approve') && users.some(u => u.role !== 'admin') && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 bg-teal-50/80 border border-teal-200 rounded-2xl p-2.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-teal-900">Bulk Resource Approval</p>
+                <p className="text-[10px] text-teal-700 truncate">
+                  {pendingCount > 0 ? `${pendingCount} waiting approval` : 'Grant all users full resource access'}
+                </p>
+              </div>
+              {pendingCount > 0 && (
+                <button
+                  type="button"
+                  disabled={bulkApproveLimit.isBlocked}
+                  onClick={() => handleAllowAllUsers(true)}
+                  className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-bold transition shrink-0 disabled:opacity-50"
+                >
+                  Allow Pending ({pendingCount})
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => handleAllowAllUsers(true)}
-                className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-bold transition shrink-0"
+                disabled={bulkApproveLimit.isBlocked}
+                onClick={() => handleAllowAllUsers(false)}
+                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-bold transition shrink-0 disabled:opacity-50"
               >
-                Allow Pending ({pendingCount})
+                Allow All Users
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => handleAllowAllUsers(false)}
-              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-bold transition shrink-0"
-            >
-              Allow All Users
-            </button>
+            </div>
+            <RateLimitAlert
+              message={bulkApproveLimit.limitError}
+              retryAfterSeconds={bulkApproveLimit.retryAfterSeconds}
+              policyLabel={bulkApproveLimit.policyLabel}
+            />
           </div>
         )}
 
@@ -1900,14 +1917,21 @@ export function AdminAnnouncements({ onBack, onNavigate }: { onBack: () => void;
 // ==================== SEND ANNOUNCEMENT ====================
 export function SendAnnouncement({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  const rbac = useRbac();
+  const announcementLimit = useRateLimitGuard('comms:announcement');
   const { addAnnouncement } = useData();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [pinned, setPinned] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  if (!rbac.can('announcements:publish')) {
+    return <AccessRestrictedScreen moduleName="Send Announcement" onBack={onBack} />;
+  }
+
   const handlePost = () => {
     if (!title || !content || !user) return;
+    if (!announcementLimit.tryConsume().allowed) return;
     addAnnouncement({ title, content, pinned, authorId: user.id, authorName: user.name, authorRole: user.role });
     setSuccess(true);
     setTimeout(() => onBack(), 1500);
@@ -1928,13 +1952,22 @@ export function SendAnnouncement({ onBack }: { onBack: () => void }) {
     <div>
       <Header title="New Announcement" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-4">
+        <div className="flex items-center justify-between text-[10px] text-gray-500">
+          <span>Broadcast Quota: <strong>{announcementLimit.remaining}/{announcementLimit.limit} remaining</strong></span>
+          <span className="badge badge-teal text-[9px]">{announcementLimit.policyLabel}</span>
+        </div>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title *" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Content *" rows={5} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" />
         <div className="flex items-center gap-2">
           <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
           <span className="text-sm text-gray-600">Pin this announcement</span>
         </div>
-        <button onClick={handlePost} disabled={!title || !content} className="btn-primary disabled:opacity-50"><i className="fas fa-bullhorn mr-2" />Post Announcement</button>
+        <RateLimitAlert
+          message={announcementLimit.limitError}
+          retryAfterSeconds={announcementLimit.retryAfterSeconds}
+          policyLabel={announcementLimit.policyLabel}
+        />
+        <button onClick={handlePost} disabled={!title || !content || announcementLimit.isBlocked} className="btn-primary disabled:opacity-50"><i className="fas fa-bullhorn mr-2" />Post Announcement</button>
       </div>
     </div>
   );
@@ -1942,14 +1975,21 @@ export function SendAnnouncement({ onBack }: { onBack: () => void }) {
 
 // ==================== SEND NOTIFICATION ====================
 export function SendNotification({ onBack }: { onBack: () => void }) {
+  const rbac = useRbac();
+  const notificationLimit = useRateLimitGuard('comms:notification');
   const { addNotification } = useData();
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [targetRole, setTargetRole] = useState('all');
   const [success, setSuccess] = useState(false);
 
+  if (!rbac.can('notifications:send')) {
+    return <AccessRestrictedScreen moduleName="Send Notification" onBack={onBack} />;
+  }
+
   const handleSend = () => {
     if (!title || !message) return;
+    if (!notificationLimit.tryConsume().allowed) return;
     addNotification({ title, message, type: 'notification', targetRole });
     setSuccess(true);
     setTimeout(() => onBack(), 1500);
@@ -1970,6 +2010,10 @@ export function SendNotification({ onBack }: { onBack: () => void }) {
     <div>
       <Header title="Send Notification" showBack onBack={onBack} gradient={false} />
       <div className="p-4 space-y-4">
+        <div className="flex items-center justify-between text-[10px] text-gray-500">
+          <span>Dispatch Quota: <strong>{notificationLimit.remaining}/{notificationLimit.limit} remaining</strong></span>
+          <span className="badge badge-teal text-[9px]">{notificationLimit.policyLabel}</span>
+        </div>
         <div>
           <label className="text-xs font-semibold text-gray-700 mb-2 block">Send To</label>
           <div className="grid grid-cols-2 gap-2">
@@ -1980,7 +2024,12 @@ export function SendNotification({ onBack }: { onBack: () => void }) {
         </div>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title *" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Message *" rows={4} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" />
-        <button onClick={handleSend} disabled={!title || !message} className="btn-primary disabled:opacity-50"><i className="fas fa-paper-plane mr-2" />Send Notification</button>
+        <RateLimitAlert
+          message={notificationLimit.limitError}
+          retryAfterSeconds={notificationLimit.retryAfterSeconds}
+          policyLabel={notificationLimit.policyLabel}
+        />
+        <button onClick={handleSend} disabled={!title || !message || notificationLimit.isBlocked} className="btn-primary disabled:opacity-50"><i className="fas fa-paper-plane mr-2" />Send Notification</button>
       </div>
     </div>
   );
@@ -2018,6 +2067,9 @@ export function AdminNotifications({ onBack, onNavigate }: { onBack: () => void;
 // ==================== ADMIN COMMUNITY ====================
 export function AdminCommunity({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  const rbac = useRbac();
+  const postLimit = useRateLimitGuard('community:post');
+  const replyLimit = useRateLimitGuard('community:reply');
   const { communityMessages, addCommunityMessage, addCommunityReply, deleteCommunityMessage, togglePinMessage } = useData();
   const [newMessage, setNewMessage] = useState('');
   const [replyTarget, setReplyTarget] = useState<{
@@ -2037,13 +2089,17 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
   const [replyText, setReplyText] = useState('');
 
   const handlePost = () => {
+    if (!rbac.can('community:post')) return;
     if (!newMessage.trim() || !user) return;
+    if (!postLimit.tryConsume().allowed) return;
     addCommunityMessage({ authorId: user.id, authorName: user.name, authorRole: 'Admin', message: newMessage, pinned: false });
     setNewMessage('');
   };
 
   const handleSendReply = (parentId: string, targetReplyId?: string, targetAuthor?: string) => {
+    if (!rbac.can('community:reply')) return;
     if (!replyText.trim() || !user) return;
+    if (!replyLimit.tryConsume().allowed) return;
     const parentReplyId = targetReplyId || replyTarget?.replyId;
     const replyToAuthor = targetAuthor || (replyTarget?.replyId ? replyTarget.replyAuthorName : undefined);
 
@@ -2063,9 +2119,18 @@ export function AdminCommunity({ onBack }: { onBack: () => void }) {
     <div>
       <Header title="Community" showBack onBack={onBack} />
       <div className="p-4 space-y-3 pb-12">
-        <div className="card">
-          <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Post as admin..." rows={2} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none mb-2" />
-          <button onClick={handlePost} className="btn-primary">Post</button>
+        <div className="card space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-gray-500">
+            <span>Admin Quota: <strong>{postLimit.remaining}/{postLimit.limit} remaining</strong></span>
+            <span className="badge badge-teal text-[9px]">{postLimit.policyLabel}</span>
+          </div>
+          <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Post as admin..." rows={2} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm resize-none" />
+          <RateLimitAlert
+            message={postLimit.limitError || replyLimit.limitError}
+            retryAfterSeconds={postLimit.isBlocked ? postLimit.retryAfterSeconds : replyLimit.retryAfterSeconds}
+            policyLabel={postLimit.isBlocked ? postLimit.policyLabel : replyLimit.policyLabel}
+          />
+          <button onClick={handlePost} disabled={!newMessage.trim() || postLimit.isBlocked} className="btn-primary disabled:opacity-50">Post</button>
         </div>
         {communityMessages.map((msg) => (
           <div key={msg.id} className={`card ${msg.pinned ? 'border-l-4 border-teal-500' : ''}`}>

@@ -1,6 +1,7 @@
 
 const express = require("express");
 const router = express.Router();
+const { handleAIChat } = require("../controllers/aiController");
 
 const GROQ_MODELS = [
     "llama-3.3-70b-versatile",
@@ -160,5 +161,7 @@ Expected format:
         });
     }
 });
+
+router.post("/chat", handleAIChat);
 
 module.exports = router;

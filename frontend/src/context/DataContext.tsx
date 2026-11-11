@@ -4,11 +4,18 @@ import { DEFAULT_CURRICULUM } from '../features/curriculum/curriculumService';
 import {
   type AccountStatus,
   type UserAccessPermissions,
+  type AccessModuleKey,
+  type PermissionCapability,
   FULL_USER_PERMISSIONS,
   EMPTY_USER_PERMISSIONS,
   RESOURCE_ACCESS_MODULES,
+  SCREEN_MODULE_MAP,
   normalizePermissions,
   hasResourceAccess,
+  hasCapability,
+  canAccessScreen,
+  evaluateScreenAccess,
+  buildRbacSnapshot,
   isUserApproved,
 } from '../features/auth';
 import {
@@ -31,11 +38,18 @@ import {
 export {
   type AccountStatus,
   type UserAccessPermissions,
+  type AccessModuleKey,
+  type PermissionCapability,
   FULL_USER_PERMISSIONS,
   EMPTY_USER_PERMISSIONS,
   RESOURCE_ACCESS_MODULES,
+  SCREEN_MODULE_MAP,
   normalizePermissions,
   hasResourceAccess,
+  hasCapability,
+  canAccessScreen,
+  evaluateScreenAccess,
+  buildRbacSnapshot,
   isUserApproved,
 };
 

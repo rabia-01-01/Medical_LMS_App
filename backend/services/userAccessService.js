@@ -88,7 +88,7 @@ function buildDefaultUsers() {
         {
             id: "u-admin-1",
             name: "Alice Kernel",
-            email: "admin@medical.lms",
+            email: "[EMAIL_ADDRESS]",
             phone: "+1 555-0100",
             passwordHash: defaultHash,
             role: "admin",
@@ -102,7 +102,7 @@ function buildDefaultUsers() {
         {
             id: "u-faculty-1",
             name: "Dr. Sarah Jenkins",
-            email: "sarah.jenkins@medical.lms",
+            email: "[EMAIL_ADDRESS]",
             phone: "+1 555-0101",
             passwordHash: defaultHash,
             role: "faculty",
@@ -116,7 +116,7 @@ function buildDefaultUsers() {
         {
             id: "u-student-1",
             name: "Mary",
-            email: "mary@medical.lms",
+            email: "[EMAIL_ADDRESS]",
             phone: "+1 555-0102",
             passwordHash: defaultHash,
             role: "student",
@@ -131,7 +131,7 @@ function buildDefaultUsers() {
         {
             id: "u-consultant-1",
             name: "Dr. Marco Rossi",
-            email: "consultant@italia.medica",
+            email: "[EMAIL_ADDRESS]",
             phone: "+39 06 6987 1234",
             passwordHash: defaultHash,
             role: "consultant",

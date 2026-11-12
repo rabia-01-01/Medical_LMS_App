@@ -11,7 +11,13 @@ const {
     updateUserAccess,
     allowAllUsers,
     removeUser,
+    suspendAdminAccount,
+    deleteOwnAccount,
     verifyAdminActor,
+    requestPasswordReset,
+    issuePasswordResetCode,
+    adminResetUserPassword,
+    completePasswordResetWithCode,
 } = require("../services/userAccessService");
 
 function resolveAdminActor(req) {
@@ -109,6 +115,85 @@ router.patch("/:id/access", (req, res) =>
     handleAction(res, () => {
         const actor = resolveAdminActor(req);
         const result = updateUserAccess(req.params.id, req.body, actor);
+        if (result.error) {
+            return res.status(result.statusCode).json({ error: result.error });
+        }
+        return res.status(200).json({ user: result.user });
+    })
+);
+
+router.post("/forgot-password", (req, res) =>
+    handleAction(res, () => {
+        const result = requestPasswordReset(req.body?.email);
+        if (result.error) {
+            return res.status(result.statusCode).json({ error: result.error });
+        }
+        return res.status(200).json({ requested: result.requested, message: result.message });
+    })
+);
+
+router.post("/reset-password", (req, res) =>
+    handleAction(res, () => {
+        const result = completePasswordResetWithCode(req.body || {});
+        if (result.error) {
+            return res.status(result.statusCode).json({ error: result.error });
+        }
+        return res.status(200).json({ success: true, user: result.user });
+    })
+);
+
+router.post("/delete-account", (req, res) =>
+    handleAction(res, () => {
+        const result = deleteOwnAccount(req.body?.email, req.body?.password);
+        if (result.error) {
+            return res.status(result.statusCode).json({ error: result.error });
+        }
+        return res.status(200).json({
+            success: true,
+            deletedId: result.deletedId,
+            deletedEmail: result.deletedEmail,
+            role: result.role,
+            adminRegistrationOpen: result.adminRegistrationOpen,
+        });
+    })
+);
+
+router.post("/:id/suspend-admin", (req, res) =>
+    handleAction(res, () => {
+        const actor = resolveAdminActor(req);
+        const result = suspendAdminAccount(req.params.id, actor);
+        if (result.error) {
+            return res.status(result.statusCode).json({ error: result.error });
+        }
+        return res.status(200).json({
+            success: true,
+            deletedId: result.deletedId,
+            deletedEmail: result.deletedEmail,
+            deletedSelf: result.deletedSelf,
+            adminRegistrationOpen: result.adminRegistrationOpen,
+        });
+    })
+);
+
+router.post("/:id/reset-code", (req, res) =>
+    handleAction(res, () => {
+        const actor = resolveAdminActor(req);
+        const result = issuePasswordResetCode(req.params.id, actor);
+        if (result.error) {
+            return res.status(result.statusCode).json({ error: result.error });
+        }
+        return res.status(200).json({
+            resetCode: result.resetCode,
+            expiresAt: result.expiresAt,
+            user: result.user,
+        });
+    })
+);
+
+router.patch("/:id/password", (req, res) =>
+    handleAction(res, () => {
+        const actor = resolveAdminActor(req);
+        const result = adminResetUserPassword(req.params.id, req.body?.password, actor);
         if (result.error) {
             return res.status(result.statusCode).json({ error: result.error });
         }

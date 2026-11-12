@@ -24,6 +24,7 @@ import {
   updateBackendUserAccess,
   allowAllBackendUsers,
   deleteBackendUser,
+  suspendBackendAdminAccount,
 } from '../services/userAccessApi';
 import {
   ConsultancyChecklistItem,
@@ -66,6 +67,8 @@ export interface User {
   status: AccountStatus;
   accessPermissions?: UserAccessPermissions;
   selfRegisteredAdmin?: boolean;
+  passwordResetRequested?: boolean;
+  hasActiveResetCode?: boolean;
   createdAt: string;
   targetExam?: string;
 }
@@ -286,6 +289,8 @@ interface DataContextType {
   addUser: (user: Omit<User, 'id' | 'createdAt'> & { id?: string }, actorRole?: string, actorEmail?: string) => void;
   updateUser: (id: string, data: Partial<User>, actorRole?: string, actorEmail?: string) => void;
   deleteUser: (id: string, actorRole?: string, actorEmail?: string) => void;
+  suspendAdminAccount: (id: string, actorEmail?: string, actorId?: string) => Promise<void>;
+  deleteOwnUserAccount: (email: string, id?: string) => void;
   getUserById: (id: string) => User | undefined;
   getUsersByRole: (role: string) => User[];
   allowAllUsersAccess: (actorRole?: string, actorEmail?: string, onlyPending?: boolean) => number;
@@ -546,8 +551,12 @@ export function deduplicateCompletedChapters(chapters: string[]): string[] {
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>(() => {
+    let rawExists = false;
+    try {
+      rawExists = localStorage.getItem('sim_users') !== null;
+    } catch {}
     const stored = loadFromStorage<User[]>('sim_users', []);
-    if (!stored || stored.length === 0) {
+    if (!rawExists) {
       return [
         {
           id: 'u-admin-1',
@@ -930,13 +939,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
         status,
         accessPermissions: normalizePermissions(r.accessPermissions, status === 'active'),
         ...(r.selfRegisteredAdmin ? { selfRegisteredAdmin: true } : {}),
+        ...(r.passwordResetRequested ? { passwordResetRequested: true } : {}),
+        ...(r.hasActiveResetCode ? { hasActiveResetCode: true } : {}),
         createdAt: r.createdAt || localMatch?.createdAt || new Date().toISOString(),
       };
     });
     const remoteEmails = new Set(remoteUsers.map((r) => r.email.toLowerCase()));
+    const remoteHasSelfAdmin = remoteUsers.some((r) => r.role === 'admin' && Boolean(r.selfRegisteredAdmin));
+    try {
+      if (remoteHasSelfAdmin) {
+        localStorage.setItem('sim_first_admin_registered_v1', 'true');
+      } else {
+        localStorage.removeItem('sim_first_admin_registered_v1');
+      }
+    } catch {}
     currentLocal.forEach((u) => {
       if (!remoteEmails.has(u.email.toLowerCase())) {
-        merged.push(u);
+        merged.push(
+          remoteHasSelfAdmin || !u.selfRegisteredAdmin
+            ? u
+            : { ...u, selfRegisteredAdmin: false }
+        );
       }
     });
     return merged;
@@ -976,12 +999,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const canRegisterAdmin = React.useMemo(() => {
+    const hasLocalSelfAdmin = users.some(
+      (u) => u.role === 'admin' && Boolean(u.selfRegisteredAdmin)
+    );
+    if (hasLocalSelfAdmin) return false;
     try {
       if (localStorage.getItem('sim_first_admin_registered_v1') === 'true') return false;
     } catch {}
-    return !users.some(
-      (u) => u.role === 'admin' && Boolean(u.selfRegisteredAdmin)
-    );
+    return true;
   }, [users]);
 
   useEffect(() => {
@@ -1085,15 +1110,50 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setUsers(prev => prev.map(u => (u.id === id ? computeUpdatedUser(u, data) : u)));
   };
 
+  const removeUserFromState = (predicate: (u: User) => boolean) => {
+    setUsers(prev => {
+      const next = prev.filter(u => !predicate(u));
+      if (!next.some(u => u.role === 'admin' && Boolean(u.selfRegisteredAdmin))) {
+        try { localStorage.removeItem('sim_first_admin_registered_v1'); } catch {}
+      }
+      return next;
+    });
+  };
+
   const deleteUser = (id: string, actorRole?: string, actorEmail?: string) => {
     if (actorRole && actorRole !== 'admin') {
       console.warn('[DataContext] Permission Denied: ONLY Admin can delete users.');
       return;
     }
     const user = users.find(u => u.id === id);
-    setUsers(prev => prev.filter(u => u.id !== id));
+    removeUserFromState(u => u.id === id);
     deleteBackendUser(id, { adminEmail: actorEmail }).catch(() => {});
     addAuditLog({ action: 'User Deleted', userId: 'system', userName: 'Administrator', details: `Deleted user: ${user?.name}` });
+  };
+
+  const suspendAdminAccount = async (id: string, actorEmail?: string, actorId?: string) => {
+    const target = users.find(u => u.id === id && u.role === 'admin');
+    if (!target) return;
+    removeUserFromState(u => u.id === id);
+    addAuditLog({
+      action: 'ADMIN_SUSPENDED_DELETED',
+      userId: actorId || id,
+      userName: actorEmail || target.name,
+      details: `Suspended and deleted administrator account: ${target.email}`,
+    });
+    await suspendBackendAdminAccount(id, { adminEmail: actorEmail, adminId: actorId }).catch(() => {});
+  };
+
+  const deleteOwnUserAccount = (email: string, id?: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const target = users.find(u => (id && u.id === id) || u.email.toLowerCase() === cleanEmail);
+    removeUserFromState(u => (id && u.id === id) || u.email.toLowerCase() === cleanEmail);
+    addAuditLog({
+      action: 'USER_SELF_DELETED',
+      userId: target?.id || id || 'self',
+      userName: target?.name || cleanEmail,
+      details: `Account permanently deleted via self-service verification (${cleanEmail})`,
+    });
   };
 
   const getUserById = (id: string) => users.find(u => u.id === id);
@@ -2078,7 +2138,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      users, addUser, updateUser, deleteUser, getUserById, getUsersByRole, allowAllUsersAccess, refreshUsersFromBackend, canRegisterAdmin,
+      users, addUser, updateUser, deleteUser, suspendAdminAccount, deleteOwnUserAccount, getUserById, getUsersByRole, allowAllUsersAccess, refreshUsersFromBackend, canRegisterAdmin,
       departments, addDepartment, deleteDepartment, updateDepartment,
       cohortBatches, addCohortBatch, deleteCohortBatch,
       courses, addCourse, deleteCourse, updateCourse, enrollStudents, unenrollStudent,

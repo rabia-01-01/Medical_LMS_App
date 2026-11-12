@@ -14,6 +14,10 @@ import {
 } from '../context/DataContext';
 import { Header, StatusBadge, EmptyState, RateLimitAlert, AccessRestrictedScreen } from '../components/Navigation';
 import { signUpUser } from '../features/auth';
+import {
+  issueBackendResetCode,
+  adminResetBackendUserPassword,
+} from '../services/userAccessApi';
 import { useRbac } from '../hooks/useRbac';
 import { useRateLimitGuard } from '../hooks/useRateLimitGuard';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -535,10 +539,10 @@ export function AddUser({ onBack }: { onBack: () => void }) {
 
 // ==================== MANAGE USERS ====================
 export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavigate: (screen: string) => void }) {
-  const { user: currentUser, startViewingAs } = useAuth();
+  const { user: currentUser, startViewingAs, logout } = useAuth();
   const rbac = useRbac();
   const bulkApproveLimit = useRateLimitGuard('admin:bulk_action');
-  const { users, cohortBatches, deleteUser, updateUser, allowAllUsersAccess, refreshUsersFromBackend, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
+  const { users, cohortBatches, deleteUser, suspendAdminAccount, updateUser, allowAllUsersAccess, refreshUsersFromBackend, studentDocuments, updateStudentDocument, deleteStudentDocument } = useData();
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [docFilter, setDocFilter] = useState<string>('All');
   const [filter, setFilter] = useState(() => {
@@ -558,6 +562,10 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   const [modalBatch, setModalBatch] = useState<string>('');
   const [modalPermissions, setModalPermissions] = useState<UserAccessPermissions>({ ...FULL_USER_PERMISSIONS });
   const [accessToast, setAccessToast] = useState('');
+  const [issuedResetCode, setIssuedResetCode] = useState<string>('');
+  const [adminTempPassword, setAdminTempPassword] = useState<string>('');
+  const [resetActionNote, setResetActionNote] = useState<string>('');
+  const [isResetActionLoading, setIsResetActionLoading] = useState(false);
 
   React.useEffect(() => {
     refreshUsersFromBackend().catch(() => {});
@@ -604,6 +612,36 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
   const toggleStatus = async (id: string) => {
     const target = users.find(u => u.id === id);
     if (!target) return;
+
+    if (target.role === 'admin') {
+      const isSelf =
+        target.id === currentUser?.id ||
+        target.email.toLowerCase() === (currentUser?.email || '').toLowerCase();
+
+      if (currentUser) {
+        await adminService.recordAuditLog({
+          action: 'ADMIN_SUSPENDED_DELETED',
+          entityType: 'USER',
+          entityId: id,
+          userId: currentUser.id,
+          userName: currentUser.name || 'Admin',
+          details: `Suspended and deleted admin account ${target.name} (${target.email})`,
+          severity: 'critical',
+        });
+      }
+
+      await suspendAdminAccount(id, currentUser?.email, currentUser?.id);
+
+      if (isSelf) {
+        logout();
+        return;
+      }
+
+      setAccessToast(`Deleted admin account for ${target.name}`);
+      setTimeout(() => setAccessToast(''), 2500);
+      return;
+    }
+
     const newStatus: AccountStatus = target.status === 'active' ? 'suspended' : 'active';
     const nextPerms =
       newStatus === 'active'
@@ -633,6 +671,9 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
 
   const openAccessModal = (target: User) => {
     setAccessModalUser(target);
+    setIssuedResetCode('');
+    setAdminTempPassword('');
+    setResetActionNote('');
     const defaultStatus: AccountStatus = target.status === 'pending' ? 'active' : target.status;
     setModalStatus(defaultStatus);
     setModalBatch(target.batch || '');
@@ -678,6 +719,57 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
     setAccessToast(`Updated access for ${accessModalUser.name}`);
     setTimeout(() => setAccessToast(''), 2500);
     setAccessModalUser(null);
+  };
+
+  const handleGenerateResetCode = async () => {
+    if (!accessModalUser || !currentUser) return;
+    setIsResetActionLoading(true);
+    setResetActionNote('');
+    try {
+      const res = await issueBackendResetCode(accessModalUser.id, {
+        adminEmail: currentUser.email,
+        adminId: currentUser.id,
+      });
+      if (res.ok && res.data?.resetCode) {
+        setIssuedResetCode(res.data.resetCode);
+        setResetActionNote('Share this 1-time code (valid 15 min) so the user can set a new password on Login -> Forgot Password -> Use Reset Code.');
+        refreshUsersFromBackend().catch(() => {});
+      } else {
+        setResetActionNote(
+          res.networkError
+            ? 'Backend server is offline; set a temporary password directly below instead.'
+            : res.error || 'Could not generate reset code.'
+        );
+      }
+    } finally {
+      setIsResetActionLoading(false);
+    }
+  };
+
+  const handleAdminSetPassword = async () => {
+    if (!accessModalUser || !currentUser) return;
+    if (adminTempPassword.length < 6) {
+      setResetActionNote('Temporary password must be at least 6 characters.');
+      return;
+    }
+    setIsResetActionLoading(true);
+    setResetActionNote('');
+    try {
+      const res = await adminResetBackendUserPassword(accessModalUser.id, adminTempPassword, {
+        adminEmail: currentUser.email,
+        adminId: currentUser.id,
+      });
+      updateUser(accessModalUser.id, { password: adminTempPassword }, 'admin', currentUser.email);
+      setAdminTempPassword('');
+      if (res.ok || res.networkError) {
+        setResetActionNote(`Password updated for ${accessModalUser.name}. Share it securely with them.`);
+        refreshUsersFromBackend().catch(() => {});
+      } else {
+        setResetActionNote(res.error || 'Password update saved locally only.');
+      }
+    } finally {
+      setIsResetActionLoading(false);
+    }
   };
 
   const handleAllowAllUsers = async (onlyPending: boolean) => {
@@ -876,9 +968,15 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                   <div className="flex flex-col gap-1 flex-shrink-0 items-end">
                     <div className="flex items-center gap-1">
                       {u.role !== 'admin' && (
-                        <button
-                          type="button"
-                          onClick={() => openAccessModal(u)}
+                        <>
+                          {u.passwordResetRequested && (
+                            <span className="badge bg-amber-100 text-amber-800 border border-amber-300 text-[8px] py-0 px-1.5">
+                              Reset Requested
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openAccessModal(u)}
                           className={`text-[10px] px-2 py-1 rounded font-bold transition flex items-center gap-1 ${
                             u.status === 'pending'
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
@@ -889,6 +987,7 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                           <i className={`fas ${u.status === 'pending' ? 'fa-check-circle' : 'fa-key'} text-[8px]`} />
                           <span>{u.status === 'pending' ? 'Allow User' : 'Access'}</span>
                         </button>
+                        </>
                       )}
                       {u.id !== currentUser?.id && (
                         <button
@@ -1082,6 +1181,66 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
                     );
                   })}
                 </div>
+              )}
+            </div>
+
+            {/* 4. Password Recovery Support */}
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-gray-700">4. Password Recovery</label>
+                {accessModalUser.passwordResetRequested && (
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    User Requested Reset
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={isResetActionLoading}
+                onClick={handleGenerateResetCode}
+                className="w-full py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+              >
+                <i className="fas fa-shield-alt text-[10px]" />
+                <span>Generate 1-Time Reset Code</span>
+              </button>
+
+              {issuedResetCode && (
+                <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] text-teal-700 font-semibold">One-Time Reset Code (15 min)</p>
+                    <p className="text-sm font-mono font-extrabold text-teal-950 tracking-wider">{issuedResetCode}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { try { navigator.clipboard?.writeText(issuedResetCode); } catch {} }}
+                    className="px-2.5 py-1 bg-teal-600 text-white rounded-lg text-[10px] font-bold"
+                  >
+                    Copy
+                  </button>
+                </div>
+              )}
+
+              <div className="flex gap-1.5">
+                <input
+                  type="password"
+                  value={adminTempPassword}
+                  onChange={(e) => setAdminTempPassword(e.target.value)}
+                  placeholder="Or set temporary password (min 6 chars)"
+                  className="flex-1 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-[11px] focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <button
+                  type="button"
+                  disabled={isResetActionLoading || adminTempPassword.length < 6}
+                  onClick={handleAdminSetPassword}
+                  className="px-2.5 py-1.5 bg-gray-800 text-white rounded-xl text-[10px] font-bold disabled:opacity-40"
+                >
+                  Set
+                </button>
+              </div>
+
+              {resetActionNote && (
+                <p className="text-[10px] text-teal-700 leading-relaxed">{resetActionNote}</p>
               )}
             </div>
 

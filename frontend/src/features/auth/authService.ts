@@ -383,7 +383,33 @@ export async function resetPassword(email: string): Promise<AuthResult<void>> {
   }
 
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email.trim(),
+      redirectTo ? { redirectTo } : undefined
+    );
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Complete Supabase password recovery session by updating the signed-in user's password.
+ */
+export async function updateUserPassword(newPassword: string): Promise<AuthResult<void>> {
+  if (!isSupabaseConfigured()) {
+    return { success: false, error: 'Supabase client is offline.' };
+  }
+  if (!newPassword || newPassword.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters.' };
+  }
+
+  try {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
       return { success: false, error: error.message };
     }

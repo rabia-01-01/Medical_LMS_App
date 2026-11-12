@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData, User, EMPTY_USER_PERMISSIONS, FULL_USER_PERMISSIONS, normalizePermissions } from '../context/DataContext';
-import { resetPassword, resetRateLimit } from '../features/auth';
+import { resetPassword, resetRateLimit, signInUser, signOutUser } from '../features/auth';
 import { RateLimitAlert } from '../components/Navigation';
 import { useRateLimitGuard } from '../hooks/useRateLimitGuard';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
   authenticateBackendUser,
+  completeBackendPasswordReset,
+  deleteBackendOwnAccount,
   fetchAdminRegistrationOpen,
   fetchBackendUserStatus,
   googleAuthBackendSync,
   registerBackendSelfUser,
+  requestBackendPasswordReset,
 } from '../services/userAccessApi';
 
 type GoogleRole = 'faculty' | 'student' | 'consultant';
@@ -35,14 +38,14 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
             </div>
           </div>
         </div>
-        
+
         <h1 className="text-white text-2xl font-bold text-center mb-1 tracking-tight">Sultanat e Italia</h1>
         <h2 className="text-teal-400 text-lg font-semibold text-center mb-2">Medica LMS</h2>
         <p className="text-gray-400 text-xs text-center max-w-[260px] mx-auto leading-relaxed">
           Your Gateway to Medical Excellence in India & Italy
         </p>
       </div>
-      
+
       <div className="absolute bottom-16 flex flex-col items-center">
         <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mb-3" />
         <p className="text-teal-400/80 text-[11px] font-medium tracking-wide">CONNECTING TO CAMPUS...</p>
@@ -53,7 +56,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
 
 export function LoginScreen() {
   const { signIn, login } = useAuth();
-  const { users, addUser, canRegisterAdmin, refreshUsersFromBackend } = useData();
+  const { users, addUser, deleteOwnUserAccount, canRegisterAdmin, refreshUsersFromBackend } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -61,8 +64,18 @@ export function LoginScreen() {
   const [registerInitialRole, setRegisterInitialRole] = useState<RegisterableRole | undefined>(undefined);
   const [remoteAdminOpen, setRemoteAdminOpen] = useState<boolean | null>(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotMode, setForgotMode] = useState<'request' | 'code'>('request');
   const [forgotEmail, setForgotEmail] = useState('');
+  const [resetCodeInput, setResetCodeInput] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [forgotStatus, setForgotStatus] = useState<{ message: string; isError: boolean } | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteEmail, setDeleteEmail] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState<{ message: string; isError: boolean } | null>(null);
   const [error, setError] = useState('');
   const [pendingNotice, setPendingNotice] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -95,7 +108,7 @@ export function LoginScreen() {
     return () => { active = false; };
   }, [showRegister]);
 
-  const showAdminSetup = remoteAdminOpen === null ? canRegisterAdmin : (remoteAdminOpen && canRegisterAdmin);
+  const showAdminSetup = remoteAdminOpen !== null ? remoteAdminOpen : canRegisterAdmin;
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
@@ -155,10 +168,10 @@ export function LoginScreen() {
     const isNewGoogle = remoteUser ? Boolean(remoteSync.data?.isNew) : !localExisting;
     const resolvedUser: User | undefined = remoteUser
       ? {
-          ...remoteUser,
-          password: localExisting?.password || '',
-          accessPermissions: normalizePermissions(remoteUser.accessPermissions, remoteUser.status === 'active'),
-        }
+        ...remoteUser,
+        password: localExisting?.password || '',
+        accessPermissions: normalizePermissions(remoteUser.accessPermissions, remoteUser.status === 'active'),
+      }
       : localExisting;
 
     if (resolvedUser && !isNewGoogle) {
@@ -193,7 +206,7 @@ export function LoginScreen() {
     };
 
     addUser(newGoogleUser);
-    refreshUsersFromBackend().catch(() => {});
+    refreshUsersFromBackend().catch(() => { });
     setGoogleNotice('Your Google account has been registered and is awaiting Administrator approval before you can access resources.');
   };
 
@@ -293,10 +306,20 @@ export function LoginScreen() {
     }
   };
 
+  const openForgotModal = (initialMode: 'request' | 'code' = 'request') => {
+    setForgotMode(initialMode);
+    setForgotEmail(email);
+    setForgotStatus(null);
+    setResetCodeInput('');
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setShowForgotModal(true);
+  };
+
   const handleForgotPassword = async () => {
     const cleanForgot = forgotEmail.trim().toLowerCase();
-    if (!cleanForgot) {
-      setForgotStatus({ message: 'Please enter your registered email address.', isError: true });
+    if (!cleanForgot || !cleanForgot.includes('@')) {
+      setForgotStatus({ message: 'Please enter a valid registered email address.', isError: true });
       return;
     }
 
@@ -306,18 +329,182 @@ export function LoginScreen() {
       return;
     }
 
-    setForgotStatus({ message: 'Sending recovery link...', isError: false });
-    const result = await resetPassword(cleanForgot);
+    setIsResettingPassword(true);
+    try {
+      if (forgotMode === 'code') {
+        if (!resetCodeInput.trim()) {
+          setForgotStatus({ message: 'Enter the one-time reset code provided by your Administrator.', isError: true });
+          return;
+        }
+        if (resetNewPassword.length < 6) {
+          setForgotStatus({ message: 'New password must be at least 6 characters.', isError: true });
+          return;
+        }
+        if (resetNewPassword !== resetConfirmPassword) {
+          setForgotStatus({ message: 'Passwords do not match.', isError: true });
+          return;
+        }
 
-    if (result.success) {
-      setForgotStatus({ message: 'Password recovery email sent! Please check your inbox.', isError: false });
-      setTimeout(() => {
-        setShowForgotModal(false);
-        setForgotStatus(null);
-        setForgotEmail('');
-      }, 2500);
-    } else {
-      setForgotStatus({ message: result.error || 'Failed to send recovery link.', isError: true });
+        setForgotStatus({ message: 'Verifying reset code and updating password...', isError: false });
+        const resetRes = await completeBackendPasswordReset({
+          email: cleanForgot,
+          code: resetCodeInput.trim(),
+          newPassword: resetNewPassword,
+        });
+
+        if (resetRes.ok && resetRes.data?.success) {
+          resetRateLimit('auth:login', 'guest', cleanForgot);
+          refreshUsersFromBackend().catch(() => { });
+          setEmail(cleanForgot);
+          setPassword('');
+          setForgotStatus({
+            message: 'Password updated! You can now sign in with your new password.',
+            isError: false,
+          });
+          setTimeout(() => {
+            setShowForgotModal(false);
+            setForgotStatus(null);
+          }, 1800);
+          return;
+        }
+
+        setForgotStatus({
+          message: resetRes.networkError
+            ? 'Server is unreachable right now. Please try again when online or use Google Sign-In.'
+            : resetRes.error || 'Could not reset password with that code.',
+          isError: true,
+        });
+        return;
+      }
+
+      if (isSupabaseConfigured()) {
+        setForgotStatus({ message: 'Sending recovery link...', isError: false });
+        const result = await resetPassword(cleanForgot);
+        if (result.success) {
+          setForgotStatus({
+            message: 'Password recovery email sent! Open the link in your inbox to set a new password.',
+            isError: false,
+          });
+          return;
+        }
+        setForgotStatus({ message: result.error || 'Failed to send recovery link.', isError: true });
+        return;
+      }
+
+      setForgotStatus({ message: 'Logging password recovery request...', isError: false });
+      const backendReq = await requestBackendPasswordReset(cleanForgot);
+      if (backendReq.ok) {
+        refreshUsersFromBackend().catch(() => { });
+        setForgotStatus({
+          message:
+            'Reset request sent to Administrator. Ask your Admin for a 1-time Reset Code and enter it in "Use Reset Code" — or sign in with Google if your account is active.',
+          isError: false,
+        });
+      } else {
+        setForgotStatus({
+          message: backendReq.networkError
+            ? 'Automated email recovery (Supabase) is not configured and the server is offline. Sign in with Google if your account is active, or ask your Admin once online.'
+            : backendReq.error || 'Unable to log reset request.',
+          isError: true,
+        });
+      }
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const openDeleteModal = () => {
+    setDeleteEmail(email);
+    setDeletePassword('');
+    setDeleteStatus(null);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteOwnAccount = async () => {
+    const cleanEmail = deleteEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@') || !deletePassword) {
+      setDeleteStatus({ message: 'Please enter your account email and password.', isError: true });
+      return;
+    }
+
+    const rateCheck = loginRateLimit.tryConsume(cleanEmail, 'guest');
+    if (!rateCheck.allowed) {
+      setDeleteStatus({ message: rateCheck.message, isError: true });
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    setDeleteStatus(null);
+    try {
+      const backendRes = await deleteBackendOwnAccount(cleanEmail, deletePassword);
+
+      if (backendRes.ok && backendRes.data?.success) {
+        resetRateLimit('auth:login', 'guest', cleanEmail);
+        if (typeof backendRes.data.adminRegistrationOpen === 'boolean') {
+          setRemoteAdminOpen(backendRes.data.adminRegistrationOpen);
+        }
+        deleteOwnUserAccount(cleanEmail, backendRes.data.deletedId);
+        if (email.trim().toLowerCase() === cleanEmail) {
+          setEmail('');
+          setPassword('');
+        }
+        setDeleteStatus({
+          message: `Account for ${cleanEmail} has been permanently deleted.`,
+          isError: false,
+        });
+        setTimeout(() => {
+          setShowDeleteModal(false);
+          setDeleteStatus(null);
+          setDeletePassword('');
+        }, 1600);
+        return;
+      }
+
+      if (!backendRes.networkError) {
+        setDeleteStatus({
+          message: backendRes.error || 'Invalid email or password.',
+          isError: true,
+        });
+        return;
+      }
+
+      // Offline / local fallback verification when backend server is unreachable
+      const localMatch = users.find(
+        (u) => u.email.toLowerCase() === cleanEmail && u.password === deletePassword
+      );
+      let supabaseVerified = false;
+      if (!localMatch && isSupabaseConfigured()) {
+        const sbRes = await signInUser({ email: cleanEmail, password: deletePassword });
+        if (sbRes.success) {
+          supabaseVerified = true;
+          await signOutUser().catch(() => {});
+        }
+      }
+
+      if (localMatch || supabaseVerified) {
+        resetRateLimit('auth:login', 'guest', cleanEmail);
+        deleteOwnUserAccount(cleanEmail, localMatch?.id);
+        if (email.trim().toLowerCase() === cleanEmail) {
+          setEmail('');
+          setPassword('');
+        }
+        setDeleteStatus({
+          message: `Account for ${cleanEmail} has been permanently deleted.`,
+          isError: false,
+        });
+        setTimeout(() => {
+          setShowDeleteModal(false);
+          setDeleteStatus(null);
+          setDeletePassword('');
+        }, 1600);
+      } else {
+        setDeleteStatus({
+          message: 'Invalid email or password.',
+          isError: true,
+        });
+      }
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -325,6 +512,7 @@ export function LoginScreen() {
     return (
       <RegisterScreen
         initialRole={registerInitialRole}
+        onAdminRegistered={() => setRemoteAdminOpen(false)}
         onBack={() => {
           setShowRegister(false);
           setRegisterInitialRole(undefined);
@@ -338,7 +526,7 @@ export function LoginScreen() {
       <div className="italy-accent">
         <div className="green" /><div className="white" /><div className="red" />
       </div>
-      
+
       <div className="flex-1 flex flex-col justify-center px-6 py-8">
         <div className="text-center mb-8">
           <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-white/20 shadow-lg shadow-teal-900/30">
@@ -360,7 +548,7 @@ export function LoginScreen() {
               className="w-full pl-11 pr-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400 transition"
             />
           </div>
-          
+
           <div className="relative">
             <i className="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
             <input
@@ -407,7 +595,7 @@ export function LoginScreen() {
             </span>
             <button
               type="button"
-              onClick={() => { setForgotEmail(email); setShowForgotModal(true); }}
+              onClick={() => openForgotModal('request')}
               className="text-teal-400 hover:text-teal-300 transition font-medium"
             >
               Forgot Password?
@@ -475,35 +663,54 @@ export function LoginScreen() {
           </div>
         </div>
 
-        <div className="text-center mt-6 space-y-3">
-          <p className="text-gray-400 text-sm">
-            Don't have an account?{' '}
-            <button
-              onClick={() => {
-                setRegisterInitialRole(undefined);
-                setShowRegister(true);
-              }}
-              className="text-teal-400 font-semibold hover:underline"
-            >
-              Register Now
-            </button>
-          </p>
+        <div className="mt-6 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-px bg-white/15 flex-1" />
+            <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">New to the portal?</span>
+            <div className="h-px bg-white/15 flex-1" />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setRegisterInitialRole(undefined);
+              setShowRegister(true);
+            }}
+            className="w-full py-3 px-4 bg-white/10 hover:bg-white/15 active:scale-[0.98] text-white border border-white/25 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition cursor-pointer"
+          >
+            <i className="fas fa-user-plus text-teal-300" />
+            <span>Sign Up</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openDeleteModal}
+            className="w-full py-2.5 px-4 bg-red-500/15 hover:bg-red-500/25 active:scale-[0.98] text-red-200 border border-red-400/35 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+          >
+            <i className="fas fa-user-times text-red-300" />
+            <span>Delete Account</span>
+          </button>
 
           {showAdminSetup && (
-            <button
-              type="button"
-              onClick={() => {
-                setRegisterInitialRole('admin');
-                setShowRegister(true);
-              }}
-              className="w-full py-2.5 px-4 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-400/40 text-teal-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-            >
-              <i className="fas fa-user-shield text-teal-300" />
-              <span>Admin Registration</span>
-              <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal-400/20 text-teal-200">
-                First-Time Setup
-              </span>
-            </button>
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setRegisterInitialRole('admin');
+                  setShowRegister(true);
+                }}
+                className="w-full py-2.5 px-4 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-400/40 text-teal-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <i className="fas fa-user-shield text-teal-300" />
+                <span>Admin Registration</span>
+                <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal-400/20 text-teal-200">
+                  One-Time Setup
+                </span>
+              </button>
+              <p className="text-[10px] text-center text-gray-400">
+                Available once for initial Administrator setup. Automatically disabled after registration.
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -512,7 +719,7 @@ export function LoginScreen() {
         <p className="text-gray-500 text-xs">© 2026 Sultanat e Italia Medica • All Rights Reserved</p>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* Forgot Password / Recovery Modal */}
       {showForgotModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#12283e] border border-white/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -520,18 +727,70 @@ export function LoginScreen() {
               <i className="fas fa-key text-teal-400 text-xl" />
             </div>
             <h3 className="text-white text-base font-bold text-center mb-1">Reset Password</h3>
-            <p className="text-gray-400 text-xs text-center mb-4">
-              Enter your email address and we'll send you a password recovery link.
+            <p className="text-gray-400 text-xs text-center mb-3">
+              {forgotMode === 'request'
+                ? isSupabaseConfigured()
+                  ? 'Enter your email address and we will send a password recovery link.'
+                  : 'Request Administrator recovery help, or enter an Admin-issued 1-time Reset Code.'
+                : 'Enter your registered email, one-time Reset Code from your Admin, and your new password.'}
             </p>
-            <input
-              type="email"
-              value={forgotEmail}
-              onChange={(e) => setForgotEmail(e.target.value)}
-              placeholder="Your registered email"
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400 mb-3"
-            />
+
+            <div className="grid grid-cols-2 gap-1.5 bg-white/5 p-1 rounded-xl mb-3">
+              <button
+                type="button"
+                onClick={() => { setForgotMode('request'); setForgotStatus(null); }}
+                className={`py-1.5 rounded-lg text-[11px] font-semibold transition ${forgotMode === 'request' ? 'bg-teal-500 text-white' : 'text-gray-300 hover:text-white'
+                  }`}
+              >
+                {isSupabaseConfigured() ? 'Email Link' : 'Request Help'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setForgotMode('code'); setForgotStatus(null); }}
+                className={`py-1.5 rounded-lg text-[11px] font-semibold transition ${forgotMode === 'code' ? 'bg-teal-500 text-white' : 'text-gray-300 hover:text-white'
+                  }`}
+              >
+                Use Reset Code
+              </button>
+            </div>
+
+            <div className="space-y-2.5 mb-3">
+              <input
+                type="email"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                placeholder="Your registered email"
+                className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
+              />
+              {forgotMode === 'code' && (
+                <>
+                  <input
+                    type="text"
+                    value={resetCodeInput}
+                    onChange={(e) => setResetCodeInput(e.target.value.toUpperCase())}
+                    placeholder="One-Time Code (e.g. A1B2-C3D4)"
+                    className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm font-mono tracking-wider focus:outline-none focus:border-teal-400"
+                  />
+                  <input
+                    type="password"
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    placeholder="New password (min 6 characters)"
+                    className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
+                  />
+                  <input
+                    type="password"
+                    value={resetConfirmPassword}
+                    onChange={(e) => setResetConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
+                  />
+                </>
+              )}
+            </div>
+
             {forgotStatus && (
-              <p className={`text-xs mb-3 text-center ${forgotStatus.isError ? 'text-red-400' : 'text-teal-300'}`}>
+              <p className={`text-xs mb-3 text-center leading-relaxed ${forgotStatus.isError ? 'text-red-400' : 'text-teal-300'}`}>
                 {forgotStatus.message}
               </p>
             )}
@@ -545,17 +804,91 @@ export function LoginScreen() {
             </div>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => { setShowForgotModal(false); setForgotStatus(null); }}
                 className="flex-1 py-2.5 bg-white/10 text-gray-300 rounded-xl text-xs font-semibold"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleForgotPassword}
-                disabled={forgotRateLimit.isBlocked}
+                disabled={isResettingPassword || forgotRateLimit.isBlocked}
                 className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
               >
-                Send Link
+                {isResettingPassword
+                  ? 'Processing...'
+                  : forgotMode === 'code'
+                    ? 'Update Password'
+                    : isSupabaseConfigured()
+                      ? 'Send Link'
+                      : 'Request Reset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#12283e] border border-red-400/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3">
+              <i className="fas fa-user-times text-red-400 text-xl" />
+            </div>
+            <h3 className="text-white text-base font-bold text-center mb-1">Delete Account</h3>
+            <p className="text-gray-400 text-xs text-center mb-4">
+              Enter your registered email and password to permanently delete that account.
+            </p>
+
+            <div className="space-y-2.5 mb-3">
+              <input
+                type="email"
+                value={deleteEmail}
+                onChange={(e) => setDeleteEmail(e.target.value)}
+                placeholder="Account email"
+                className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-red-400"
+              />
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleDeleteOwnAccount()}
+                placeholder="Account password"
+                className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-red-400"
+              />
+            </div>
+
+            {deleteStatus && (
+              <p className={`text-xs mb-3 text-center leading-relaxed ${deleteStatus.isError ? 'text-red-400' : 'text-teal-300'}`}>
+                {deleteStatus.message}
+              </p>
+            )}
+
+            <div className="mb-3">
+              <RateLimitAlert
+                message={loginRateLimit.limitError}
+                retryAfterSeconds={loginRateLimit.retryAfterSeconds}
+                policyLabel={loginRateLimit.policyLabel}
+                variant="dark"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowDeleteModal(false); setDeleteStatus(null); setDeletePassword(''); }}
+                className="flex-1 py-2.5 bg-white/10 text-gray-300 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOwnAccount}
+                disabled={isDeletingAccount || loginRateLimit.isBlocked}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
+              >
+                {isDeletingAccount ? 'Deleting...' : 'Delete Account'}
               </button>
             </div>
           </div>
@@ -623,11 +956,10 @@ export function LoginScreen() {
                       key={r.id}
                       type="button"
                       onClick={() => setGoogleRoleInput(r.id)}
-                      className={`py-1.5 rounded-lg text-[11px] font-bold border transition ${
-                        googleRoleInput === r.id
+                      className={`py-1.5 rounded-lg text-[11px] font-bold border transition ${googleRoleInput === r.id
                           ? 'bg-teal-600 text-white border-teal-600'
                           : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       {r.label}
                     </button>
@@ -701,7 +1033,15 @@ export function LoginScreen() {
   );
 }
 
-function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRole?: RegisterableRole }) {
+function RegisterScreen({
+  onBack,
+  initialRole,
+  onAdminRegistered,
+}: {
+  onBack: () => void;
+  initialRole?: RegisterableRole;
+  onAdminRegistered?: () => void;
+}) {
   const { signUp, login } = useAuth();
   const { addUser, users, canRegisterAdmin, refreshUsersFromBackend } = useData();
   const [step, setStep] = useState(initialRole === 'admin' && canRegisterAdmin ? 2 : 1);
@@ -735,7 +1075,7 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
     return () => { active = false; };
   }, []);
 
-  const showAdminOption = remoteAdminOpen === null ? canRegisterAdmin : (remoteAdminOpen && canRegisterAdmin);
+  const showAdminOption = remoteAdminOpen !== null ? remoteAdminOpen : canRegisterAdmin;
 
   useEffect(() => {
     if (!showAdminOption && formData.role === 'admin') {
@@ -870,26 +1210,27 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
       addUser(createdUserRecord);
 
       if (isAdminSignup) {
-        try { localStorage.setItem('sim_first_admin_registered_v1', 'true'); } catch {}
+        try { localStorage.setItem('sim_first_admin_registered_v1', 'true'); } catch { }
         setRemoteAdminOpen(false);
+        onAdminRegistered?.();
       }
 
-      refreshUsersFromBackend().catch(() => {});
+      refreshUsersFromBackend().catch(() => { });
       setSuccessNotice(
         isAdminSignup
           ? {
-              title: 'Administrator Registered',
-              message:
-                'Your Academy Administrator account is active with full portal access. First-time Admin registration is now removed. You can now allow all users and manage resources.',
-              isAdmin: true,
-              createdUser: createdUserRecord,
-            }
+            title: 'Administrator Registered',
+            message:
+              'Your Academy Administrator account is active with full portal access. First-time Admin registration is now removed. You can now allow all users and manage resources.',
+            isAdmin: true,
+            createdUser: createdUserRecord,
+          }
           : {
-              title: 'Registration Submitted',
-              message:
-                'Your account has been registered and is awaiting Administrator approval. You will only be able to access your resources (branch, courses, quizzes, announcements, notifications) after an Admin allows your account.',
-              isAdmin: false,
-            }
+            title: 'Registration Submitted',
+            message:
+              'Your account has been registered and is awaiting Administrator approval. You will only be able to access your resources (branch, courses, quizzes, announcements, notifications) after an Admin allows your account.',
+            isAdmin: false,
+          }
       );
     } catch (err: any) {
       setError(err.message || 'An unexpected registration error occurred.');
@@ -909,20 +1250,20 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
     icon: string;
     badge?: string;
   }[] = [
-    { id: 'student', label: 'Medical Aspirant (Student)', desc: 'NEET, IMAT, UCAT exam prep, DPPs, mocks & lecture notes', icon: 'fa-graduation-cap' },
-    { id: 'faculty', label: 'Faculty & Medical Doctor', desc: 'Create curriculum, author medical questions & upload resources', icon: 'fa-user-md' },
-    ...(showAdminOption
-      ? [{ id: 'admin' as RegisterableRole, label: 'Academy Administrator', desc: 'First-time setup: approve users & manage batches, courses & resources', icon: 'fa-user-shield', badge: 'First-Time Setup' }]
-      : []),
-    { id: 'consultant', label: 'Consultant Agent (Study Abroad)', desc: 'Passport, HRD, Apostille, Scholarship docs, Universitaly & IMAT verification', icon: 'fa-briefcase' },
-  ];
+      { id: 'student', label: 'Medical Aspirant (Student)', desc: 'NEET, IMAT, UCAT exam prep, DPPs, mocks & lecture notes', icon: 'fa-graduation-cap' },
+      { id: 'faculty', label: 'Faculty & Medical Doctor', desc: 'Create curriculum, author medical questions & upload resources', icon: 'fa-user-md' },
+      ...(showAdminOption
+        ? [{ id: 'admin' as RegisterableRole, label: 'Academy Administrator', desc: 'First-time setup: approve users & manage batches, courses & resources', icon: 'fa-user-shield', badge: 'First-Time Setup' }]
+        : []),
+      { id: 'consultant', label: 'Consultant Agent (Study Abroad)', desc: 'Passport, HRD, Apostille, Scholarship docs, Universitaly & IMAT verification', icon: 'fa-briefcase' },
+    ];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
       <div className="italy-accent">
         <div className="green" /><div className="white" /><div className="red" />
       </div>
-      
+
       <div className="px-4 py-4 flex items-center gap-3">
         <button onClick={onBack} className="text-white text-lg p-2 rounded-lg hover:bg-white/10 transition">
           <i className="fas fa-arrow-left" />
@@ -936,26 +1277,23 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
           {[1, 2, 3].map((s) => (
             <div
               key={s}
-              className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${
-                s <= step ? 'bg-teal-400' : 'bg-white/20'
-              }`}
+              className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${s <= step ? 'bg-teal-400' : 'bg-white/20'
+                }`}
             />
           ))}
         </div>
 
         {successNotice ? (
           <div className="text-center py-10 px-3 animate-slide-up space-y-4">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${
-              successNotice.isAdmin
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${successNotice.isAdmin
                 ? 'bg-teal-500/20 text-teal-300 border-teal-400/40'
                 : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
-            }`}>
+              }`}>
               <i className={`fas ${successNotice.isAdmin ? 'fa-user-shield' : 'fa-user-clock'} text-2xl`} />
             </div>
             <h3 className="text-white text-lg font-bold">{successNotice.title}</h3>
-            <p className={`text-xs leading-relaxed bg-white/5 border border-white/10 rounded-xl p-3.5 ${
-              successNotice.isAdmin ? 'text-teal-200' : 'text-amber-200'
-            }`}>
+            <p className={`text-xs leading-relaxed bg-white/5 border border-white/10 rounded-xl p-3.5 ${successNotice.isAdmin ? 'text-teal-200' : 'text-amber-200'
+              }`}>
               {successNotice.message}
             </p>
             {successNotice.isAdmin && successNotice.createdUser && (
@@ -994,15 +1332,13 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
                     <button
                       key={r.id}
                       onClick={() => updateField('role', r.id)}
-                      className={`w-full p-4 rounded-xl flex items-center gap-4 text-left transition ${
-                        formData.role === r.id
+                      className={`w-full p-4 rounded-xl flex items-center gap-4 text-left transition ${formData.role === r.id
                           ? 'bg-teal-500/20 border-2 border-teal-400 shadow-lg shadow-teal-500/10'
                           : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                      }`}
+                        }`}
                     >
-                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
-                        formData.role === r.id ? 'bg-teal-400 text-[#0f2b46]' : 'bg-white/10 text-teal-400'
-                      }`}>
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${formData.role === r.id ? 'bg-teal-400 text-[#0f2b46]' : 'bg-white/10 text-teal-400'
+                        }`}>
                         <i className={`fas ${r.icon}`} />
                       </div>
                       <div className="flex-1">
@@ -1033,31 +1369,31 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
                   <p className="text-gray-400 text-xs mt-0.5">Please provide your official contact details.</p>
                 </div>
 
-                <input 
+                <input
                   value={formData.name}
                   onChange={(e) => updateField('name', e.target.value)}
-                  placeholder="Full Name *" 
-                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                  placeholder="Full Name *"
+                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                 />
-                <input 
+                <input
                   value={formData.email}
                   onChange={(e) => updateField('email', e.target.value)}
-                  placeholder="Email Address *" 
-                  type="email" 
-                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                  placeholder="Email Address *"
+                  type="email"
+                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                 />
-                <input 
+                <input
                   value={formData.phone}
                   onChange={(e) => updateField('phone', e.target.value)}
-                  placeholder="Phone Number (e.g. +91 / +39)" 
-                  type="tel" 
-                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                  placeholder="Phone Number (e.g. +91 / +39)"
+                  type="tel"
+                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                 />
 
                 {formData.role === 'student' && (
                   <div>
                     <label className="text-gray-300 text-xs font-medium block mb-1">Target Competitive Exam</label>
-                    <select 
+                    <select
                       value={formData.targetExam}
                       onChange={(e) => updateField('targetExam', e.target.value)}
                       className="w-full px-4 py-3.5 bg-[#173351] border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:border-teal-400"
@@ -1072,29 +1408,29 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
                 )}
 
                 {formData.role === 'faculty' && (
-                  <input 
+                  <input
                     value={formData.department}
                     onChange={(e) => updateField('department', e.target.value)}
-                    placeholder="Department (e.g. Anatomy, Physiology, Chemistry)" 
-                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                    placeholder="Department (e.g. Anatomy, Physiology, Chemistry)"
+                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                   />
                 )}
 
                 {formData.role === 'consultant' && (
-                  <input 
+                  <input
                     value={formData.department}
                     onChange={(e) => updateField('department', e.target.value)}
-                    placeholder="Consultancy Specialization (e.g. Italy IMAT / HRD & Apostille)" 
-                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                    placeholder="Consultancy Specialization (e.g. Italy IMAT / HRD & Apostille)"
+                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                   />
                 )}
 
                 {formData.role === 'admin' && (
-                  <input 
+                  <input
                     value={formData.department}
                     onChange={(e) => updateField('department', e.target.value)}
-                    placeholder="Directorate / Institution Title (optional)" 
-                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                    placeholder="Directorate / Institution Title (optional)"
+                    className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                   />
                 )}
 
@@ -1139,21 +1475,21 @@ function RegisterScreen({ onBack, initialRole }: { onBack: () => void; initialRo
                   </p>
                 </div>
 
-                <input 
+                <input
                   value={formData.password}
                   onChange={(e) => updateField('password', e.target.value)}
-                  placeholder="Create Password (min. 6 characters) *" 
-                  type="password" 
-                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                  placeholder="Create Password (min. 6 characters) *"
+                  type="password"
+                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                 />
-                <input 
+                <input
                   value={formData.confirmPassword}
                   onChange={(e) => updateField('confirmPassword', e.target.value)}
-                  placeholder="Confirm Password *" 
-                  type="password" 
-                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400" 
+                  placeholder="Confirm Password *"
+                  type="password"
+                  className="w-full px-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
                 />
-                
+
                 {error && (
                   <div className="bg-red-500/20 border border-red-500/50 rounded-lg px-3 py-2.5">
                     <p className="text-red-300 text-xs flex items-center gap-1.5">
@@ -1249,18 +1585,16 @@ export function PendingApprovalScreen({ user }: { user: User }) {
 
       <div className="flex-1 flex flex-col justify-center px-6 py-8">
         <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-3xl p-6 text-center space-y-4 shadow-xl">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${
-            isSuspended
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${isSuspended
               ? 'bg-red-500/20 text-red-300 border-red-400/40'
               : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
-          }`}>
+            }`}>
             <i className={`fas ${isSuspended ? 'fa-ban' : 'fa-user-clock'} text-2xl`} />
           </div>
 
           <div>
-            <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full mb-2 ${
-              isSuspended ? 'bg-red-500/30 text-red-200' : 'bg-amber-500/30 text-amber-200'
-            }`}>
+            <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full mb-2 ${isSuspended ? 'bg-red-500/30 text-red-200' : 'bg-amber-500/30 text-amber-200'
+              }`}>
               {isSuspended ? 'Access Suspended' : 'Pending Admin Approval'}
             </span>
             <h2 className="text-white text-lg font-bold">{user.name}</h2>

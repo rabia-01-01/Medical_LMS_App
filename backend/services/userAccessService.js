@@ -8,6 +8,25 @@ const STORE_PATH = path.join(DATA_DIR, "user-access.json");
 const SELF_REGISTER_ROLES = new Set(["student", "faculty", "consultant"]);
 const ALL_ROLES = new Set(["admin", "faculty", "student", "consultant"]);
 const VALID_STATUSES = new Set(["pending", "active", "suspended"]);
+const RESET_CODE_TTL_MS = 15 * 60 * 1000;
+const RESET_CODE_MAX_ATTEMPTS = 5;
+
+function normalizeResetCode(code) {
+    return String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function hashResetCode(code) {
+    return crypto.createHash("sha256").update(normalizeResetCode(code)).digest("hex");
+}
+
+function clearResetMetadata(record) {
+    const next = { ...record };
+    delete next.resetCodeHash;
+    delete next.resetCodeExpiresAt;
+    delete next.resetCodeAttempts;
+    delete next.passwordResetRequestedAt;
+    return next;
+}
 
 const FULL_PERMISSIONS = Object.freeze({
     resources: true,
@@ -145,7 +164,7 @@ function loadUsers() {
         if (fs.existsSync(STORE_PATH)) {
             const raw = fs.readFileSync(STORE_PATH, "utf8");
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed)) {
                 usersCache = parsed;
                 return usersCache;
             }
@@ -160,10 +179,20 @@ function loadUsers() {
 
 function toSafeUser(record) {
     if (!record) return null;
-    const { passwordHash: _ignored, ...safe } = record;
+    const {
+        passwordHash: _ignoredPassword,
+        resetCodeHash,
+        resetCodeExpiresAt,
+        resetCodeAttempts: _ignoredAttempts,
+        passwordResetRequestedAt,
+        ...safe
+    } = record;
+    const hasActiveResetCode = Boolean(resetCodeHash && Number(resetCodeExpiresAt) > Date.now());
     return {
         ...safe,
         status: VALID_STATUSES.has(safe.status) ? safe.status : "active",
+        passwordResetRequested: Boolean(passwordResetRequestedAt),
+        hasActiveResetCode,
         accessPermissions: normalizePermissions(
             safe.accessPermissions,
             safe.role === "admin" || safe.status === "active"
@@ -474,6 +503,210 @@ function removeUser(userId, actor) {
     return { success: true, statusCode: 200 };
 }
 
+function suspendAdminAccount(userId, actor) {
+    if (!actor) {
+        return { error: "Administrator authorization required.", statusCode: 403 };
+    }
+
+    const users = loadUsers();
+    const target = users.find((u) => u.id === userId);
+    if (!target) {
+        return { error: "User not found.", statusCode: 404 };
+    }
+    if (target.role !== "admin") {
+        return { error: "Target user is not an administrator.", statusCode: 400 };
+    }
+
+    const nextUsers = users.filter((u) => u.id !== userId);
+    persistUsers(nextUsers);
+    return {
+        success: true,
+        deletedId: target.id,
+        deletedEmail: target.email,
+        deletedSelf: target.id === actor.id,
+        adminRegistrationOpen: !hasRegisteredAdmin(nextUsers),
+        statusCode: 200,
+    };
+}
+
+function deleteOwnAccount(email, password) {
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const passStr = String(password || "");
+    if (!cleanEmail || !cleanEmail.includes("@") || !passStr) {
+        return { error: "Valid email and password are required.", statusCode: 400 };
+    }
+
+    const users = loadUsers();
+    const target = findUserByEmailOrId(users, { email: cleanEmail });
+    if (!target || !verifyPassword(passStr, target.passwordHash)) {
+        return { error: "Invalid email or password.", statusCode: 401 };
+    }
+
+    const nextUsers = users.filter((u) => u.id !== target.id);
+    persistUsers(nextUsers);
+    return {
+        success: true,
+        deletedId: target.id,
+        deletedEmail: target.email,
+        role: target.role,
+        adminRegistrationOpen: !hasRegisteredAdmin(nextUsers),
+        statusCode: 200,
+    };
+}
+
+function requestPasswordReset(email) {
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+        return { error: "Please enter a valid registered email address.", statusCode: 400 };
+    }
+
+    const users = loadUsers();
+    const index = users.findIndex((u) => u.email && u.email.toLowerCase() === cleanEmail);
+    if (index !== -1) {
+        const nextUsers = [...users];
+        nextUsers[index] = {
+            ...nextUsers[index],
+            passwordResetRequestedAt: new Date().toISOString(),
+        };
+        persistUsers(nextUsers);
+    }
+
+    return {
+        requested: true,
+        statusCode: 200,
+        message:
+            "If an account exists for that email, your password reset request has been logged for Administrator recovery.",
+    };
+}
+
+function issuePasswordResetCode(userId, actor) {
+    if (!actor) {
+        return { error: "Administrator authorization required.", statusCode: 403 };
+    }
+
+    const users = loadUsers();
+    const index = users.findIndex((u) => u.id === userId);
+    if (index === -1) {
+        return { error: "User not found.", statusCode: 404 };
+    }
+
+    const raw = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const formattedCode = `${raw.slice(0, 4)}-${raw.slice(4)}`;
+    const expiresAt = Date.now() + RESET_CODE_TTL_MS;
+
+    const updated = {
+        ...users[index],
+        resetCodeHash: hashResetCode(formattedCode),
+        resetCodeExpiresAt: expiresAt,
+        resetCodeAttempts: 0,
+    };
+
+    const nextUsers = [...users];
+    nextUsers[index] = updated;
+    persistUsers(nextUsers);
+
+    return {
+        resetCode: formattedCode,
+        expiresAt: new Date(expiresAt).toISOString(),
+        user: toSafeUser(updated),
+        statusCode: 200,
+    };
+}
+
+function adminResetUserPassword(userId, newPassword, actor) {
+    if (!actor) {
+        return { error: "Administrator authorization required.", statusCode: 403 };
+    }
+    const passwordStr = String(newPassword || "");
+    if (passwordStr.length < 6) {
+        return { error: "New password must be at least 6 characters.", statusCode: 400 };
+    }
+
+    const users = loadUsers();
+    const index = users.findIndex((u) => u.id === userId);
+    if (index === -1) {
+        return { error: "User not found.", statusCode: 404 };
+    }
+
+    const updated = {
+        ...clearResetMetadata(users[index]),
+        passwordHash: hashPassword(passwordStr),
+    };
+    const nextUsers = [...users];
+    nextUsers[index] = updated;
+    persistUsers(nextUsers);
+    return { user: toSafeUser(updated), statusCode: 200 };
+}
+
+function completePasswordResetWithCode({ email, code, newPassword }) {
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const normalizedCode = normalizeResetCode(code);
+    const passwordStr = String(newPassword || "");
+
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+        return { error: "Please enter a valid email address.", statusCode: 400 };
+    }
+    if (!normalizedCode) {
+        return { error: "Please enter the one-time reset code issued by an Administrator.", statusCode: 400 };
+    }
+    if (passwordStr.length < 6) {
+        return { error: "New password must be at least 6 characters.", statusCode: 400 };
+    }
+
+    const users = loadUsers();
+    const index = users.findIndex((u) => u.email && u.email.toLowerCase() === cleanEmail);
+    if (index === -1) {
+        return { error: "Invalid email or reset code.", statusCode: 400 };
+    }
+
+    const record = users[index];
+    if (!record.resetCodeHash || Number(record.resetCodeExpiresAt) <= Date.now()) {
+        return {
+            error: "No active reset code found for this account, or the code has expired. Request a new code from an Administrator.",
+            statusCode: 400,
+        };
+    }
+
+    const incomingBuf = Buffer.from(hashResetCode(normalizedCode), "hex");
+    const expectedBuf = Buffer.from(record.resetCodeHash, "hex");
+    const matches =
+        incomingBuf.length === expectedBuf.length &&
+        crypto.timingSafeEqual(incomingBuf, expectedBuf);
+
+    if (!matches) {
+        const nextAttempts = (Number(record.resetCodeAttempts) || 0) + 1;
+        const nextUsers = [...users];
+        if (nextAttempts >= RESET_CODE_MAX_ATTEMPTS) {
+            nextUsers[index] = {
+                ...clearResetMetadata(record),
+                passwordResetRequestedAt: record.passwordResetRequestedAt || new Date().toISOString(),
+            };
+            persistUsers(nextUsers);
+            return {
+                error: "Too many invalid attempts. This reset code has been invalidated; request a fresh code.",
+                statusCode: 400,
+            };
+        }
+        nextUsers[index] = { ...record, resetCodeAttempts: nextAttempts };
+        persistUsers(nextUsers);
+        return { error: "Invalid reset code. Please check the code and try again.", statusCode: 400 };
+    }
+
+    const updated = {
+        ...clearResetMetadata(record),
+        passwordHash: hashPassword(passwordStr),
+    };
+    const nextUsers = [...users];
+    nextUsers[index] = updated;
+    persistUsers(nextUsers);
+
+    return {
+        success: true,
+        user: toSafeUser(updated),
+        statusCode: 200,
+    };
+}
+
 module.exports = {
     FULL_PERMISSIONS,
     EMPTY_PERMISSIONS,
@@ -487,6 +720,12 @@ module.exports = {
     updateUserAccess,
     allowAllUsers,
     removeUser,
+    suspendAdminAccount,
+    deleteOwnAccount,
     verifyAdminActor,
+    requestPasswordReset,
+    issuePasswordResetCode,
+    adminResetUserPassword,
+    completePasswordResetWithCode,
 };
 

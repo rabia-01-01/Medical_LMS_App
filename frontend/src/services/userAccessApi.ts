@@ -12,6 +12,9 @@ export interface BackendUserDTO {
   targetExam?: string;
   status: AccountStatus;
   accessPermissions?: UserAccessPermissions;
+  selfRegisteredAdmin?: boolean;
+  passwordResetRequested?: boolean;
+  hasActiveResetCode?: boolean;
   createdAt: string;
 }
 
@@ -151,18 +154,29 @@ export async function googleAuthBackendSync(payload: {
   });
 }
 
-export async function createBackendUserAsAdmin(
-  payload: Record<string, any>,
-  actor?: { adminEmail?: string; adminId?: string }
-): Promise<ApiResponse<{ user: BackendUserDTO }>> {
+function resolveAdminContext(actor?: { adminEmail?: string; adminId?: string }): {
+  identity: { adminEmail?: string; adminId?: string };
+  headers: Record<string, string>;
+} {
   const identity = actor?.adminEmail || actor?.adminId ? actor : getStoredAdminIdentity();
-  return requestJson<{ user: BackendUserDTO }>('/api/users/admin-create', {
-    method: 'POST',
+  return {
+    identity,
     headers: {
       'Content-Type': 'application/json',
       ...(identity.adminEmail ? { 'x-admin-email': identity.adminEmail } : {}),
       ...(identity.adminId ? { 'x-admin-id': identity.adminId } : {}),
     },
+  };
+}
+
+export async function createBackendUserAsAdmin(
+  payload: Record<string, any>,
+  actor?: { adminEmail?: string; adminId?: string }
+): Promise<ApiResponse<{ user: BackendUserDTO }>> {
+  const { identity, headers } = resolveAdminContext(actor);
+  return requestJson<{ user: BackendUserDTO }>('/api/users/admin-create', {
+    method: 'POST',
+    headers,
     body: JSON.stringify({ ...payload, ...identity }),
   });
 }
@@ -172,14 +186,10 @@ export async function updateBackendUserAccess(
   patch: Record<string, any>,
   actor?: { adminEmail?: string; adminId?: string }
 ): Promise<ApiResponse<{ user: BackendUserDTO }>> {
-  const identity = actor?.adminEmail || actor?.adminId ? actor : getStoredAdminIdentity();
+  const { identity, headers } = resolveAdminContext(actor);
   return requestJson<{ user: BackendUserDTO }>(`/api/users/${encodeURIComponent(userId)}/access`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(identity.adminEmail ? { 'x-admin-email': identity.adminEmail } : {}),
-      ...(identity.adminId ? { 'x-admin-id': identity.adminId } : {}),
-    },
+    headers,
     body: JSON.stringify({ ...patch, ...identity }),
   });
 }
@@ -188,14 +198,10 @@ export async function allowAllBackendUsers(
   onlyPending = false,
   actor?: { adminEmail?: string; adminId?: string }
 ): Promise<ApiResponse<{ users: BackendUserDTO[]; updatedCount: number }>> {
-  const identity = actor?.adminEmail || actor?.adminId ? actor : getStoredAdminIdentity();
+  const { identity, headers } = resolveAdminContext(actor);
   return requestJson<{ users: BackendUserDTO[]; updatedCount: number }>('/api/users/allow-all', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(identity.adminEmail ? { 'x-admin-email': identity.adminEmail } : {}),
-      ...(identity.adminId ? { 'x-admin-id': identity.adminId } : {}),
-    },
+    headers,
     body: JSON.stringify({ onlyPending, ...identity }),
   });
 }
@@ -204,15 +210,90 @@ export async function deleteBackendUser(
   userId: string,
   actor?: { adminEmail?: string; adminId?: string }
 ): Promise<ApiResponse<{ success: boolean }>> {
-  const identity = actor?.adminEmail || actor?.adminId ? actor : getStoredAdminIdentity();
+  const { identity, headers } = resolveAdminContext(actor);
   return requestJson<{ success: boolean }>(`/api/users/${encodeURIComponent(userId)}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(identity.adminEmail ? { 'x-admin-email': identity.adminEmail } : {}),
-      ...(identity.adminId ? { 'x-admin-id': identity.adminId } : {}),
-    },
+    headers,
     body: JSON.stringify(identity),
   });
+}
+
+export async function requestBackendPasswordReset(
+  email: string
+): Promise<ApiResponse<{ requested: boolean; message: string }>> {
+  return requestJson<{ requested: boolean; message: string }>('/api/users/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function completeBackendPasswordReset(payload: {
+  email: string;
+  code: string;
+  newPassword: string;
+}): Promise<ApiResponse<{ success: boolean; user: BackendUserDTO }>> {
+  return requestJson<{ success: boolean; user: BackendUserDTO }>('/api/users/reset-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function issueBackendResetCode(
+  userId: string,
+  actor?: { adminEmail?: string; adminId?: string }
+): Promise<ApiResponse<{ resetCode: string; expiresAt: string; user: BackendUserDTO }>> {
+  const { identity, headers } = resolveAdminContext(actor);
+  return requestJson<{ resetCode: string; expiresAt: string; user: BackendUserDTO }>(
+    `/api/users/${encodeURIComponent(userId)}/reset-code`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(identity),
+    }
+  );
+}
+
+export async function adminResetBackendUserPassword(
+  userId: string,
+  password: string,
+  actor?: { adminEmail?: string; adminId?: string }
+): Promise<ApiResponse<{ user: BackendUserDTO }>> {
+  const { identity, headers } = resolveAdminContext(actor);
+  return requestJson<{ user: BackendUserDTO }>(
+    `/api/users/${encodeURIComponent(userId)}/password`,
+    {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ password, ...identity }),
+    }
+  );
+}
+
+export async function suspendBackendAdminAccount(
+  userId: string,
+  actor?: { adminEmail?: string; adminId?: string }
+): Promise<ApiResponse<{ success: boolean; deletedId: string; deletedEmail: string; deletedSelf: boolean; adminRegistrationOpen: boolean }>> {
+  const { identity, headers } = resolveAdminContext(actor);
+  return requestJson<{ success: boolean; deletedId: string; deletedEmail: string; deletedSelf: boolean; adminRegistrationOpen: boolean }>(
+    `/api/users/${encodeURIComponent(userId)}/suspend-admin`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(identity),
+    }
+  );
+}
+
+export async function deleteBackendOwnAccount(
+  email: string,
+  password: string
+): Promise<ApiResponse<{ success: boolean; deletedId: string; deletedEmail: string; role: AppUserRole; adminRegistrationOpen: boolean }>> {
+  return requestJson<{ success: boolean; deletedId: string; deletedEmail: string; role: AppUserRole; adminRegistrationOpen: boolean }>(
+    '/api/users/delete-account',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }
+  );
 }
 

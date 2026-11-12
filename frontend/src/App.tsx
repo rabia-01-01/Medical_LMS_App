@@ -24,10 +24,38 @@ import { StudentAIChatbot } from './components/StudentAIChatbot';
 const SCREEN_PERMISSION_MAP = SCREEN_MODULE_MAP;
 
 function AppContent() {
-  const { user, isAuthenticated, isLoading, isViewingAs, viewingAsUser, stopViewingAs } = useAuth();
+  const { user, isAuthenticated, isLoading, isViewingAs, viewingAsUser, stopViewingAs, isPasswordRecovery, completePasswordRecovery, dismissPasswordRecovery } = useAuth();
   const { users } = useData();
   const [showSplash, setShowSplash] = useState(true);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('mobile');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryConfirm, setRecoveryConfirm] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [isUpdatingRecovery, setIsUpdatingRecovery] = useState(false);
+
+  const handleRecoverySubmit = async () => {
+    setRecoveryError('');
+    if (recoveryPassword.length < 6) {
+      setRecoveryError('Password must be at least 6 characters.');
+      return;
+    }
+    if (recoveryPassword !== recoveryConfirm) {
+      setRecoveryError('Passwords do not match.');
+      return;
+    }
+    setIsUpdatingRecovery(true);
+    try {
+      const res = await completePasswordRecovery(recoveryPassword);
+      if (!res.success) {
+        setRecoveryError(res.error || 'Failed to update password.');
+      } else {
+        setRecoveryPassword('');
+        setRecoveryConfirm('');
+      }
+    } finally {
+      setIsUpdatingRecovery(false);
+    }
+  };
 
   const activeUser = useMemo(() => {
     if (!user) return null;
@@ -239,6 +267,51 @@ function AppContent() {
           )}
         </SecurityShield>
       </div>
+      {isPasswordRecovery && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-3">
+            <div className="w-11 h-11 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center mx-auto">
+              <i className="fas fa-key" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 text-center">Set New Password</h3>
+            <p className="text-xs text-gray-500 text-center">
+              Your password recovery session is active. Enter a new password for your account.
+            </p>
+            <input
+              type="password"
+              value={recoveryPassword}
+              onChange={(e) => setRecoveryPassword(e.target.value)}
+              placeholder="New password (min 6 characters)"
+              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+            <input
+              type="password"
+              value={recoveryConfirm}
+              onChange={(e) => setRecoveryConfirm(e.target.value)}
+              placeholder="Confirm new password"
+              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+            {recoveryError && <p className="text-xs text-red-600">{recoveryError}</p>}
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={dismissPasswordRecovery}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                disabled={isUpdatingRecovery}
+                onClick={handleRecoverySubmit}
+                className="flex-1 py-2.5 bg-teal-600 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
+              >
+                {isUpdatingRecovery ? 'Saving...' : 'Save Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

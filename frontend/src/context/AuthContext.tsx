@@ -5,6 +5,7 @@ import {
   signInUser,
   signUpUser,
   signOutUser,
+  updateUserPassword,
   EMPTY_USER_PERMISSIONS,
   FULL_USER_PERMISSIONS,
   normalizePermissions,
@@ -26,9 +27,12 @@ interface AuthContextType {
   isLoading: boolean;
   isViewingAs: boolean;
   viewingAsUser: User | null;
+  isPasswordRecovery: boolean;
   signIn: (payload: SignInPayload) => Promise<AuthResult<AuthUser>>;
   signUp: (payload: SignUpPayload) => Promise<AuthResult<AuthUser>>;
   signOut: () => Promise<void>;
+  completePasswordRecovery: (newPassword: string) => Promise<AuthResult<void>>;
+  dismissPasswordRecovery: () => void;
   login: (user: User) => void;
   logout: () => void;
   startViewingAs: (targetUser: User, reason: string) => void;
@@ -148,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isViewingAs, setIsViewingAs] = useState(false);
   const [viewingAsUser, setViewingAsUser] = useState<User | null>(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const suppressNextSignInRef = React.useRef(false);
 
   const applyAuthenticatedProfile = useCallback((profile: AuthUser) => {
@@ -203,7 +208,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         if (!mounted) return;
 
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsPasswordRecovery(true);
+        }
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED' || event === 'PASSWORD_RECOVERY') {
           if (suppressNextSignInRef.current) {
             suppressNextSignInRef.current = false;
             return;
@@ -222,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
         } else if (event === 'SIGNED_OUT') {
+          setIsPasswordRecovery(false);
           setAuthUser(null);
           setUser(null);
           setIsViewingAs(false);
@@ -298,6 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       await signOutUser();
+      setIsPasswordRecovery(false);
       setAuthUser(null);
       setUser(null);
       setIsViewingAs(false);
@@ -306,6 +317,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const completePasswordRecovery = async (newPassword: string): Promise<AuthResult<void>> => {
+    const result = await updateUserPassword(newPassword);
+    if (result.success) {
+      setIsPasswordRecovery(false);
+    }
+    return result;
+  };
+
+  const dismissPasswordRecovery = () => {
+    setIsPasswordRecovery(false);
   };
 
   const login = (userData: User) => {
@@ -424,9 +447,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isViewingAs,
         viewingAsUser,
+        isPasswordRecovery,
         signIn,
         signUp,
         signOut,
+        completePasswordRecovery,
+        dismissPasswordRecovery,
         login,
         logout,
         startViewingAs,

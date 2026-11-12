@@ -732,7 +732,7 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
       });
       if (res.ok && res.data?.resetCode) {
         setIssuedResetCode(res.data.resetCode);
-        setResetActionNote('Share this 1-time code (valid 15 min) so the user can set a new password on Login -> Forgot Password -> Use Reset Code.');
+        setResetActionNote('Share this 1-time code (valid 2 min) so the user can set a new password on Login -> Forgot Password -> Use Reset Code.');
         refreshUsersFromBackend().catch(() => {});
       } else {
         setResetActionNote(
@@ -1208,7 +1208,7 @@ export function AdminUsers({ onBack, onNavigate }: { onBack: () => void; onNavig
               {issuedResetCode && (
                 <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-[10px] text-teal-700 font-semibold">One-Time Reset Code (15 min)</p>
+                    <p className="text-[10px] text-teal-700 font-semibold">One-Time Reset Code (2 min)</p>
                     <p className="text-sm font-mono font-extrabold text-teal-950 tracking-wider">{issuedResetCode}</p>
                   </div>
                   <button
@@ -1630,7 +1630,7 @@ export function AdminDepartments({ onBack }: { onBack: () => void }) {
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto smooth-scroll p-4 space-y-3">
               {batchTab === 'students' ? (
                 <div>
                   {(() => {

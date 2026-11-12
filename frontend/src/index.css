@@ -25,11 +25,45 @@
   scrollbar-width: none;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body, html {
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+}
+
+.smooth-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(13, 148, 136, 0.35) transparent;
+}
+
+.smooth-scroll::-webkit-scrollbar,
+.screen-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.smooth-scroll::-webkit-scrollbar-track,
+.screen-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.smooth-scroll::-webkit-scrollbar-thumb,
+.screen-content::-webkit-scrollbar-thumb {
+  background: rgba(13, 148, 136, 0.3);
+  border-radius: 9999px;
+}
+
+.smooth-scroll::-webkit-scrollbar-thumb:hover,
+.screen-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(13, 148, 136, 0.5);
 }
 
 @media print {
@@ -115,8 +149,13 @@ body {
 .screen-content {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(13, 148, 136, 0.35) transparent;
   padding-bottom: 70px;
 }
 

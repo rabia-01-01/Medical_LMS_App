@@ -101,11 +101,11 @@ export const ROLE_RATE_LIMIT_POLICIES: Record<RateLimitScope, Record<RateLimitRo
     admin: { maxRequests: 2, windowMs: TEN_MINUTES, minIntervalMs: 3_000, blockDurationMs: 60_000, label: '2 admin setups / 10 min' },
   },
   'auth:forgot_password': {
-    guest: { maxRequests: 3, windowMs: FIVE_MINUTES, minIntervalMs: 10_000, label: '3 emails / 5 min' },
-    student: { maxRequests: 3, windowMs: FIVE_MINUTES, minIntervalMs: 10_000, label: '3 emails / 5 min' },
-    faculty: { maxRequests: 3, windowMs: FIVE_MINUTES, minIntervalMs: 10_000, label: '3 emails / 5 min' },
-    consultant: { maxRequests: 3, windowMs: FIVE_MINUTES, minIntervalMs: 10_000, label: '3 emails / 5 min' },
-    admin: { maxRequests: 5, windowMs: FIVE_MINUTES, minIntervalMs: 5_000, label: '5 emails / 5 min' },
+    guest: { maxRequests: 10, windowMs: FIVE_MINUTES, minIntervalMs: 2_000, label: '10 mails / 5 min' },
+    student: { maxRequests: 10, windowMs: FIVE_MINUTES, minIntervalMs: 2_000, label: '10 mails / 5 min' },
+    faculty: { maxRequests: 10, windowMs: FIVE_MINUTES, minIntervalMs: 2_000, label: '10 mails / 5 min' },
+    consultant: { maxRequests: 10, windowMs: FIVE_MINUTES, minIntervalMs: 2_000, label: '10 mails / 5 min' },
+    admin: { maxRequests: 10, windowMs: FIVE_MINUTES, minIntervalMs: 2_000, label: '10 mails / 5 min' },
   },
   'auth:google': {
     guest: { maxRequests: 5, windowMs: MINUTE, minIntervalMs: 2_000, blockDurationMs: 20_000, label: '5 attempts / min' },

@@ -8,7 +8,7 @@ const STORE_PATH = path.join(DATA_DIR, "user-access.json");
 const SELF_REGISTER_ROLES = new Set(["student", "faculty", "consultant"]);
 const ALL_ROLES = new Set(["admin", "faculty", "student", "consultant"]);
 const VALID_STATUSES = new Set(["pending", "active", "suspended"]);
-const RESET_CODE_TTL_MS = 15 * 60 * 1000;
+const RESET_CODE_TTL_MS = 2 * 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
 
 function normalizeResetCode(code) {
@@ -554,6 +554,30 @@ function deleteOwnAccount(email, password) {
     };
 }
 
+function generateAndStoreResetCode(users, index, { markRequested = false } = {}) {
+    const raw = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const formattedCode = `${raw.slice(0, 4)}-${raw.slice(4)}`;
+    const expiresAt = Date.now() + RESET_CODE_TTL_MS;
+
+    const updated = {
+        ...users[index],
+        ...(markRequested ? { passwordResetRequestedAt: new Date().toISOString() } : {}),
+        resetCodeHash: hashResetCode(formattedCode),
+        resetCodeExpiresAt: expiresAt,
+        resetCodeAttempts: 0,
+    };
+
+    const nextUsers = [...users];
+    nextUsers[index] = updated;
+    persistUsers(nextUsers);
+
+    return {
+        resetCode: formattedCode,
+        expiresAt: new Date(expiresAt).toISOString(),
+        user: toSafeUser(updated),
+    };
+}
+
 function requestPasswordReset(email) {
     const cleanEmail = String(email || "").trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
@@ -562,20 +586,17 @@ function requestPasswordReset(email) {
 
     const users = loadUsers();
     const index = users.findIndex((u) => u.email && u.email.toLowerCase() === cleanEmail);
-    if (index !== -1) {
-        const nextUsers = [...users];
-        nextUsers[index] = {
-            ...nextUsers[index],
-            passwordResetRequestedAt: new Date().toISOString(),
-        };
-        persistUsers(nextUsers);
+    if (index === -1) {
+        return { error: "No account found with that email address.", statusCode: 404 };
     }
 
+    const generated = generateAndStoreResetCode(users, index, { markRequested: true });
     return {
         requested: true,
+        resetCode: generated.resetCode,
+        expiresAt: generated.expiresAt,
         statusCode: 200,
-        message:
-            "If an account exists for that email, your password reset request has been logged for Administrator recovery.",
+        message: "One-time reset code generated. Enter this code below to update your password.",
     };
 }
 
@@ -590,25 +611,9 @@ function issuePasswordResetCode(userId, actor) {
         return { error: "User not found.", statusCode: 404 };
     }
 
-    const raw = crypto.randomBytes(4).toString("hex").toUpperCase();
-    const formattedCode = `${raw.slice(0, 4)}-${raw.slice(4)}`;
-    const expiresAt = Date.now() + RESET_CODE_TTL_MS;
-
-    const updated = {
-        ...users[index],
-        resetCodeHash: hashResetCode(formattedCode),
-        resetCodeExpiresAt: expiresAt,
-        resetCodeAttempts: 0,
-    };
-
-    const nextUsers = [...users];
-    nextUsers[index] = updated;
-    persistUsers(nextUsers);
-
+    const generated = generateAndStoreResetCode(users, index);
     return {
-        resetCode: formattedCode,
-        expiresAt: new Date(expiresAt).toISOString(),
-        user: toSafeUser(updated),
+        ...generated,
         statusCode: 200,
     };
 }

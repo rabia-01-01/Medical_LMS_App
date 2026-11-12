@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider, useData, hasResourceAccess } from './context/DataContext';
 import { BottomNav, AccessRestrictedScreen } from './components/Navigation';
@@ -79,6 +79,15 @@ function AppContent() {
   const [currentScreen, setCurrentScreen] = useState(() => getRoleDefaultScreen(user?.role));
   const [screenData, setScreenData] = useState<any>(null);
   const [screenHistory, setScreenHistory] = useState<string[]>([]);
+  const screenContentRef = useRef<HTMLDivElement>(null);
+
+  // Smoothly scroll back to the top when switching between screens (e.g., courses & curriculum)
+  useEffect(() => {
+    const el = screenContentRef.current;
+    if (el) {
+      el.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentScreen]);
 
   // Automatically reset to role-specific entry screen upon authentication or role switch
   React.useEffect(() => {
@@ -260,7 +269,7 @@ function AppContent() {
             <PendingApprovalScreen user={activeUser} />
           ) : (
             <>
-              <div className="screen-content">{renderScreen()}</div>
+              <div ref={screenContentRef} className="screen-content smooth-scroll">{renderScreen()}</div>
               {rbac.can('ai:chatbot') && activeUser.role === 'student' && currentScreen !== 'community' && currentScreen !== 'announcements' && currentScreen !== 'active-quiz' && currentScreen !== 'quiz-results' && currentScreen !== 'quiz-detail' && currentScreen !== 'departments' && <StudentAIChatbot />}
               {showBottomNav && <BottomNav items={navItems} activeTab={currentScreen} onTabChange={handleTabChange} notificationCount={0} />}
             </>

@@ -56,7 +56,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
 
 export function LoginScreen() {
   const { signIn, login } = useAuth();
-  const { users, addUser, deleteOwnUserAccount, canRegisterAdmin, refreshUsersFromBackend } = useData();
+  const { users, addUser, updateUser, deleteOwnUserAccount, canRegisterAdmin, refreshUsersFromBackend } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +66,8 @@ export function LoginScreen() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotMode, setForgotMode] = useState<'request' | 'code'>('request');
   const [forgotEmail, setForgotEmail] = useState('');
+  const [generatedResetCode, setGeneratedResetCode] = useState<string | null>(null);
+  const [offlineResetMeta, setOfflineResetMeta] = useState<{ email: string; code: string; expiresAt: number } | null>(null);
   const [resetCodeInput, setResetCodeInput] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
   const [resetConfirmPassword, setResetConfirmPassword] = useState('');
@@ -306,18 +308,19 @@ export function LoginScreen() {
     }
   };
 
-  const openForgotModal = (initialMode: 'request' | 'code' = 'request') => {
-    setForgotMode(initialMode);
-    setForgotEmail(email);
-    setForgotStatus(null);
-    setResetCodeInput('');
-    setResetNewPassword('');
-    setResetConfirmPassword('');
-    setShowForgotModal(true);
+  const generateLocalFallbackCode = () => {
+    const bytes = new Uint8Array(4);
+    try {
+      window.crypto.getRandomValues(bytes);
+    } catch {
+      for (let i = 0; i < 4; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    return `${hex.slice(0, 4)}-${hex.slice(4)}`;
   };
 
-  const handleForgotPassword = async () => {
-    const cleanForgot = forgotEmail.trim().toLowerCase();
+  const generateOneTimeResetCode = async (targetEmail: string) => {
+    const cleanForgot = targetEmail.trim().toLowerCase();
     if (!cleanForgot || !cleanForgot.includes('@')) {
       setForgotStatus({ message: 'Please enter a valid registered email address.', isError: true });
       return;
@@ -330,84 +333,186 @@ export function LoginScreen() {
     }
 
     setIsResettingPassword(true);
+    setForgotStatus({ message: 'Generating one-time reset code...', isError: false });
     try {
-      if (forgotMode === 'code') {
-        if (!resetCodeInput.trim()) {
-          setForgotStatus({ message: 'Enter the one-time reset code provided by your Administrator.', isError: true });
-          return;
-        }
-        if (resetNewPassword.length < 6) {
-          setForgotStatus({ message: 'New password must be at least 6 characters.', isError: true });
-          return;
-        }
-        if (resetNewPassword !== resetConfirmPassword) {
-          setForgotStatus({ message: 'Passwords do not match.', isError: true });
-          return;
-        }
-
-        setForgotStatus({ message: 'Verifying reset code and updating password...', isError: false });
-        const resetRes = await completeBackendPasswordReset({
-          email: cleanForgot,
-          code: resetCodeInput.trim(),
-          newPassword: resetNewPassword,
-        });
-
-        if (resetRes.ok && resetRes.data?.success) {
-          resetRateLimit('auth:login', 'guest', cleanForgot);
-          refreshUsersFromBackend().catch(() => { });
-          setEmail(cleanForgot);
-          setPassword('');
-          setForgotStatus({
-            message: 'Password updated! You can now sign in with your new password.',
-            isError: false,
-          });
-          setTimeout(() => {
-            setShowForgotModal(false);
-            setForgotStatus(null);
-          }, 1800);
-          return;
-        }
-
-        setForgotStatus({
-          message: resetRes.networkError
-            ? 'Server is unreachable right now. Please try again when online or use Google Sign-In.'
-            : resetRes.error || 'Could not reset password with that code.',
-          isError: true,
-        });
-        return;
-      }
-
-      if (isSupabaseConfigured()) {
-        setForgotStatus({ message: 'Sending recovery link...', isError: false });
-        const result = await resetPassword(cleanForgot);
-        if (result.success) {
-          setForgotStatus({
-            message: 'Password recovery email sent! Open the link in your inbox to set a new password.',
-            isError: false,
-          });
-          return;
-        }
-        setForgotStatus({ message: result.error || 'Failed to send recovery link.', isError: true });
-        return;
-      }
-
-      setForgotStatus({ message: 'Logging password recovery request...', isError: false });
       const backendReq = await requestBackendPasswordReset(cleanForgot);
-      if (backendReq.ok) {
-        refreshUsersFromBackend().catch(() => { });
+      if (backendReq.ok && backendReq.data?.resetCode) {
+        setGeneratedResetCode(backendReq.data.resetCode);
+        setOfflineResetMeta(null);
+        setForgotMode('code');
+        refreshUsersFromBackend().catch(() => {});
         setForgotStatus({
-          message:
-            'Reset request sent to Administrator. Ask your Admin for a 1-time Reset Code and enter it in "Use Reset Code" — or sign in with Google if your account is active.',
+          message: 'One-time reset code generated below. Enter it with your new password.',
           isError: false,
         });
+        return;
+      }
+
+      if (!backendReq.networkError) {
+        setGeneratedResetCode(null);
+        setForgotStatus({
+          message: backendReq.error || 'No account found with that email address.',
+          isError: true,
+        });
+        return;
+      }
+
+      // Offline fallback when Express backend is unreachable
+      const localMatch = users.find((u) => u.email.toLowerCase() === cleanForgot);
+      if (!localMatch) {
+        setGeneratedResetCode(null);
+        setForgotStatus({
+          message: 'No account found with that email address.',
+          isError: true,
+        });
+        return;
+      }
+
+      const code = generateLocalFallbackCode();
+      setOfflineResetMeta({
+        email: cleanForgot,
+        code: code.replace(/[^A-Z0-9]/g, ''),
+        expiresAt: Date.now() + 2 * 60 * 1000,
+      });
+      setGeneratedResetCode(code);
+      setForgotMode('code');
+      setForgotStatus({
+        message: 'One-time reset code generated below. Enter it with your new password.',
+        isError: false,
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const openForgotModal = (initialMode: 'request' | 'code' = 'request') => {
+    const prefilled = email.trim();
+    setForgotMode(prefilled.includes('@') ? 'code' : initialMode);
+    setForgotEmail(prefilled);
+    setGeneratedResetCode(null);
+    setOfflineResetMeta(null);
+    setForgotStatus(null);
+    setResetCodeInput('');
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setShowForgotModal(true);
+    if (prefilled.includes('@')) {
+      generateOneTimeResetCode(prefilled);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const cleanForgot = forgotEmail.trim().toLowerCase();
+    if (!cleanForgot || !cleanForgot.includes('@')) {
+      setForgotStatus({ message: 'Please enter a valid registered email address.', isError: true });
+      return;
+    }
+
+    if (forgotMode === 'request') {
+      await generateOneTimeResetCode(cleanForgot);
+      return;
+    }
+
+    if (!resetCodeInput.trim()) {
+      setForgotStatus({ message: 'Enter the generated one-time reset code.', isError: true });
+      return;
+    }
+    if (resetNewPassword.length < 6) {
+      setForgotStatus({ message: 'New password must be at least 6 characters.', isError: true });
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setForgotStatus({ message: 'Passwords do not match.', isError: true });
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      setForgotStatus({ message: 'Verifying reset code and updating password...', isError: false });
+      const resetRes = await completeBackendPasswordReset({
+        email: cleanForgot,
+        code: resetCodeInput.trim(),
+        newPassword: resetNewPassword,
+      });
+
+      if (resetRes.ok && resetRes.data?.success) {
+        const localMatch = users.find((u) => u.email.toLowerCase() === cleanForgot);
+        if (localMatch) {
+          updateUser(localMatch.id, { password: resetNewPassword });
+        }
+        resetRateLimit('auth:login', 'guest', cleanForgot);
+        refreshUsersFromBackend().catch(() => {});
+        setEmail(cleanForgot);
+        setPassword('');
+        setGeneratedResetCode(null);
+        setForgotStatus({
+          message: 'Password updated! You can now sign in with your new password.',
+          isError: false,
+        });
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setForgotStatus(null);
+        }, 1800);
+        return;
+      }
+
+      if (!resetRes.networkError) {
+        setForgotStatus({
+          message: resetRes.error || 'Could not reset password with that code.',
+          isError: true,
+        });
+        return;
+      }
+
+      const normalizedInput = resetCodeInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const localMatch = users.find((u) => u.email.toLowerCase() === cleanForgot);
+      if (
+        localMatch &&
+        offlineResetMeta &&
+        offlineResetMeta.email === cleanForgot &&
+        offlineResetMeta.expiresAt > Date.now() &&
+        offlineResetMeta.code === normalizedInput
+      ) {
+        updateUser(localMatch.id, { password: resetNewPassword });
+        setOfflineResetMeta(null);
+        setGeneratedResetCode(null);
+        resetRateLimit('auth:login', 'guest', cleanForgot);
+        setEmail(cleanForgot);
+        setPassword('');
+        setForgotStatus({
+          message: 'Password updated! You can now sign in with your new password.',
+          isError: false,
+        });
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setForgotStatus(null);
+        }, 1800);
       } else {
         setForgotStatus({
-          message: backendReq.networkError
-            ? 'Automated email recovery (Supabase) is not configured and the server is offline. Sign in with Google if your account is active, or ask your Admin once online.'
-            : backendReq.error || 'Unable to log reset request.',
+          message: 'Invalid or expired reset code. Generate a fresh code and try again.',
           isError: true,
         });
       }
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const handleSendSupabaseRecoveryEmail = async () => {
+    const cleanForgot = forgotEmail.trim().toLowerCase();
+    if (!cleanForgot || !cleanForgot.includes('@')) {
+      setForgotStatus({ message: 'Please enter a valid registered email address.', isError: true });
+      return;
+    }
+    setIsResettingPassword(true);
+    setForgotStatus({ message: 'Sending recovery link...', isError: false });
+    try {
+      const result = await resetPassword(cleanForgot);
+      setForgotStatus(
+        result.success
+          ? { message: 'Password recovery email sent! Open the link in your inbox.', isError: false }
+          : { message: result.error || 'Failed to send recovery link.', isError: true }
+      );
     } finally {
       setIsResettingPassword(false);
     }
@@ -522,13 +627,14 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
-      <div className="italy-accent">
+    <div className="h-full max-h-[100dvh] w-full overflow-y-auto overflow-x-clip smooth-scroll bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
+      <div className="italy-accent shrink-0">
         <div className="green" /><div className="white" /><div className="red" />
       </div>
 
-      <div className="flex-1 flex flex-col justify-center px-6 py-8">
-        <div className="text-center mb-8">
+      <div className="flex-1 flex flex-col px-6 py-8">
+        <div className="w-full max-w-md mx-auto my-auto">
+          <div className="text-center mb-8">
           <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-white/20 shadow-lg shadow-teal-900/30">
             <i className="fas fa-staff-snake text-2xl text-teal-400" />
           </div>
@@ -713,26 +819,25 @@ export function LoginScreen() {
             </div>
           )}
         </div>
+        </div>
       </div>
 
-      <div className="px-6 pb-6 text-center">
+      <div className="shrink-0 px-6 pb-6 text-center">
         <p className="text-gray-500 text-xs">© 2026 Sultanat e Italia Medica • All Rights Reserved</p>
       </div>
 
       {/* Forgot Password / Recovery Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#12283e] border border-white/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto smooth-scroll">
+          <div className="bg-[#12283e] border border-white/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl my-auto max-h-[90dvh] overflow-y-auto smooth-scroll">
             <div className="w-12 h-12 rounded-full bg-teal-500/20 flex items-center justify-center mx-auto mb-3">
               <i className="fas fa-key text-teal-400 text-xl" />
             </div>
             <h3 className="text-white text-base font-bold text-center mb-1">Reset Password</h3>
             <p className="text-gray-400 text-xs text-center mb-3">
               {forgotMode === 'request'
-                ? isSupabaseConfigured()
-                  ? 'Enter your email address and we will send a password recovery link.'
-                  : 'Request Administrator recovery help, or enter an Admin-issued 1-time Reset Code.'
-                : 'Enter your registered email, one-time Reset Code from your Admin, and your new password.'}
+                ? 'Enter your registered email to automatically generate a one-time reset code on screen.'
+                : 'Use your generated one-time code below to set a new password.'}
             </p>
 
             <div className="grid grid-cols-2 gap-1.5 bg-white/5 p-1 rounded-xl mb-3">
@@ -742,7 +847,7 @@ export function LoginScreen() {
                 className={`py-1.5 rounded-lg text-[11px] font-semibold transition ${forgotMode === 'request' ? 'bg-teal-500 text-white' : 'text-gray-300 hover:text-white'
                   }`}
               >
-                {isSupabaseConfigured() ? 'Email Link' : 'Request Help'}
+                Generate Code
               </button>
               <button
                 type="button"
@@ -755,13 +860,49 @@ export function LoginScreen() {
             </div>
 
             <div className="space-y-2.5 mb-3">
-              <input
-                type="email"
-                value={forgotEmail}
-                onChange={(e) => setForgotEmail(e.target.value)}
-                placeholder="Your registered email"
-                className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
-              />
+              <div className="flex gap-1.5">
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="Your registered email"
+                  className="flex-1 min-w-0 px-3.5 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-teal-400"
+                />
+                {forgotMode === 'code' && (
+                  <button
+                    type="button"
+                    disabled={isResettingPassword || forgotRateLimit.isBlocked}
+                    onClick={() => generateOneTimeResetCode(forgotEmail)}
+                    className="px-3 py-2 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/40 text-teal-200 rounded-xl text-[11px] font-bold shrink-0 transition disabled:opacity-50"
+                  >
+                    New Code
+                  </button>
+                )}
+              </div>
+
+              {generatedResetCode && (
+                <div className="p-3 bg-teal-500/15 border border-teal-400/40 rounded-xl flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-teal-300">
+                      One-Time Reset Code (2 min)
+                    </p>
+                    <p className="text-base font-mono font-extrabold text-white tracking-widest mt-0.5">
+                      {generatedResetCode}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetCodeInput(generatedResetCode);
+                      setForgotMode('code');
+                    }}
+                    className="px-2.5 py-1.5 bg-teal-500 hover:bg-teal-400 text-[#0f2b46] rounded-lg text-[11px] font-bold transition shrink-0"
+                  >
+                    Auto-Fill
+                  </button>
+                </div>
+              )}
+
               {forgotMode === 'code' && (
                 <>
                   <input
@@ -805,7 +946,7 @@ export function LoginScreen() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => { setShowForgotModal(false); setForgotStatus(null); }}
+                onClick={() => { setShowForgotModal(false); setForgotStatus(null); setGeneratedResetCode(null); }}
                 className="flex-1 py-2.5 bg-white/10 text-gray-300 rounded-xl text-xs font-semibold"
               >
                 Cancel
@@ -813,26 +954,34 @@ export function LoginScreen() {
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                disabled={isResettingPassword || forgotRateLimit.isBlocked}
+                disabled={isResettingPassword || (forgotMode === 'request' && forgotRateLimit.isBlocked)}
                 className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
               >
                 {isResettingPassword
                   ? 'Processing...'
                   : forgotMode === 'code'
                     ? 'Update Password'
-                    : isSupabaseConfigured()
-                      ? 'Send Link'
-                      : 'Request Reset'}
+                    : 'Generate One-Time Code'}
               </button>
             </div>
+            {isSupabaseConfigured() && (
+              <button
+                type="button"
+                onClick={handleSendSupabaseRecoveryEmail}
+                disabled={isResettingPassword}
+                className="w-full mt-2 py-2 text-[11px] text-teal-300 hover:text-teal-200 underline"
+              >
+                Or send Supabase recovery email instead
+              </button>
+            )}
           </div>
         </div>
       )}
 
       {/* Delete Account Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#12283e] border border-red-400/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto smooth-scroll">
+          <div className="bg-[#12283e] border border-red-400/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl my-auto max-h-[90dvh] overflow-y-auto smooth-scroll">
             <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3">
               <i className="fas fa-user-times text-red-400 text-xl" />
             </div>
@@ -897,8 +1046,8 @@ export function LoginScreen() {
 
       {/* Google Account Sign-In Modal */}
       {showGoogleModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-gray-100 flex flex-col text-left">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto smooth-scroll animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-gray-100 flex flex-col text-left my-auto max-h-[90dvh] overflow-y-auto smooth-scroll">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
                 <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
@@ -1002,7 +1151,7 @@ export function LoginScreen() {
               {users.some(u => u.role !== 'admin' && u.status === 'active') && (
                 <div className="pt-2.5 border-t border-gray-100">
                   <p className="text-[10px] text-gray-500 font-semibold mb-1.5">Or choose an approved account:</p>
-                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 smooth-scroll">
                     {users.filter(u => u.role === 'student' && u.status === 'active').map((student) => (
                       <button
                         key={student.id}
@@ -1259,19 +1408,19 @@ function RegisterScreen({
     ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
-      <div className="italy-accent">
+    <div className="h-full max-h-[100dvh] w-full overflow-y-auto overflow-x-clip smooth-scroll bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
+      <div className="italy-accent shrink-0">
         <div className="green" /><div className="white" /><div className="red" />
       </div>
 
-      <div className="px-4 py-4 flex items-center gap-3">
+      <div className="shrink-0 px-4 py-4 flex items-center gap-3">
         <button onClick={onBack} className="text-white text-lg p-2 rounded-lg hover:bg-white/10 transition">
           <i className="fas fa-arrow-left" />
         </button>
         <h1 className="text-white text-lg font-bold">Create Account</h1>
       </div>
 
-      <div className="flex-1 px-6 py-4">
+      <div className="flex-1 px-6 py-4 max-w-md w-full mx-auto">
         {/* Step Progress Bar */}
         <div className="flex gap-2 mb-6">
           {[1, 2, 3].map((s) => (
@@ -1578,13 +1727,13 @@ export function PendingApprovalScreen({ user }: { user: User }) {
   const isSuspended = user.status === 'suspended';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
-      <div className="italy-accent">
+    <div className="h-full max-h-[100dvh] w-full overflow-y-auto overflow-x-clip smooth-scroll bg-gradient-to-b from-[#0f2b46] to-[#1a3a5c] flex flex-col">
+      <div className="italy-accent shrink-0">
         <div className="green" /><div className="white" /><div className="red" />
       </div>
 
-      <div className="flex-1 flex flex-col justify-center px-6 py-8">
-        <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-3xl p-6 text-center space-y-4 shadow-xl">
+      <div className="flex-1 flex flex-col px-6 py-8">
+        <div className="w-full max-w-md mx-auto my-auto bg-white/10 backdrop-blur-md border border-white/15 rounded-3xl p-6 text-center space-y-4 shadow-xl">
           <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${isSuspended
               ? 'bg-red-500/20 text-red-300 border-red-400/40'
               : 'bg-amber-500/20 text-amber-300 border-amber-400/40'

@@ -220,11 +220,14 @@ export async function deleteBackendUser(
 
 export async function requestBackendPasswordReset(
   email: string
-): Promise<ApiResponse<{ requested: boolean; message: string }>> {
-  return requestJson<{ requested: boolean; message: string }>('/api/users/forgot-password', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  });
+): Promise<ApiResponse<{ requested: boolean; resetCode?: string; expiresAt?: string; message: string }>> {
+  return requestJson<{ requested: boolean; resetCode?: string; expiresAt?: string; message: string }>(
+    '/api/users/forgot-password',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }
+  );
 }
 
 export async function completeBackendPasswordReset(payload: {

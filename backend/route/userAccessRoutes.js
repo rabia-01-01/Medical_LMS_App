@@ -128,7 +128,12 @@ router.post("/forgot-password", (req, res) =>
         if (result.error) {
             return res.status(result.statusCode).json({ error: result.error });
         }
-        return res.status(200).json({ requested: result.requested, message: result.message });
+        return res.status(200).json({
+            requested: result.requested,
+            resetCode: result.resetCode,
+            expiresAt: result.expiresAt,
+            message: result.message,
+        });
     })
 );
 

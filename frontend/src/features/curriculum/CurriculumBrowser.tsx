@@ -192,7 +192,7 @@ function SortableTopicItem({
           <div
             {...attributes}
             {...listeners}
-            className="p-1 text-gray-400 hover:text-teal-600 cursor-grab active:cursor-grabbing rounded"
+            className="p-1 text-gray-400 hover:text-teal-600 cursor-grab active:cursor-grabbing rounded touch-none"
             title="Drag to reorder topic"
           >
             <i className="fas fa-grip-vertical text-xs" />
@@ -929,7 +929,7 @@ export function CurriculumBrowser({
   const studyGuide = activeStudyChapter ? getChapterStudyGuide(activeStudyChapter.chapter.name, activeSubject?.name) : null;
 
   return (
-    <div className="space-y-3 overflow-x-hidden">
+    <div className="space-y-3 overflow-x-clip">
       {/* Toast Notification */}
       <AnimatePresence>
         {successMessage && (
@@ -952,7 +952,7 @@ export function CurriculumBrowser({
 
       {/* Subject Selector Tabs - Clean Non-scrolling Flex Wrap with Full Subject Names */}
       {!hideSubjectTabs && (
-        <div className="flex flex-wrap gap-1.5 pb-1 overflow-x-hidden no-scrollbar">
+        <div className="flex flex-wrap gap-1.5 pb-1 overflow-x-clip">
           {curriculum.map((subj) => {
             const isActive = activeSubject?.id === subj.id;
             return (
@@ -1068,7 +1068,7 @@ export function CurriculumBrowser({
             return (
               <div
                 key={chapter.id}
-                className={`border rounded-xl transition overflow-hidden bg-white ${isExpanded ? 'border-teal-400/60 shadow-xs ring-1 ring-teal-400/20' : 'border-gray-200'
+                className={`border rounded-xl transition overflow-hidden bg-white scroll-mt-3 ${isExpanded ? 'border-teal-400/60 shadow-xs ring-1 ring-teal-400/20' : 'border-gray-200'
                   }`}
               >
                 {/* Clickable Chapter Header */}
@@ -1329,7 +1329,7 @@ export function CurriculumBrowser({
       <AnimatePresence>
         {activeStudyChapter && (
           <div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto smooth-scroll"
             onClick={handleCloseChapterStudyHub}
           >
             <motion.div
@@ -1338,7 +1338,7 @@ export function CurriculumBrowser({
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ duration: 0.2 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200"
+              className="bg-white rounded-2xl max-w-lg w-full my-auto max-h-[88dvh] overflow-y-auto smooth-scroll shadow-2xl border border-gray-200"
             >
               {/* Modal Header */}
               <div className="gradient-header p-5 text-white relative">
@@ -1427,7 +1427,7 @@ export function CurriculumBrowser({
                       items={activeStudyChapter.chapter.topics.map(t => t.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 smooth-scroll">
                         {activeStudyChapter.chapter.topics.length === 0 ? (
                           <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-xl">
                             No topics registered under this chapter yet.
@@ -1532,7 +1532,7 @@ export function CurriculumBrowser({
       <AnimatePresence>
         {activeStudyTopic && (
           <div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto smooth-scroll"
             onClick={handleCloseTopicModal}
           >
             <motion.div
@@ -1541,7 +1541,7 @@ export function CurriculumBrowser({
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ duration: 0.2 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl max-w-[395px] w-full max-h-[85vh] sm:max-h-[82dvh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden"
+              className="bg-white rounded-2xl max-w-[395px] w-full my-auto max-h-[85vh] sm:max-h-[82dvh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden"
             >
               {/* Modal Header */}
               <div className="gradient-header p-4 text-white relative shrink-0">
@@ -1572,7 +1572,7 @@ export function CurriculumBrowser({
               <div className="italy-accent shrink-0"><div className="green" /><div className="white" /><div className="red" /></div>
 
               {/* Modal Scrollable Body */}
-              <div className="p-4 space-y-3.5 flex-1 overflow-y-auto overscroll-contain">
+              <div className="p-4 space-y-3.5 flex-1 overflow-y-auto overscroll-contain smooth-scroll">
                 {/* About This Topic Card */}
                 <div className="bg-teal-50/60 border border-teal-200/80 rounded-xl p-3">
                   <h4 className="text-xs font-bold text-teal-900 flex items-center gap-1.5 uppercase tracking-wide mb-1.5">
@@ -1988,7 +1988,7 @@ export function CurriculumBrowser({
       <AnimatePresence>
         {viewingCompletionsModal && (
           <div
-            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in"
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto smooth-scroll backdrop-blur-xs animate-fade-in"
             onClick={() => setViewingCompletionsModal(null)}
           >
             <motion.div
@@ -1996,7 +1996,7 @@ export function CurriculumBrowser({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl max-w-[380px] w-full p-4 shadow-xl border border-gray-200 space-y-3"
+              className="bg-white rounded-2xl max-w-[380px] w-full my-auto p-4 shadow-xl border border-gray-200 space-y-3"
             >
               <div className="flex items-center justify-between border-b pb-2">
                 <div>
@@ -2015,7 +2015,7 @@ export function CurriculumBrowser({
                 </button>
               </div>
 
-              <div className="max-h-[260px] overflow-y-auto space-y-2">
+              <div className="max-h-[260px] overflow-y-auto pr-1 smooth-scroll space-y-2">
                 {viewingCompletionsModal.students.length === 0 ? (
                   <div className="text-center py-6 text-gray-400">
                     <i className="fas fa-user-clock text-2xl mb-1 text-gray-300" />

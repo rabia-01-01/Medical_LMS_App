@@ -34,14 +34,28 @@ try {
   assert.equal(badLogin.statusCode, 401);
   console.log('  [PASS] Registered user authenticates with valid password and fails with wrong password');
 
-  // 2. Request password reset & verify safe user does not leak secrets
+  // 2. Request password reset auto-generates 1-time code for registered email and verifies update
+  const missingReq = userAccessService.requestPasswordReset('nobody.missing@example.com');
+  assert.equal(missingReq.statusCode, 404, 'Unknown email should return 404');
+
   const reqReset = userAccessService.requestPasswordReset(studentEmail);
   assert.equal(reqReset.statusCode, 200);
   assert.equal(reqReset.requested, true);
+  assert.match(reqReset.resetCode, /^[A-F0-9]{4}-[A-F0-9]{4}$/, 'Forgot password auto-generates formatted 1-time reset code');
   const statusAfterReq = userAccessService.getUserStatus({ id: regStudent.user.id });
   assert.equal(statusAfterReq.passwordResetRequested, true, 'User status flags pending reset request for admin');
+  assert.equal(statusAfterReq.hasActiveResetCode, true, 'User status records active reset code');
   assert.equal('resetCodeHash' in statusAfterReq, false, 'Safe user never exposes resetCodeHash');
-  console.log('  [PASS] Forgot password logs recovery request without exposing password/code hashes');
+
+  const selfComplete = userAccessService.completePasswordResetWithCode({
+    email: studentEmail,
+    code: reqReset.resetCode,
+    newPassword: 'selfUpdatedPassword1',
+  });
+  assert.equal(selfComplete.statusCode, 200);
+  assert.equal(userAccessService.authenticateUser(studentEmail, 'oldPassword123').statusCode, 401);
+  assert.equal(userAccessService.authenticateUser(studentEmail, 'selfUpdatedPassword1').statusCode, 200);
+  console.log('  [PASS] Forgot password auto-generates 1-time code and lets user update password safely');
 
   // 3. Non-admin cannot issue reset code
   const nonAdmin = userAccessService.verifyAdminActor({ adminEmail: studentEmail });
